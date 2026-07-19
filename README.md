@@ -146,3 +146,9 @@ hosting/
 | 3 | Фоновые: tracking, SalesRender, SMS, cron | Planned |
 | 4 | Европочта, склад | Planned |
 | 5 | Финансы, CSV, multi-tenant UI | Planned |
+
+---
+
+## Документация
+
+Планы миграции, описания фич и fix-notes: [docs/README.md](./docs/README.md)
