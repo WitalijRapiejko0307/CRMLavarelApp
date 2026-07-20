@@ -203,6 +203,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import { apiFetch } from '@/utils/api'
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 const props = defineProps({
@@ -349,21 +350,6 @@ function updateInList(updated) {
 
 function formatAmount(value) {
     return Number(value ?? 0).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-
-function getCsrf() {
-    return document.querySelector('meta[name="csrf-token"]')?.content ?? ''
-}
-
-async function apiFetch(path, method, body) {
-    return fetch(path, {
-        method,
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': getCsrf(),
-        },
-        body: body ? JSON.stringify(body) : undefined,
-    })
 }
 </script>
 

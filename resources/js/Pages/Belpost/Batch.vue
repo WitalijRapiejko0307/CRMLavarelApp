@@ -367,6 +367,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import AddressSearchModal from '@/Components/AddressSearchModal.vue'
 import { Inertia } from '@inertiajs/inertia'
+import { apiFetch } from '@/utils/api'
 
 const SELLER_ONLY_TYPES = ['ecommerce_light', 'ecommerce_optima']
 
@@ -457,13 +458,10 @@ async function createBatch() {
     creating.value    = true
     createError.value = ''
 
-    const csrf = getCsrf()
-
     try {
-        const resp = await fetch('/belpost/batches', {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf },
-            body:    JSON.stringify({ type: newBatchType.value, who_pays: newBatchWhoPays.value }),
+        const resp = await apiFetch('/belpost/batches', 'POST', {
+            type: newBatchType.value,
+            who_pays: newBatchWhoPays.value,
         })
         const data = await resp.json()
 
@@ -509,16 +507,10 @@ async function processAll() {
 }
 
 async function processOne(order, belpostAddressId) {
-    const csrf = getCsrf()
-
     try {
-        const resp = await fetch(`/belpost/batches/${activeBatch.value.id}/items`, {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf },
-            body:    JSON.stringify({
-                order_id:           order.id,
-                belpost_address_id: belpostAddressId ?? undefined,
-            }),
+        const resp = await apiFetch(`/belpost/batches/${activeBatch.value.id}/items`, 'POST', {
+            order_id:           order.id,
+            belpost_address_id: belpostAddressId ?? undefined,
         })
         const data = await resp.json()
         results.value[order.id] = data
@@ -542,13 +534,8 @@ async function commitBatch() {
     committing.value = true
     commitError.value = ''
 
-    const csrf = getCsrf()
-
     try {
-        const resp = await fetch(`/belpost/batches/${activeBatch.value.id}/commit`, {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf },
-        })
+        const resp = await apiFetch(`/belpost/batches/${activeBatch.value.id}/commit`, 'POST')
         const data = await resp.json()
 
         if (data.success) {
@@ -572,13 +559,8 @@ async function retryDownload() {
     retrying.value  = true
     retryError.value = ''
 
-    const csrf = getCsrf()
-
     try {
-        const resp = await fetch(`/belpost/batches/${activeBatch.value.id}/retry-download`, {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf },
-        })
+        const resp = await apiFetch(`/belpost/batches/${activeBatch.value.id}/retry-download`, 'POST')
         const data = await resp.json()
 
         if (data.success) {
@@ -613,17 +595,12 @@ async function onAddressSelected({ id, building, city, street }) {
 
     // Persist resolved address + belpost_address_id on the order so
     // BelpostService can reuse it without autoResolve on retry
-    const csrf = getCsrf()
     try {
-        await fetch(`/orders/${order.id}`, {
-            method:  'PUT',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf },
-            body:    JSON.stringify({
-                city,
-                street,
-                building,
-                belpost_address_id: String(id),
-            }),
+        await apiFetch(`/orders/${order.id}`, 'PUT', {
+            city,
+            street,
+            building,
+            belpost_address_id: String(id),
         })
         // Update local order reference so retries have correct data
         order.city     = city
@@ -749,10 +726,6 @@ function errorLabel(code) {
         exception:         '✕ Исключение',
     }
     return map[code] ?? code
-}
-
-function getCsrf() {
-    return document.querySelector('meta[name="csrf-token"]')?.content ?? ''
 }
 
 function badgeClass(status) {

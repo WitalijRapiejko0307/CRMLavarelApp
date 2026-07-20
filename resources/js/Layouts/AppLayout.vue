@@ -136,6 +136,7 @@
 import { computed, ref } from 'vue'
 import { Link, usePage } from '@inertiajs/inertia-vue3'
 import { Inertia } from '@inertiajs/inertia'
+import { apiFetch } from '@/utils/api'
 
 const page = usePage()
 
@@ -167,12 +168,8 @@ function formatNoticeDate(value) {
 
 async function dismissTrackingNotice() {
     trackingNoticeDismissed.value = true
-    const csrf = document.querySelector('meta[name="csrf-token"]')?.content ?? ''
     try {
-        await fetch('/api/tracking/auto-notice/dismiss', {
-            method:  'POST',
-            headers: { 'X-CSRF-TOKEN': csrf, 'X-Requested-With': 'XMLHttpRequest' },
-        })
+        await apiFetch('/api/tracking/auto-notice/dismiss', 'POST')
     } catch {
         // Non-fatal — banner already hidden locally
     }

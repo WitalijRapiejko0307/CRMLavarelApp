@@ -209,6 +209,7 @@
 import { ref, computed } from 'vue'
 import { Inertia } from '@inertiajs/inertia'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import { apiFetch } from '@/utils/api'
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 const props = defineProps({
@@ -350,21 +351,6 @@ function fmtDate(dateStr) {
     if (!dateStr) return '—'
     const d = new Date(dateStr)
     return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}`
-}
-
-function getCsrf() {
-    return document.querySelector('meta[name="csrf-token"]')?.content ?? ''
-}
-
-async function apiFetch(path, method, body) {
-    return fetch(path, {
-        method,
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': getCsrf(),
-        },
-        body: body ? JSON.stringify(body) : undefined,
-    })
 }
 </script>
 

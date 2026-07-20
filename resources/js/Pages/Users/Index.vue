@@ -135,6 +135,7 @@
 import { ref } from 'vue'
 import { usePage } from '@inertiajs/inertia-vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import { apiFetch } from '@/utils/api'
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 const props = defineProps({
@@ -249,18 +250,6 @@ function roleBadgeClass(role) {
 function fmtDate(value) {
     if (!value) return '—'
     return new Date(value).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit' })
-}
-
-function getCsrf() {
-    return document.querySelector('meta[name="csrf-token"]')?.content ?? ''
-}
-
-async function apiFetch(path, method, body) {
-    return fetch(path, {
-        method,
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrf() },
-        body: body ? JSON.stringify(body) : undefined,
-    })
 }
 </script>
 

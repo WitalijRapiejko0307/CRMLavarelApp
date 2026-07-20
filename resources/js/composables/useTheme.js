@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue'
 import { usePage } from '@inertiajs/inertia-vue3'
+import { apiFetch } from '@/utils/api'
 
 const STORAGE_KEY = 'crm-theme'
 
@@ -62,15 +63,7 @@ export function useTheme() {
 
         if (page.props.value.auth?.user) {
             try {
-                const resp = await fetch('/settings/theme', {
-                    method: 'PATCH',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
-                    },
-                    body: JSON.stringify({ theme: value }),
-                })
+                const resp = await apiFetch('/settings/theme', 'PATCH', { theme: value })
                 if (resp.ok) {
                     const data = await resp.json()
                     if (page.props.value.auth?.user) {

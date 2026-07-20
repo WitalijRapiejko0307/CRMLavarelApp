@@ -126,6 +126,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import { apiFetch } from '@/utils/api'
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 const props = defineProps({
@@ -173,13 +174,9 @@ async function processAll() {
 }
 
 async function registerOne(order) {
-    const csrf = getCsrf()
-
     try {
-        const resp = await fetch(`/europochta/orders/${order.id}/register`, {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf },
-            body:    JSON.stringify({ who_pays: whoPays.value }),
+        const resp = await apiFetch(`/europochta/orders/${order.id}/register`, 'POST', {
+            who_pays: whoPays.value,
         })
         const data = await resp.json()
         results.value = { ...results.value, [order.id]: data }
@@ -207,10 +204,6 @@ function errorLabel(code) {
         exception:                '✕ Исключение',
     }
     return map[code] ?? code
-}
-
-function getCsrf() {
-    return document.querySelector('meta[name="csrf-token"]')?.content ?? ''
 }
 </script>
 

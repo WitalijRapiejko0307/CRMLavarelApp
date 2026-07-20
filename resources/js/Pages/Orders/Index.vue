@@ -135,6 +135,7 @@ import { Inertia } from '@inertiajs/inertia'
 import { Link } from '@inertiajs/inertia-vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import OrderStatusBadge from '@/Components/OrderStatusBadge.vue'
+import { apiFetch } from '@/utils/api'
 import {
     useVueTable,
     createColumnHelper,
@@ -172,10 +173,6 @@ const trackingLabel   = computed(() => {
 
 let pollTimer = null
 
-function getCsrf() {
-    return document.querySelector('meta[name="csrf-token"]')?.content ?? ''
-}
-
 function startPolling() {
     stopPolling()
     pollTimer = setInterval(pollTrackingStatus, 2000)
@@ -212,13 +209,8 @@ async function pollTrackingStatus() {
 async function startRefreshTracking() {
     if (trackingRunning.value) return
 
-    const csrf = getCsrf()
-
     try {
-        const resp = await fetch('/orders/refresh-tracking', {
-            method:  'POST',
-            headers: { 'X-CSRF-TOKEN': csrf, 'X-Requested-With': 'XMLHttpRequest' },
-        })
+        const resp = await apiFetch('/orders/refresh-tracking', 'POST')
         const data = await resp.json()
 
         if (resp.status === 202) {

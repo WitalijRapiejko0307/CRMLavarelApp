@@ -153,6 +153,7 @@ import { Inertia } from '@inertiajs/inertia'
 import { usePage } from '@inertiajs/inertia-vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { useTheme } from '@/composables/useTheme'
+import { apiFetch } from '@/utils/api'
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 const props = defineProps({
@@ -289,13 +290,7 @@ function save() {
 async function generateSecret() {
     generating.value = true
     try {
-        const resp = await fetch('/settings/generate-webhook-secret', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
-            },
-        })
+        const resp = await apiFetch('/settings/generate-webhook-secret', 'POST')
         const data = await resp.json()
         if (data.success) {
             form['webhook_secret']                = data.secret
