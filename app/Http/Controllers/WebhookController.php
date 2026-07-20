@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Models\TenantSetting;
 use App\Services\BlacklistService;
 use App\Services\SalesRenderService;
+use App\Support\PhoneNormalizer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -29,7 +30,7 @@ class WebhookController extends Controller
      *   X-Webhook-Token: <webhook_secret from tenant_settings>
      *
      * Body (JSON):
-     *   name, phone, offer, options, source
+     *   name, phone, offer, options (price in BYN), source
      */
     public function lead(Request $request): JsonResponse
     {
@@ -61,9 +62,11 @@ class WebhookController extends Controller
             'name'    => ['required', 'string', 'max:255'],
             'phone'   => ['required', 'string', 'max:30'],
             'offer'   => ['nullable', 'string', 'max:255'],
-            'options' => ['nullable', 'string', 'max:1000'],
+            'options' => ['nullable', 'numeric', 'min:0'],
             'source'  => ['nullable', 'string', 'max:50'],
         ]);
+
+        $phone = PhoneNormalizer::normalize($data['phone']);
 
         // Set tenant context so TenantSetting::get() resolves correctly below
         app()->instance('current_tenant_id', $tenantId);
@@ -75,9 +78,9 @@ class WebhookController extends Controller
 
         if ($apiKey && $listId) {
             $blacklist = new BlacklistService($apiKey, $listId);
-            if ($blacklist->check($data['phone'])) {
+            if ($blacklist->check($phone)) {
                 $fullName .= ' НЕБЛАГОНАДЕЖНЫЙ КЛИЕНТ';
-                Log::info('Webhook: blacklisted phone', ['phone' => $data['phone'], 'tenant_id' => $tenantId]);
+                Log::info('Webhook: blacklisted phone', ['phone' => $phone, 'tenant_id' => $tenantId]);
             }
         }
 
@@ -85,13 +88,13 @@ class WebhookController extends Controller
         $order = Order::withoutGlobalScopes()->create([
             'tenant_id'  => $tenantId,
             'full_name'  => $fullName,
-            'phone'      => $data['phone'],
+            'phone'      => $phone,
             'goods'      => $data['offer'] ? [$data['offer']] : [],
             'quantities' => [1],
-            'prices'     => [],
+            'prices'     => $data['offer'] ? [(float) ($data['options'] ?? 0)] : [],
             'status'     => 'Позвонить',
             'source'     => $data['source'] ?? 'site',
-            'sms_log'    => $data['options'] ?? null,
+            'sms_log'    => null,
         ]);
 
         Log::info('Webhook: order created', ['order_id' => $order->id, 'tenant_id' => $tenantId]);

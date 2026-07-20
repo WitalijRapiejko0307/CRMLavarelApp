@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\PhoneNormalizer;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -33,8 +34,8 @@ class BlacklistService
      */
     public function check(string $phone): bool
     {
-        // Format: 80XXXXXXXXX (as in GAS: '80' + phone)
-        $formatted = '80' . preg_replace('/\D/', '', $phone);
+        // Format: 80 + last 9 digits of normalized number
+        $formatted = '80' . PhoneNormalizer::lastNineDigits(PhoneNormalizer::normalize($phone));
 
         $url = self::API_URL . '?' . http_build_query([
             'getphone' => $formatted,

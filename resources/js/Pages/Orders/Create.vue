@@ -41,6 +41,9 @@
                             <p v-if="form.errors.full_name" class="mt-1 text-xs text-red-500">
                                 {{ form.errors.full_name }}
                             </p>
+                            <p v-else class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                                Фамилия, имя и отчество через пробел (требование Белпочты)
+                            </p>
                         </div>
                         <div>
                             <label class="label">Телефон</label>
@@ -48,7 +51,7 @@
                                 v-model="form.phone"
                                 type="tel"
                                 class="w-full mt-1"
-                                placeholder="+375 29 123-45-67"
+                                placeholder="375291234567"
                             />
                         </div>
                         <div>
@@ -144,35 +147,59 @@
                         <div
                             v-for="(_, i) in form.goods"
                             :key="i"
-                            class="flex items-center gap-3"
+                            class="space-y-1"
                         >
-                            <select v-model="form.goods[i]" class="flex-1">
-                                <option value="">— выберите товар —</option>
-                                <option v-for="p in products" :key="p.id" :value="p.name">{{ p.name }}</option>
-                            </select>
-                            <input
-                                v-model.number="form.quantities[i]"
-                                type="number"
-                                min="1"
-                                class="w-20 text-center"
-                                placeholder="шт."
-                            />
-                            <input
-                                v-model.number="form.prices[i]"
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                class="w-28 text-right"
-                                placeholder="цена"
-                            />
-                            <button
-                                class="text-red-400 hover:text-red-600 p-1 shrink-0"
-                                @click="removeGood(i)"
+                            <div class="flex items-center gap-3">
+                                <select v-model="form.goods[i]" class="flex-1">
+                                    <option value="">— выберите товар —</option>
+                                    <option
+                                        v-if="form.goods[i] && !isInCatalog(form.goods[i])"
+                                        :value="form.goods[i]"
+                                    >
+                                        {{ form.goods[i] }} (нет на складе)
+                                    </option>
+                                    <option v-for="p in products" :key="p.id" :value="p.name">{{ p.name }}</option>
+                                </select>
+                                <input
+                                    v-model.number="form.quantities[i]"
+                                    type="number"
+                                    min="1"
+                                    class="w-20 text-center"
+                                    placeholder="шт."
+                                />
+                                <input
+                                    v-model.number="form.prices[i]"
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    class="w-28 text-right"
+                                    placeholder="цена"
+                                />
+                                <button
+                                    class="text-red-400 hover:text-red-600 p-1 shrink-0"
+                                    @click="removeGood(i)"
+                                >
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div
+                                v-if="form.goods[i] && !isInCatalog(form.goods[i])"
+                                class="flex items-center gap-3 flex-wrap text-xs"
                             >
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                                </svg>
-                            </button>
+                                <span class="inline-flex items-center font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded-full">
+                                    Товар не найден на складе
+                                </span>
+                                <a
+                                    :href="`/products?suggest_name=${encodeURIComponent(form.goods[i])}`"
+                                    target="_blank"
+                                    rel="noopener"
+                                    class="text-indigo-600 hover:underline"
+                                >
+                                    Добавить на склад
+                                </a>
+                            </div>
                         </div>
                         <p v-if="form.goods.length === 0" class="text-sm text-gray-400 dark:text-gray-500 italic">Нет товаров</p>
                         <button class="btn-secondary btn-sm" @click="addGood">+ Добавить товар</button>
@@ -246,12 +273,19 @@ import { Inertia } from '@inertiajs/inertia'
 import { useForm } from '@inertiajs/inertia-vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import AddressInlinePicker from '@/Components/AddressInlinePicker.vue'
+import { isInCatalog as checkInCatalog } from '@/utils/phone'
 
 const props = defineProps({
     statuses:      Array,
     deliveryTypes: Object,
     products:      Array,
 })
+
+const productNames = computed(() => props.products.map(p => p.name))
+
+function isInCatalog(name) {
+    return checkInCatalog(name, productNames.value)
+}
 
 const pickerRef = ref(null)
 

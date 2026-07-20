@@ -201,7 +201,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -262,11 +262,19 @@ async function saveEdit(product) {
 }
 
 // ── Create ────────────────────────────────────────────────────────────────────
-function openCreateModal() {
-    createForm.value  = { name: '', weight: 0, stock: 0, sr_item_id: null }
+function openCreateModal(presetName = '') {
+    createForm.value  = { name: presetName, weight: 0, stock: 0, sr_item_id: null }
     createError.value = ''
     createModal.value = true
 }
+
+onMounted(() => {
+    const params = new URLSearchParams(window.location.search)
+    const suggestName = params.get('suggest_name')
+    if (suggestName) {
+        openCreateModal(suggestName)
+    }
+})
 
 async function createProduct() {
     if (!createForm.value.name.trim()) {

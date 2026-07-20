@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\TenantSetting;
+use App\Rules\FullNameThreeParts;
 use App\Services\TrackingRunService;
+use App\Support\PhoneNormalizer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -39,7 +41,7 @@ class OrderController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'full_name'  => ['required', 'string', 'max:255'],
+            'full_name'  => ['required', 'string', 'max:255', new FullNameThreeParts],
             'phone'      => ['nullable', 'string', 'max:20'],
             'status'     => ['required', 'in:' . implode(',', Order::STATUSES)],
             'goods'      => ['nullable', 'array'],
@@ -58,6 +60,10 @@ class OrderController extends Controller
 
         $data['tenant_id'] = Auth::user()->tenant_id;
         $data['source']  ??= 'manual';
+
+        if (!empty($data['phone'])) {
+            $data['phone'] = PhoneNormalizer::normalize($data['phone']);
+        }
 
         $order = Order::create($data);
 
@@ -283,18 +289,21 @@ class OrderController extends Controller
     {
         $order->load('statusHistory');
 
+        $catalogNames = Product::pluck('name')->all();
+
         return Inertia::render('Orders/Show', [
             'order'         => $order,
             'statuses'      => Order::STATUSES,
             'deliveryTypes' => Order::DELIVERY_TYPES,
             'products'      => Product::orderBy('name')->get(['id', 'name', 'stock']),
+            'unknownGoods'  => array_values(array_diff($order->goods ?? [], $catalogNames)),
         ]);
     }
 
     public function update(Request $request, Order $order)
     {
         $data = $request->validate([
-            'full_name'     => ['sometimes', 'required', 'string', 'max:255'],
+            'full_name'     => ['sometimes', 'required', 'string', 'max:255', new FullNameThreeParts],
             'phone'         => ['sometimes', 'nullable', 'string', 'max:20'],
             'city'          => ['sometimes', 'nullable', 'string', 'max:100'],
             'street'        => ['sometimes', 'nullable', 'string', 'max:100'],
@@ -308,6 +317,10 @@ class OrderController extends Controller
             'source'             => ['sometimes', 'nullable', 'string', 'max:50'],
             'belpost_address_id' => ['sometimes', 'nullable', 'string', 'max:50'],
         ]);
+
+        if (array_key_exists('phone', $data) && !empty($data['phone'])) {
+            $data['phone'] = PhoneNormalizer::normalize($data['phone']);
+        }
 
         $order->update($data);
 

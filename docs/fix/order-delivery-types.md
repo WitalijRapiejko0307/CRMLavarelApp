@@ -1,7 +1,7 @@
 # Выбор вида доставки в заявках
 
 **Дата:** 27.06.2026  
-**Статус:** planned  
+**Статус:** done  
 **Контекст:** В заявке невозможно выбрать вид доставки. Требуются 5 типов: Белпочта, Европочта, Курьер, Самовывоз, Лично.
 
 ## Цель
@@ -165,12 +165,12 @@ cd hosting && npm run dev   # или npm run production
 
 ## Acceptance Criteria
 
-- [ ] При создании заказа можно выбрать один из 5 типов доставки
-- [ ] На карточке заказа select в блоке «Доставка» всегда доступен и сохраняет значение отдельной кнопкой
-- [ ] В списке заказов отображаются русские подписи всех типов
-- [ ] CSV-импорт принимает русские и латинские названия всех 5 типов
-- [ ] Белпочта / Европочта продолжают показывать только «свои» заявки
-- [ ] `php artisan migrate` проходит без ошибок
+- [x] При создании заказа можно выбрать один из 5 типов доставки
+- [x] На карточке заказа select в блоке «Доставка» всегда доступен и сохраняет значение отдельной кнопкой
+- [x] В списке заказов отображаются русские подписи всех типов
+- [x] CSV-импорт принимает русские и латинские названия всех 5 типов
+- [x] Белпочта / Европочта продолжают показывать только «свои» заявки
+- [ ] `php artisan migrate` проходит без ошибок *(локально не проверено — БД недоступна)*
 
 ## Риски
 
@@ -179,10 +179,10 @@ cd hosting && npm run dev   # или npm run production
 
 ## Чеклист реализации
 
-- [ ] Миграция: `orders.delivery_type` enum → VARCHAR(30)
-- [ ] `Order::DELIVERY_TYPES` (5 типов) + `deliveryTypeRule()`
-- [ ] `OrderController`: store/update/import + `updateDeliveryType` + route
-- [ ] `Create.vue`: prop `deliveryTypes` + select в форме
-- [ ] `Show.vue`: always-visible select + PATCH delivery-type
-- [ ] `Index.vue` и `Import.vue`: подписи из `deliveryTypes`
-- [ ] `npm run dev` + ручная проверка AC
+- [x] Миграция: `orders.delivery_type` enum → VARCHAR(30)
+- [x] `Order::DELIVERY_TYPES` (5 типов) + `deliveryTypeRule()`
+- [x] `OrderController`: store/update/import + `updateDeliveryType` + route
+- [x] `Create.vue`: prop `deliveryTypes` + select в форме
+- [x] `Show.vue`: always-visible select + PATCH delivery-type
+- [x] `Index.vue` и `Import.vue`: подписи из `deliveryTypes`
+- [x] `npm run production` — сборка успешна

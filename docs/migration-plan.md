@@ -144,7 +144,7 @@ flowchart LR
   "name": "Иван Иванов",
   "phone": "291234567",
   "offer": "Название товара",
-  "options": "Комментарий"
+  "options": "49.90"
 }
 ```
 
@@ -166,7 +166,7 @@ X-Webhook-Token: <секрет из tenant_settings.webhook_secret>
   "name": "Иван Иванов",
   "phone": "291234567",
   "offer": "Название товара",
-  "options": "Комментарий",
+  "options": "49.90",
   "source": "site"
 }
 ```
@@ -174,10 +174,11 @@ X-Webhook-Token: <секрет из tenant_settings.webhook_secret>
 **Обработка (`WebhookController`):**
 
 1. Проверка `X-Webhook-Token`
-2. Создание заказа со статусом «Позвонить»
-3. Запись `source` (site, landing, …)
-4. Вызов `BlacklistService` (blacks.by)
-5. Опционально — отправка в SalesRender (если настроено)
+2. Нормализация телефона (`291234567` → `375291234567`)
+3. Создание заказа со статусом «Позвонить»; `options` (цена) → `prices[0]`
+4. Запись `source` (site, landing, …)
+5. Вызов `BlacklistService` (blacks.by)
+6. Опционально — отправка в SalesRender (если настроено)
 
 **Ответ:**
 

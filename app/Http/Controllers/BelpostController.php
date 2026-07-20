@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Jobs\DownloadBelpostPdfJob;
 use App\Models\MailBatch;
 use App\Models\Order;
+use App\Rules\FullNameThreeParts;
 use App\Services\BelpostService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -118,6 +119,14 @@ class BelpostController extends Controller
         $order = Order::find($orderId);
         if (!$order) {
             return response()->json(['success' => false, 'message' => 'Заказ не найден'], 404);
+        }
+
+        $fioRule = new FullNameThreeParts();
+        if (!$fioRule->passes('full_name', $order->full_name)) {
+            return response()->json([
+                'success' => false,
+                'message' => $fioRule->message(),
+            ], 422);
         }
 
         try {

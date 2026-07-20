@@ -38,15 +38,41 @@
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <label class="label">ФИО</label>
-                            <div v-if="!editing" class="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100">{{ order.full_name }}</div>
-                            <input v-else v-model="form.full_name" type="text" class="w-full mt-1" />
+                            <div v-if="!editing" class="mt-1 flex items-center gap-2 flex-wrap">
+                                <span class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ order.full_name }}</span>
+                                <span
+                                    v-if="!isFullNameComplete(order.full_name)"
+                                    class="inline-flex items-center text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded-full"
+                                >
+                                    ФИО неполное
+                                </span>
+                            </div>
+                            <template v-else>
+                                <input
+                                    v-model="form.full_name"
+                                    type="text"
+                                    class="w-full mt-1"
+                                    placeholder="Иванов Иван Иванович"
+                                />
+                                <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                                    Фамилия, имя и отчество через пробел (требование Белпочты)
+                                </p>
+                            </template>
                         </div>
                         <div>
                             <label class="label">Телефон</label>
                             <div v-if="!editing" class="mt-1 text-sm text-gray-900 dark:text-gray-100">
-                                <a :href="`tel:${order.phone}`" class="text-indigo-600 hover:underline">{{ order.phone ?? '—' }}</a>
+                                <a :href="`tel:${order.phone}`" class="text-indigo-600 hover:underline">
+                                    {{ formatPhone(order.phone) || order.phone || '—' }}
+                                </a>
                             </div>
-                            <input v-else v-model="form.phone" type="tel" class="w-full mt-1" />
+                            <input
+                                v-else
+                                v-model="form.phone"
+                                type="tel"
+                                class="w-full mt-1"
+                                placeholder="375291234567"
+                            />
                         </div>
                         <div>
                             <label class="label">Источник</label>
@@ -163,7 +189,17 @@
                             </thead>
                             <tbody>
                                 <tr v-for="(good, i) in order.goods" :key="i" class="border-b border-gray-100 dark:border-gray-700">
-                                    <td class="py-2 text-gray-800 dark:text-gray-200">{{ good }}</td>
+                                    <td class="py-2 text-gray-800 dark:text-gray-200">
+                                        <span class="inline-flex items-center gap-2 flex-wrap">
+                                            {{ good }}
+                                            <span
+                                                v-if="isUnknownGood(good)"
+                                                class="inline-flex items-center text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded-full"
+                                            >
+                                                Не на складе
+                                            </span>
+                                        </span>
+                                    </td>
                                     <td class="py-2 text-right text-gray-600 dark:text-gray-400">{{ order.quantities?.[i] ?? 1 }}</td>
                                     <td class="py-2 text-right text-gray-600 dark:text-gray-400">{{ formatPrice(order.prices?.[i]) }}</td>
                                 </tr>
@@ -183,32 +219,56 @@
                         <div
                             v-for="(good, i) in form.goods"
                             :key="i"
-                            class="flex items-center gap-3"
+                            class="space-y-1"
                         >
-                            <select v-model="form.goods[i]" class="flex-1">
-                                <option value="">— выберите товар —</option>
-                                <option v-for="p in products" :key="p.id" :value="p.name">{{ p.name }}</option>
-                            </select>
-                            <input
-                                v-model.number="form.quantities[i]"
-                                type="number"
-                                min="1"
-                                class="w-20 text-center"
-                                placeholder="шт."
-                            />
-                            <input
-                                v-model.number="form.prices[i]"
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                class="w-28 text-right"
-                                placeholder="цена"
-                            />
-                            <button class="text-red-400 hover:text-red-600 p-1" @click="removeGood(i)">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                                </svg>
-                            </button>
+                            <div class="flex items-center gap-3">
+                                <select v-model="form.goods[i]" class="flex-1">
+                                    <option value="">— выберите товар —</option>
+                                    <option
+                                        v-if="form.goods[i] && !isInCatalog(form.goods[i])"
+                                        :value="form.goods[i]"
+                                    >
+                                        {{ form.goods[i] }} (нет на складе)
+                                    </option>
+                                    <option v-for="p in products" :key="p.id" :value="p.name">{{ p.name }}</option>
+                                </select>
+                                <input
+                                    v-model.number="form.quantities[i]"
+                                    type="number"
+                                    min="1"
+                                    class="w-20 text-center"
+                                    placeholder="шт."
+                                />
+                                <input
+                                    v-model.number="form.prices[i]"
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    class="w-28 text-right"
+                                    placeholder="цена"
+                                />
+                                <button class="text-red-400 hover:text-red-600 p-1" @click="removeGood(i)">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div
+                                v-if="form.goods[i] && !isInCatalog(form.goods[i])"
+                                class="flex items-center gap-3 flex-wrap text-xs"
+                            >
+                                <span class="inline-flex items-center font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded-full">
+                                    Товар не найден на складе
+                                </span>
+                                <a
+                                    :href="`/products?suggest_name=${encodeURIComponent(form.goods[i])}`"
+                                    target="_blank"
+                                    rel="noopener"
+                                    class="text-indigo-600 hover:underline"
+                                >
+                                    Добавить на склад
+                                </a>
+                            </div>
                         </div>
                         <button class="btn-secondary btn-sm" @click="addGood">+ Добавить товар</button>
                     </div>
@@ -305,13 +365,25 @@ import { useForm } from '@inertiajs/inertia-vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import OrderStatusBadge from '@/Components/OrderStatusBadge.vue'
 import AddressInlinePicker from '@/Components/AddressInlinePicker.vue'
+import { formatPhone, isFullNameComplete, isInCatalog as checkInCatalog } from '@/utils/phone'
 
 const props = defineProps({
     order:         Object,
     statuses:      Array,
     deliveryTypes: Object,
     products:      Array,
+    unknownGoods:  { type: Array, default: () => [] },
 })
+
+const productNames = computed(() => props.products.map(p => p.name))
+
+function isUnknownGood(name) {
+    return props.unknownGoods.includes(name)
+}
+
+function isInCatalog(name) {
+    return checkInCatalog(name, productNames.value)
+}
 
 // --- Edit form ---
 const editing   = ref(false)
