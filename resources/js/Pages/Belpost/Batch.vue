@@ -29,13 +29,16 @@
                             <select
                                 v-model="newBatchWhoPays"
                                 class="w-full"
-                                :disabled="isSellerOnlyType"
+                                :disabled="isSellerOnlyType || !!activeBatch"
                             >
                                 <option value="Покупатель">Покупатель</option>
                                 <option value="Продавец">Продавец</option>
                             </select>
                             <p v-if="isSellerOnlyType" class="text-xs text-amber-600 mt-1">
                                 Для этого типа доставку оплачивает только Продавец.
+                            </p>
+                            <p v-else-if="activeBatch" class="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                                Выберите «Создать партию» без активной партии или дождитесь завершения текущей.
                             </p>
                         </div>
                         <button
@@ -91,17 +94,32 @@
                                 <h2 class="section-title">
                                     Партия <span class="font-mono">{{ activeBatch.batch_id }}</span>
                                 </h2>
-                                <p class="text-sm text-muted mt-0.5">
-                                    {{ deliveryTypes[activeBatch.type] ?? activeBatch.type }} ·
-                                    {{ formatDate(activeBatch.created_at) }} ·
-                                    {{ activeBatch.who_pays ?? '—' }}
-                                </p>
+                                <div class="flex items-center flex-wrap gap-2 mt-1">
+                                    <p class="text-sm text-muted">
+                                        {{ deliveryTypes[activeBatch.type] ?? activeBatch.type }} ·
+                                        {{ formatDate(activeBatch.created_at) }}
+                                    </p>
+                                    <span
+                                        v-if="activeBatch.who_pays"
+                                        class="inline-flex items-center rounded-full font-medium px-2 py-0.5 text-xs bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
+                                    >
+                                        Оплата: {{ activeBatch.who_pays }}
+                                    </span>
+                                </div>
                                 <p v-if="activeBatch.id_to_download" class="text-xs text-gray-400 dark:text-gray-500 mt-1">
                                     ID для скачивания: <span class="font-mono text-gray-600 dark:text-gray-400">{{ activeBatch.id_to_download }}</span>
                                 </p>
                             </div>
                             <span :class="badgeClass(activeBatch.status)" class="inline-flex items-center rounded-full font-medium px-3 py-1 text-sm">{{ badgeLabel(activeBatch.status) }}</span>
                         </div>
+                    </div>
+
+                    <!-- Draft: payer is fixed at creation -->
+                    <div v-if="activeBatch.status === 'draft'" class="card bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+                        <p class="text-sm text-blue-800 dark:text-blue-200">
+                            Плательщик за доставку зафиксирован при создании партии
+                            (<strong>{{ activeBatch.who_pays ?? '—' }}</strong>) и не меняется.
+                        </p>
                     </div>
 
                     <!-- Orders to process (only when draft) -->
@@ -217,15 +235,29 @@
                         <h2 class="card-title mb-4">PDF бланки</h2>
 
                         <!-- Polling -->
-                        <div v-if="['committed', 'downloading'].includes(activeBatch.status)" class="flex items-center gap-3 text-sm text-muted">
-                            <svg class="w-5 h-5 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                            </svg>
-                            <span>
-                                {{ activeBatch.status === 'committed' ? 'Белпочта формирует PDF…' : 'Скачиваю архив…' }}
-                                Обновляю статус каждые 10 с.
-                            </span>
+                        <div v-if="['committed', 'downloading'].includes(activeBatch.status)" class="space-y-3">
+                            <div class="flex items-center gap-3 text-sm text-muted">
+                                <svg class="w-5 h-5 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                                </svg>
+                                <span>
+                                    {{ activeBatch.status === 'committed' ? 'Белпочта формирует PDF…' : 'Скачиваю архив…' }}
+                                    Обновляю статус каждые 10 с.
+                                </span>
+                            </div>
+                            <div v-if="showRetryButton" class="flex items-center gap-3">
+                                <button
+                                    class="btn-secondary btn-sm"
+                                    :disabled="retrying"
+                                    @click="retryDownload"
+                                >
+                                    {{ retrying ? 'Запускаю…' : 'Повторить скачивание' }}
+                                </button>
+                                <p class="text-xs text-gray-400 dark:text-gray-500">
+                                    Подождите 30–60 сек, если PDF ещё формируется на стороне Белпочты.
+                                </p>
+                            </div>
                         </div>
 
                         <!-- Ready -->
@@ -248,9 +280,24 @@
                         </div>
 
                         <!-- Failed -->
-                        <div v-else-if="activeBatch.status === 'failed'" class="text-sm">
-                            <p class="text-red-600 font-medium">Ошибка при скачивании PDF</p>
-                            <p class="text-muted mt-1 text-xs">{{ activeBatch.error_message }}</p>
+                        <div v-else-if="activeBatch.status === 'failed'" class="text-sm space-y-3">
+                            <div>
+                                <p class="text-red-600 font-medium">Ошибка при скачивании PDF</p>
+                                <p class="text-muted mt-1 text-xs">{{ activeBatch.error_message }}</p>
+                            </div>
+                            <div class="flex items-center gap-3 flex-wrap">
+                                <button
+                                    class="btn-secondary btn-sm"
+                                    :disabled="retrying"
+                                    @click="retryDownload"
+                                >
+                                    {{ retrying ? 'Запускаю…' : 'Повторить скачивание' }}
+                                </button>
+                                <p class="text-xs text-gray-400 dark:text-gray-500">
+                                    Подождите 30–60 сек, если PDF ещё формируется на стороне Белпочты.
+                                </p>
+                            </div>
+                            <p v-if="retryError" class="text-xs text-red-600">{{ retryError }}</p>
                         </div>
                     </div>
                 </template>
@@ -295,6 +342,17 @@ const createError     = ref('')
 const isSellerOnlyType = computed(() => SELLER_ONLY_TYPES.includes(newBatchType.value))
 
 const activeBatch   = ref(null)
+const pollingSince  = ref(null)
+const pollTick      = ref(0)
+
+const showRetryButton = computed(() => {
+    void pollTick.value
+    if (!activeBatch.value) return false
+    if (activeBatch.value.status === 'failed') return true
+    if (!['committed', 'downloading'].includes(activeBatch.value.status)) return false
+    if (!pollingSince.value) return false
+    return Date.now() - pollingSince.value >= 120_000
+})
 
 // Order processing
 const orderQueue    = ref([...props.eligibleOrders])
@@ -305,6 +363,10 @@ const results       = ref({})        // { [orderId]: { success, track_number, er
 // Commit
 const committing    = ref(false)
 const commitError   = ref('')
+
+// PDF retry
+const retrying      = ref(false)
+const retryError    = ref('')
 
 // Polling
 let pollTimer = null
@@ -327,7 +389,10 @@ function onTypeChange() {
 function selectBatch(b) {
     activeBatch.value = b
     stopPolling()
+    pollingSince.value = null
+    retryError.value = ''
     if (['committed', 'downloading'].includes(b.status)) {
+        pollingSince.value = Date.now()
         startPolling()
     }
 }
@@ -429,6 +494,7 @@ async function commitBatch() {
         if (data.success) {
             activeBatch.value.status        = 'committed'
             activeBatch.value.id_to_download = data.id_to_download ?? null
+            pollingSince.value = Date.now()
             syncBatchInList(activeBatch.value)
             startPolling()
         } else {
@@ -438,6 +504,36 @@ async function commitBatch() {
         commitError.value = e.message
     } finally {
         committing.value = false
+    }
+}
+
+async function retryDownload() {
+    if (retrying.value || !activeBatch.value) return
+    retrying.value  = true
+    retryError.value = ''
+
+    const csrf = getCsrf()
+
+    try {
+        const resp = await fetch(`/belpost/batches/${activeBatch.value.id}/retry-download`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf },
+        })
+        const data = await resp.json()
+
+        if (data.success) {
+            activeBatch.value.status        = 'committed'
+            activeBatch.value.error_message = null
+            pollingSince.value = Date.now()
+            syncBatchInList(activeBatch.value)
+            startPolling()
+        } else {
+            retryError.value = data.message ?? 'Ошибка'
+        }
+    } catch (e) {
+        retryError.value = e.message
+    } finally {
+        retrying.value = false
     }
 }
 
@@ -495,6 +591,7 @@ function stopPolling() {
 
 async function pollStatus() {
     if (!activeBatch.value) return
+    pollTick.value++
 
     try {
         const resp = await fetch(`/api/belpost/batches/${activeBatch.value.id}/status`, {
@@ -505,6 +602,7 @@ async function pollStatus() {
         activeBatch.value.status         = data.status
         activeBatch.value.error_message  = data.error_message
         if (data.id_to_download) activeBatch.value.id_to_download = data.id_to_download
+        if (data.who_pays) activeBatch.value.who_pays = data.who_pays
 
         syncBatchInList(activeBatch.value)
 

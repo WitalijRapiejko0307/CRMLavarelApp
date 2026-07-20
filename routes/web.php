@@ -40,6 +40,7 @@ Route::prefix('belpost')->name('belpost.')->group(function () {
     Route::post('/batches', [BelpostController::class, 'createBatch'])->name('batches.create');
     Route::post('/batches/{batch}/items', [BelpostController::class, 'processOrder'])->name('batches.processOrder');
     Route::post('/batches/{batch}/commit', [BelpostController::class, 'commit'])->name('batches.commit');
+    Route::post('/batches/{batch}/retry-download', [BelpostController::class, 'retryDownload'])->name('batches.retryDownload');
     Route::get('/batches/{batch}/pdf', [BelpostController::class, 'downloadPdf'])->name('batches.pdf');
 });
 

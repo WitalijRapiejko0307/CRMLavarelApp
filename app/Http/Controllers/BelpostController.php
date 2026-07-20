@@ -166,7 +166,8 @@ class BelpostController extends Controller
             $service      = new BelpostService(Auth::user()->tenant_id);
             $idToDownload = $service->commitActiveList($batch);
 
-            DownloadBelpostPdfJob::dispatch($batch->id, Auth::user()->tenant_id);
+            DownloadBelpostPdfJob::dispatch($batch->id, Auth::user()->tenant_id)
+                ->delay(now()->addSeconds(15));
 
             return response()->json([
                 'success'        => true,
@@ -185,6 +186,45 @@ class BelpostController extends Controller
     // ─── Polling + Download ───────────────────────────────────────────────────
 
     /**
+     * POST /belpost/batches/{batch}/retry-download
+     * Re-dispatch PDF download job after failure or stuck state.
+     */
+    public function retryDownload(MailBatch $batch): JsonResponse
+    {
+        $allowed = [
+            MailBatch::STATUS_FAILED,
+            MailBatch::STATUS_COMMITTED,
+            MailBatch::STATUS_DOWNLOADING,
+        ];
+
+        if (!in_array($batch->status, $allowed, true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Повторное скачивание доступно только для партий в статусе «Ошибка», «Ожидание PDF» или «Загрузка»',
+            ], 422);
+        }
+
+        if (!$batch->id_to_download) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Нет ID для скачивания — партия не была зафиксирована на Белпочте',
+            ], 422);
+        }
+
+        $batch->update([
+            'status'        => MailBatch::STATUS_COMMITTED,
+            'error_message' => null,
+        ]);
+
+        DownloadBelpostPdfJob::dispatch($batch->id, Auth::user()->tenant_id);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Скачивание запущено. Подождите 30–60 сек, если PDF ещё формируется на стороне Белпочты.',
+        ]);
+    }
+
+    /**
      * GET /api/belpost/batches/{batch}/status
      * Polling endpoint: returns current batch status for frontend.
      */
@@ -195,6 +235,7 @@ class BelpostController extends Controller
             'pdf_ready'      => $batch->isPdfReady(),
             'id_to_download' => $batch->id_to_download,
             'error_message'  => $batch->error_message,
+            'who_pays'       => $batch->who_pays,
         ]);
     }
 
@@ -211,6 +252,10 @@ class BelpostController extends Controller
         $path = $batch->pdf_path;
 
         if (!Storage::exists($path)) {
+            if ($batch->id_to_download) {
+                return back()->with('error', 'Файл потерян, нажмите «Повторить скачивание»');
+            }
+
             return back()->with('error', 'Файл не найден на сервере');
         }
 

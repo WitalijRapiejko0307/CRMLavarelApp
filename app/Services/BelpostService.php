@@ -88,6 +88,8 @@ class BelpostService
      */
     public function createItem(MailBatch $batch, Order $order, ?string $belpostAddressId = null): array
     {
+        $batch->refresh();
+
         // ── 1. Address resolution ──
         // Priority: explicit param → persisted on order → autoResolve
         $addressId = $belpostAddressId ?? ($order->belpost_address_id ?: null);
@@ -127,7 +129,15 @@ class BelpostService
         $shelfLife    = $isEcommerce ? (TenantSetting::get('shelf_life', '10') ?: '10') : null;
 
         // ── 5. Recipient payment ──
-        $recipientPayment = $batch->who_pays === 'Продавец' ? false : true;
+        $whoPays          = $batch->who_pays ?? 'Покупатель';
+        $recipientPayment = $whoPays !== 'Продавец';
+
+        Log::info('BelpostService::createItem payment', [
+            'batch_id'          => $batch->batch_id,
+            'who_pays'          => $whoPays,
+            'recipient_payment' => $recipientPayment,
+            'order_id'          => $order->id,
+        ]);
 
         // ── 6. Build payload (mirrors GAS createItem v2) ──
         $payload = [
