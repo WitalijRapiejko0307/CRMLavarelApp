@@ -210,6 +210,52 @@
                         </div>
                     </div>
 
+                    <!-- Processed forms (any batch status) -->
+                    <div class="card">
+                        <h2 class="card-title mb-4">Оформленные бланки</h2>
+
+                        <div v-if="activeBatchOrders.length === 0" class="text-sm text-gray-400 dark:text-gray-500 italic py-4 text-center">
+                            В этой партии пока нет оформленных бланков
+                        </div>
+
+                        <div v-else class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead>
+                                    <tr class="border-b border-gray-200 dark:border-gray-700 text-left">
+                                        <th class="pb-2 font-medium text-muted w-8">#</th>
+                                        <th class="pb-2 font-medium text-muted">ФИО / телефон</th>
+                                        <th class="pb-2 font-medium text-muted">Адрес</th>
+                                        <th class="pb-2 font-medium text-muted">Трек</th>
+                                        <th class="pb-2 font-medium text-muted">Дата оформления</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                                    <tr
+                                        v-for="(order, idx) in activeBatchOrders"
+                                        :key="order.id"
+                                        class="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer"
+                                        @click="goToOrder(order.id)"
+                                    >
+                                        <td class="py-2 text-gray-400 dark:text-gray-500 text-xs">{{ idx + 1 }}</td>
+                                        <td class="py-2">
+                                            <div class="font-medium text-gray-800 dark:text-gray-200">{{ order.full_name }}</div>
+                                            <div class="text-xs text-gray-400 dark:text-gray-500">{{ order.phone }}</div>
+                                        </td>
+                                        <td class="py-2 text-xs text-gray-600 dark:text-gray-400">
+                                            {{ formatAddress(order) }}
+                                        </td>
+                                        <td class="py-2 text-xs text-green-600 dark:text-green-400 font-mono font-medium">
+                                            {{ order.track_number ?? '—' }}
+                                        </td>
+                                        <td class="py-2 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                                            {{ formatDate(order.status_changed_at) }}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
                     <!-- Commit section (draft only) -->
                     <div v-if="activeBatch.status === 'draft'" class="card">
                         <div class="flex items-center justify-between">
@@ -317,7 +363,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import AddressSearchModal from '@/Components/AddressSearchModal.vue'
 import { Inertia } from '@inertiajs/inertia'
@@ -326,13 +372,16 @@ const SELLER_ONLY_TYPES = ['ecommerce_light', 'ecommerce_optima']
 
 // ── Props from controller ──────────────────────────────────────────────────
 const props = defineProps({
-    batches:        { type: Array,  default: () => [] },
-    eligibleOrders: { type: Array,  default: () => [] },
-    deliveryTypes:  { type: Object, default: () => ({}) },
+    batches:         { type: Array,  default: () => [] },
+    eligibleOrders:  { type: Array,  default: () => [] },
+    deliveryTypes:   { type: Object, default: () => ({}) },
+    batchOrders:     { type: Object, default: () => ({}) },
+    selectedBatchId: { type: Number, default: null },
 })
 
 // ── Reactive state ─────────────────────────────────────────────────────────
 const batchList       = ref([...props.batches])
+const batchOrdersLocal = ref(normalizeBatchOrders(props.batchOrders))
 const newBatchType    = ref(Object.keys(props.deliveryTypes)[0] ?? '')
 const newBatchWhoPays = ref('Покупатель')
 const creating        = ref(false)
@@ -352,6 +401,12 @@ const showRetryButton = computed(() => {
     if (!['committed', 'downloading'].includes(activeBatch.value.status)) return false
     if (!pollingSince.value) return false
     return Date.now() - pollingSince.value >= 120_000
+})
+
+const activeBatchOrders = computed(() => {
+    if (!activeBatch.value) return []
+    const id = activeBatch.value.id
+    return batchOrdersLocal.value[id] ?? batchOrdersLocal.value[String(id)] ?? []
 })
 
 // Order processing
@@ -467,6 +522,11 @@ async function processOne(order, belpostAddressId) {
         })
         const data = await resp.json()
         results.value[order.id] = data
+
+        if (data.success) {
+            appendToBatchOrders(order, data.track_number)
+            Inertia.reload({ only: ['batchOrders', 'eligibleOrders'], preserveScroll: true })
+        }
     } catch (e) {
         results.value[order.id] = { success: false, error: 'exception', error_message: e.message }
     }
@@ -621,9 +681,54 @@ function syncBatchInList(updated) {
     }
 }
 
+watch(() => props.batchOrders, (val) => {
+    batchOrdersLocal.value = normalizeBatchOrders(val)
+}, { deep: true })
+
 onUnmounted(stopPolling)
 
+onMounted(() => {
+    if (props.selectedBatchId) {
+        const b = batchList.value.find(b => b.id === props.selectedBatchId)
+        if (b) selectBatch(b)
+    }
+})
+
 // ── Helpers ────────────────────────────────────────────────────────────────
+function normalizeBatchOrders(raw) {
+    const out = {}
+    for (const [key, orders] of Object.entries(raw ?? {})) {
+        out[key] = Array.isArray(orders) ? [...orders] : Object.values(orders)
+    }
+    return out
+}
+
+function appendToBatchOrders(order, trackNumber) {
+    if (!activeBatch.value) return
+    const batchId = activeBatch.value.id
+    const key = batchOrdersLocal.value[batchId] ? batchId : String(batchId)
+    const entry = {
+        id: order.id,
+        mail_batch_id: batchId,
+        full_name: order.full_name,
+        phone: order.phone,
+        city: order.city,
+        street: order.street,
+        building: order.building,
+        track_number: trackNumber,
+        status_changed_at: new Date().toISOString(),
+    }
+    const existing = batchOrdersLocal.value[key] ?? []
+    if (existing.some(o => o.id === order.id)) return
+    batchOrdersLocal.value = {
+        ...batchOrdersLocal.value,
+        [key]: [...existing, entry],
+    }
+}
+
+function goToOrder(id) {
+    Inertia.visit(`/orders/${id}`)
+}
 function formatDate(value) {
     if (!value) return '—'
     const d = new Date(value)

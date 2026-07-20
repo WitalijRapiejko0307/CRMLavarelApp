@@ -275,7 +275,10 @@ class OrderController extends Controller
             $query->whereDate('created_at', '<=', $dateTo);
         }
 
-        $orders = $query->paginate(50)->withQueryString();
+        $orders = $query
+            ->with('mailBatch:id,batch_id')
+            ->paginate(50)
+            ->withQueryString();
 
         return Inertia::render('Orders/Index', [
             'orders'        => $orders,

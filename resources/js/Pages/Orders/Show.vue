@@ -13,7 +13,7 @@
                     <OrderStatusBadge :status="order.status" />
                 </div>
                 <div class="flex items-center gap-2">
-                    <button v-if="!editing" class="btn-secondary" @click="editing = true">Редактировать</button>
+                    <button v-if="!editing" class="btn-secondary" @click="startEdit">Редактировать</button>
                     <template v-else>
                         <button class="btn-secondary" @click="cancelEdit">Отмена</button>
                         <button class="btn-primary" :disabled="form.processing" @click="saveEdit">
@@ -355,6 +355,20 @@
                 </div>
             </div>
         </div>
+
+        <!-- Edit warning modal -->
+        <div v-if="editWarningOpen" class="modal-backdrop" @click.self="editWarningOpen = false">
+            <div class="modal-box">
+                <h2 class="section-title mb-3">Редактирование оформленной заявки</h2>
+                <p class="text-sm text-body mb-6">
+                    Заявка уже оформлена. Изменение данных может не совпадать с оформленным бланком или отправлением.
+                </p>
+                <div class="flex justify-end gap-2">
+                    <button class="btn-secondary" @click="editWarningOpen = false">Отмена</button>
+                    <button class="btn-primary" @click="confirmEdit">Продолжить</button>
+                </div>
+            </div>
+        </div>
     </AppLayout>
 </template>
 
@@ -386,8 +400,9 @@ function isInCatalog(name) {
 }
 
 // --- Edit form ---
-const editing   = ref(false)
-const pickerRef = ref(null)
+const editing         = ref(false)
+const editWarningOpen = ref(false)
+const pickerRef       = ref(null)
 
 const form = useForm({
     full_name:          props.order.full_name          ?? '',
@@ -412,6 +427,19 @@ const pickerInitialQuery = computed(() =>
 function cancelEdit() {
     form.reset()
     editing.value = false
+}
+
+function startEdit() {
+    if (props.order.status === 'Оформлен') {
+        editWarningOpen.value = true
+        return
+    }
+    editing.value = true
+}
+
+function confirmEdit() {
+    editWarningOpen.value = false
+    editing.value = true
 }
 
 function saveEdit() {
@@ -497,3 +525,9 @@ const totalPrice = computed(() => {
     }, 0)
 })
 </script>
+
+<style scoped>
+.modal-backdrop {
+    @apply fixed inset-0 bg-black/40 dark:bg-black/60 flex items-center justify-center z-50 p-4;
+}
+</style>

@@ -69,6 +69,7 @@ class Order extends Model
         'source',
         'ops_id',
         'belpost_address_id',
+        'mail_batch_id',
     ];
 
     protected $casts = [
@@ -93,6 +94,11 @@ class Order extends Model
     public function statusHistory(): HasMany
     {
         return $this->hasMany(OrderStatusHistory::class)->orderBy('created_at', 'desc');
+    }
+
+    public function mailBatch(): BelongsTo
+    {
+        return $this->belongsTo(MailBatch::class);
     }
 
     /**

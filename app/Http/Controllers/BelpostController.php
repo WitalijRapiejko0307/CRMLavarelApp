@@ -28,7 +28,7 @@ class BelpostController extends Controller
      * GET /belpost
      * Main Belpost batch management page.
      */
-    public function index(): Response
+    public function index(Request $request): Response
     {
         $batches = MailBatch::orderByDesc('created_at')->get();
 
@@ -39,10 +39,17 @@ class BelpostController extends Controller
             ->orderBy('created_at')
             ->get(['id', 'full_name', 'city', 'street', 'building', 'housing', 'apartment', 'phone', 'goods', 'quantities', 'prices']);
 
+        $batchOrders = Order::whereIn('mail_batch_id', $batches->pluck('id'))
+            ->orderBy('status_changed_at')
+            ->get(['id', 'mail_batch_id', 'full_name', 'phone', 'city', 'street', 'building', 'track_number', 'status_changed_at'])
+            ->groupBy('mail_batch_id');
+
         return Inertia::render('Belpost/Batch', [
-            'batches'        => $batches,
-            'eligibleOrders' => $eligibleOrders,
-            'deliveryTypes'  => MailBatch::DELIVERY_TYPES,
+            'batches'         => $batches,
+            'eligibleOrders'  => $eligibleOrders,
+            'deliveryTypes'   => MailBatch::DELIVERY_TYPES,
+            'batchOrders'     => $batchOrders->map(fn ($group) => $group->values())->all(),
+            'selectedBatchId' => ($batchId = (int) $request->query('batch')) > 0 ? $batchId : null,
         ]);
     }
 

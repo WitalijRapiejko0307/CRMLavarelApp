@@ -234,6 +234,7 @@ class BelpostService
                     'status'            => 'Оформлен',
                     'status_changed_at' => now(),
                     'track_number'      => $s10code,
+                    'mail_batch_id'     => $batch->id,
                 ]);
 
                 Log::info('BelpostService::createItem success', [

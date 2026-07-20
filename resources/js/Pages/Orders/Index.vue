@@ -355,6 +355,20 @@ const columns = [
             props.deliveryTypes[info.getValue()] ?? '—'
         ),
     }),
+    columnHelper.display({
+        id: 'batch',
+        header: 'Партия',
+        cell: info => {
+            const row = info.row.original
+            const batch = row.mail_batch
+            if (!batch?.batch_id) return h('span', { class: 'text-gray-400 dark:text-gray-500' }, '—')
+            return h(Link, {
+                href: `/belpost?batch=${batch.id}`,
+                class: 'text-indigo-600 dark:text-indigo-400 font-mono text-xs hover:underline',
+                onClick: (e) => e.stopPropagation(),
+            }, () => batch.batch_id)
+        },
+    }),
 ]
 
 const table = useVueTable({

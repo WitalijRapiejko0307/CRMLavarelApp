@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Scopes\TenantScope;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class MailBatch extends Model
 {
@@ -67,6 +68,11 @@ class MailBatch extends Model
     public function tenant()
     {
         return $this->belongsTo(Tenant::class);
+    }
+
+    public function orders(): HasMany
+    {
+        return $this->hasMany(Order::class);
     }
 
     public function isPdfReady(): bool
