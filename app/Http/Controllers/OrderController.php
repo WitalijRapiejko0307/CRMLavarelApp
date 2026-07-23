@@ -7,7 +7,10 @@ use App\Models\Product;
 use App\Models\TenantSetting;
 use App\Rules\FullNameThreeParts;
 use App\Services\TrackingRunService;
+use App\Support\CsvOrderLineParser;
+use App\Support\CsvOrderReader;
 use App\Support\PhoneNormalizer;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -86,12 +89,8 @@ class OrderController extends Controller
     /**
      * POST /orders/import-csv
      *
-     * Accepts a CSV file. First row must be headers.
-     * Supported header names (case-insensitive):
-     *   external_id, created_at, full_name, status, goods, quantities,
-     *   city, street, building, housing, apartment, phone,
-     *   prices, track_number, delivery_type, source
-     *
+     * Accepts a CSV export from Google Sheets (лист «Заказы»).
+     * Header row is detected automatically (must contain ФИО and Товар).
      * Rows with an existing external_id (within the tenant) are skipped.
      */
     public function importCsv(Request $request): JsonResponse
@@ -103,116 +102,86 @@ class OrderController extends Controller
         $path     = $request->file('file')->getRealPath();
         $tenantId = Auth::user()->tenant_id;
 
-        $handle = fopen($path, 'r');
-        if (!$handle) {
-            return response()->json(['success' => false, 'message' => 'Не удалось открыть файл']);
+        try {
+            $rows = CsvOrderReader::read($path);
+        } catch (\RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()]);
         }
 
-        // Detect delimiter from first line
-        $firstLine = fgets($handle);
-        rewind($handle);
-        $delimiter = substr_count($firstLine, ';') > substr_count($firstLine, ',') ? ';' : ',';
+        $created  = 0;
+        $skipped  = 0;
+        $errors   = 0;
+        $warnings = [];
 
-        // Read header row
-        $rawHeaders = fgetcsv($handle, 0, $delimiter);
-        if (!$rawHeaders) {
-            fclose($handle);
-            return response()->json(['success' => false, 'message' => 'Пустой файл или неверный формат']);
-        }
-
-        $headers = array_map(fn($h) => mb_strtolower(trim($h)), $rawHeaders);
-
-        // Map column aliases to field names
-        $aliasMap = [
-            'id'            => 'external_id',
-            'external_id'   => 'external_id',
-            'created_at'    => 'created_at',
-            'дата'          => 'created_at',
-            'full_name'     => 'full_name',
-            'фио'           => 'full_name',
-            'имя'           => 'full_name',
-            'status'        => 'status',
-            'статус'        => 'status',
-            'goods'         => 'goods',
-            'товары'        => 'goods',
-            'товар'         => 'goods',
-            'quantities'    => 'quantities',
-            'количество'    => 'quantities',
-            'кол-во'        => 'quantities',
-            'city'          => 'city',
-            'город'         => 'city',
-            'street'        => 'street',
-            'улица'         => 'street',
-            'building'      => 'building',
-            'дом'           => 'building',
-            'housing'       => 'housing',
-            'корпус'        => 'housing',
-            'apartment'     => 'apartment',
-            'кв'            => 'apartment',
-            'квартира'      => 'apartment',
-            'phone'         => 'phone',
-            'телефон'       => 'phone',
-            'prices'        => 'prices',
-            'цены'          => 'prices',
-            'цена'          => 'prices',
-            'track_number'  => 'track_number',
-            'трек'          => 'track_number',
-            'track'         => 'track_number',
-            'delivery_type' => 'delivery_type',
-            'доставка'      => 'delivery_type',
-            'source'        => 'source',
-            'источник'      => 'source',
-        ];
-
-        // Build column index → field map
-        $colMap = [];
-        foreach ($headers as $idx => $h) {
-            if (isset($aliasMap[$h])) {
-                $colMap[$idx] = $aliasMap[$h];
-            }
-        }
-
-        $created = 0;
-        $skipped = 0;
-        $errors  = 0;
-        $rowNum  = 1;
-
-        while (($row = fgetcsv($handle, 0, $delimiter)) !== false) {
-            $rowNum++;
-            if (count(array_filter($row, fn($v) => trim($v) !== '')) === 0) {
-                continue; // skip blank lines
-            }
+        foreach ($rows as $row) {
+            $rowNum = $row['rowNum'];
+            $fields = $row['fields'];
 
             try {
+                if (empty($fields['full_name'])) {
+                    $skipped++;
+                    continue;
+                }
+
                 $data = ['tenant_id' => $tenantId];
 
-                foreach ($colMap as $idx => $field) {
-                    $value = isset($row[$idx]) ? trim($row[$idx]) : null;
-
-                    if ($value === '' || $value === null) {
+                foreach ($fields as $field => $value) {
+                    if (in_array($field, ['goods', 'quantities', 'prices'], true)) {
                         continue;
                     }
 
-                    // JSON array fields
-                    if (in_array($field, ['goods', 'quantities', 'prices'])) {
-                        $data[$field] = array_map('trim', explode(',', $value));
-                    } elseif ($field === 'delivery_type') {
-                        $map = [
-                            'белпочта' => 'belpost', 'belpost' => 'belpost',
-                            'европочта' => 'europochta', 'europochta' => 'europochta',
-                            'курьер' => 'courier', 'courier' => 'courier',
-                            'самовывоз' => 'pickup', 'pickup' => 'pickup',
-                            'лично' => 'personal', 'personal' => 'personal',
-                        ];
-                        $data[$field] = $map[mb_strtolower($value)] ?? null;
-                    } elseif ($field === 'status') {
-                        $data[$field] = in_array($value, Order::STATUSES) ? $value : 'Позвонить';
-                    } else {
-                        $data[$field] = $value;
+                    if ($field === 'phone') {
+                        $data[$field] = PhoneNormalizer::normalize($value);
+                        continue;
                     }
+
+                    if ($field === 'created_at') {
+                        $parsed = $this->parseImportCreatedAt($value);
+                        if ($parsed !== null) {
+                            $data['created_at'] = $parsed;
+                        }
+                        continue;
+                    }
+
+                    if ($field === 'status') {
+                        if (in_array($value, Order::STATUSES, true)) {
+                            $data[$field] = $value;
+                        } else {
+                            $data[$field] = 'Позвонить';
+                            $warnings[] = [
+                                'row'     => $rowNum,
+                                'message' => "Неизвестный статус «{$value}», установлен «Позвонить»",
+                            ];
+                        }
+                        continue;
+                    }
+
+                    if ($field === 'delivery_type') {
+                        $data[$field] = CsvOrderReader::mapDeliveryType($value);
+                        continue;
+                    }
+
+                    $data[$field] = $value;
                 }
 
-                // Skip if external_id already exists for this tenant
+                try {
+                    $lineItems = CsvOrderLineParser::parse(
+                        $fields['goods'] ?? '',
+                        $fields['quantities'] ?? null,
+                        $fields['prices'] ?? null,
+                    );
+                    $data['goods']      = $lineItems['goods'];
+                    $data['quantities'] = $lineItems['quantities'];
+                    $data['prices']     = $lineItems['prices'];
+                } catch (\InvalidArgumentException $e) {
+                    $errors++;
+                    $warnings[] = [
+                        'row'     => $rowNum,
+                        'message' => $e->getMessage(),
+                    ];
+                    continue;
+                }
+
                 if (!empty($data['external_id'])) {
                     $exists = Order::withoutGlobalScopes()
                         ->where('tenant_id', $tenantId)
@@ -225,30 +194,39 @@ class OrderController extends Controller
                     }
                 }
 
-                if (empty($data['full_name'])) {
-                    $skipped++;
-                    continue;
-                }
-
-                if (empty($data['status'])) {
-                    $data['status'] = 'Позвонить';
-                }
+                $data['status'] ??= 'Позвонить';
 
                 Order::create($data);
                 $created++;
             } catch (\Exception $e) {
                 $errors++;
+                $warnings[] = [
+                    'row'     => $rowNum,
+                    'message' => $e->getMessage(),
+                ];
             }
         }
 
-        fclose($handle);
-
         return response()->json([
-            'success' => true,
-            'created' => $created,
-            'skipped' => $skipped,
-            'errors'  => $errors,
+            'success'  => true,
+            'created'  => $created,
+            'skipped'  => $skipped,
+            'errors'   => $errors,
+            'warnings' => $warnings,
         ]);
+    }
+
+    private function parseImportCreatedAt(string $value): ?Carbon
+    {
+        foreach (['d.m.Y H:i', 'd.m.Y'] as $format) {
+            try {
+                return Carbon::createFromFormat($format, $value);
+            } catch (\Exception $e) {
+                continue;
+            }
+        }
+
+        return null;
     }
 
     public function index(Request $request): Response

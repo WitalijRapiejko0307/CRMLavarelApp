@@ -16,28 +16,30 @@
             <div class="card bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
                 <h2 class="text-sm font-semibold text-blue-800 dark:text-blue-200 mb-2">Формат файла</h2>
                 <p class="text-xs text-blue-700 dark:text-blue-300 leading-relaxed mb-3">
-                    CSV-файл с заголовками в первой строке. Разделитель — запятая или точка с запятой.
-                    Поддерживаемые колонки:
+                    Экспорт Google Sheets (лист «Заказы»). Разделитель — запятая или точка с запятой.
+                    Строка заголовков определяется автоматически (первая строка-шаблон этикетки пропускается).
+                </p>
+                <p class="text-xs text-blue-700 dark:text-blue-300 leading-relaxed mb-3">
+                    Несколько товаров в одной строке: <strong>товары через запятую</strong>,
+                    <strong>штуки и цены через пробел</strong>.
+                    Пример: <code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">Триммер…, Культиватор…</code> /
+                    <code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">3 3</code> /
+                    <code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">135 123</code>
                 </p>
                 <div class="grid grid-cols-2 gap-1 text-xs text-blue-700 dark:text-blue-300">
-                    <div><code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">external_id</code> — внешний ID</div>
-                    <div><code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">full_name</code> / <code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">ФИО</code> — имя</div>
-                    <div><code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">phone</code> / <code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">Телефон</code> — телефон</div>
-                    <div><code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">status</code> / <code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">Статус</code> — статус</div>
-                    <div><code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">city</code> / <code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">Город</code> — город</div>
-                    <div><code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">street</code> / <code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">Улица</code> — улица</div>
-                    <div><code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">building</code> / <code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">Дом</code> — дом</div>
-                    <div><code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">goods</code> / <code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">Товары</code> — товары (через запятую)</div>
-                    <div><code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">quantities</code> / <code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">Количество</code> — кол-во</div>
-                    <div><code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">prices</code> / <code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">Цены</code> — цены</div>
-                    <div><code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">track_number</code> / <code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">Трек</code> — трек-номер</div>
-                    <div><code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">delivery_type</code> / <code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">Доставка</code> — Белпочта, Европочта, Курьер, Самовывоз, Лично</div>
-                    <div><code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">source</code> / <code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">Источник</code> — источник</div>
-                    <div><code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">created_at</code> / <code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">Дата</code> — дата заказа</div>
+                    <div><code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">№ п/п</code> — внешний ID</div>
+                    <div><code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">ФИО</code> — имя клиента</div>
+                    <div><code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">Товар</code> — товары (через запятую)</div>
+                    <div><code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">Штук</code> — количество (через пробел)</div>
+                    <div><code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">Цена за ед.</code> — цены (через пробел)</div>
+                    <div><code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">Вид доставки</code> — Белпочта, Европочта, Курьер, Самовывоз, Лично</div>
+                    <div><code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">Телефон</code> — телефон</div>
+                    <div><code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">Дата создания</code> — дата заказа</div>
                 </div>
                 <p class="text-xs text-blue-600 dark:text-blue-400 mt-2">
-                    Строки с уже существующим <code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">external_id</code> будут пропущены.
-                    Строки без <code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">full_name</code> игнорируются.
+                    Строки с уже существующим <code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">№ п/п</code> (external_id) будут пропущены.
+                    Строки без <code class="bg-blue-100 dark:bg-blue-900/50 rounded px-1">ФИО</code> игнорируются.
+                    Колонка «Доставка» (стоимость) не импортируется.
                 </p>
             </div>
 
@@ -110,6 +112,14 @@
                 </div>
                 <div class="flex justify-center mt-4">
                     <Link href="/orders" class="btn-primary btn-sm">Перейти к заказам</Link>
+                </div>
+                <div v-if="result.warnings?.length" class="mt-4 pt-4 border-t border-yellow-200 dark:border-yellow-800">
+                    <p class="text-xs font-semibold text-yellow-800 dark:text-yellow-200 mb-2">Предупреждения</p>
+                    <ul class="space-y-1 text-xs text-yellow-700 dark:text-yellow-300">
+                        <li v-for="(w, i) in result.warnings" :key="i">
+                            Строка {{ w.row }}: {{ w.message }}
+                        </li>
+                    </ul>
                 </div>
             </div>
         </div>
