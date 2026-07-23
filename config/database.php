@@ -4,6 +4,14 @@ return [
     'default' => env('DB_CONNECTION', 'mysql'),
 
     'connections' => [
+        'sqlite' => [
+            'driver'                  => 'sqlite',
+            'url'                     => env('DATABASE_URL'),
+            'database'                => env('DB_DATABASE', database_path('database.sqlite')),
+            'prefix'                  => '',
+            'foreign_key_constraints' => true,
+        ],
+
         'mysql' => [
             'driver'         => 'mysql',
             'url'            => env('DATABASE_URL'),
