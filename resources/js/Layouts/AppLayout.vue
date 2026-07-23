@@ -75,6 +75,8 @@
             </div>
         </nav>
 
+        <TrialBanner />
+
         <!-- Auto tracking notice -->
         <div
             v-if="showTrackingNotice"
@@ -137,6 +139,7 @@ import { computed, ref } from 'vue'
 import { Link, usePage } from '@inertiajs/inertia-vue3'
 import { Inertia } from '@inertiajs/inertia'
 import { apiFetch } from '@/utils/api'
+import TrialBanner from '@/Components/TrialBanner.vue'
 
 const page = usePage()
 

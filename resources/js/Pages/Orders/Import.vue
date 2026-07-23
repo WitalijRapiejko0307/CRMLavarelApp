@@ -81,7 +81,7 @@
                 <div class="flex justify-end mt-5">
                     <button
                         class="btn-primary"
-                        :disabled="!selectedFile || importing"
+                        :disabled="!selectedFile || importing || readOnly"
                         @click="startImport"
                     >
                         {{ importing ? 'Импортирую…' : 'Импортировать' }}
@@ -120,10 +120,13 @@
 import { ref } from 'vue'
 import { Link } from '@inertiajs/inertia-vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import { useSubscription } from '@/composables/useSubscription'
 
 defineProps({
     statuses: { type: Array, default: () => [] },
 })
+
+const { readOnly } = useSubscription()
 
 const selectedFile = ref(null)
 const dragging     = ref(false)
@@ -163,7 +166,7 @@ function clearFile() {
 }
 
 async function startImport() {
-    if (!selectedFile.value) return
+    if (!selectedFile.value || readOnly.value) return
     importing.value = true
     fileError.value = ''
     result.value    = null

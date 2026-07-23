@@ -13,10 +13,10 @@
                     <OrderStatusBadge :status="order.status" />
                 </div>
                 <div class="flex items-center gap-2">
-                    <button v-if="!editing" class="btn-secondary" @click="startEdit">Редактировать</button>
+                    <button v-if="!editing && !readOnly" class="btn-secondary" @click="startEdit">Редактировать</button>
                     <template v-else>
                         <button class="btn-secondary" @click="cancelEdit">Отмена</button>
-                        <button class="btn-primary" :disabled="form.processing" @click="saveEdit">
+                        <button class="btn-primary" :disabled="form.processing || readOnly" @click="saveEdit">
                             {{ form.processing ? 'Сохраняю…' : 'Сохранить' }}
                         </button>
                     </template>
@@ -295,7 +295,7 @@
                             </select>
                             <button
                                 class="btn-primary w-full justify-center"
-                                :disabled="statusForm.processing || newStatus === order.status"
+                                :disabled="statusForm.processing || newStatus === order.status || readOnly"
                                 @click="changeStatus"
                             >
                                 {{ statusForm.processing ? 'Сохраняю…' : 'Применить' }}
@@ -316,7 +316,7 @@
                             </select>
                             <button
                                 class="btn-primary w-full justify-center"
-                                :disabled="deliveryForm.processing || !selectedDelivery || selectedDelivery === (order.delivery_type ?? '')"
+                                :disabled="deliveryForm.processing || !selectedDelivery || selectedDelivery === (order.delivery_type ?? '') || readOnly"
                                 @click="changeDeliveryType"
                             >
                                 {{ deliveryForm.processing ? 'Сохраняю…' : 'Применить' }}
@@ -379,7 +379,10 @@ import { useForm } from '@inertiajs/inertia-vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import OrderStatusBadge from '@/Components/OrderStatusBadge.vue'
 import AddressInlinePicker from '@/Components/AddressInlinePicker.vue'
+import { useSubscription } from '@/composables/useSubscription'
 import { formatPhone, isFullNameComplete, isInCatalog as checkInCatalog } from '@/utils/phone'
+
+const { readOnly } = useSubscription()
 
 const props = defineProps({
     order:         Object,

@@ -3,7 +3,7 @@
         <template #header>
             <div class="flex items-center justify-between">
                 <h1 class="page-title">Товары и склад</h1>
-                <button class="btn-primary" @click="openCreateModal">
+                <button v-if="!readOnly" class="btn-primary" @click="openCreateModal">
                     + Добавить товар
                 </button>
             </div>
@@ -203,7 +203,10 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import { useSubscription } from '@/composables/useSubscription'
 import { apiFetch } from '@/utils/api'
+
+const { readOnly } = useSubscription()
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 const props = defineProps({

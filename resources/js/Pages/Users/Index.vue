@@ -3,7 +3,7 @@
         <template #header>
             <div class="flex items-center justify-between">
                 <h1 class="page-title">Пользователи</h1>
-                <button class="btn-primary" @click="openCreateModal">+ Добавить</button>
+                <button v-if="!readOnly" class="btn-primary" @click="openCreateModal">+ Добавить</button>
             </div>
         </template>
 
@@ -135,7 +135,10 @@
 import { ref } from 'vue'
 import { usePage } from '@inertiajs/inertia-vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import { useSubscription } from '@/composables/useSubscription'
 import { apiFetch } from '@/utils/api'
+
+const { readOnly } = useSubscription()
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 const props = defineProps({

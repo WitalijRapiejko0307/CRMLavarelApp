@@ -8,7 +8,7 @@
                 </div>
                 <div class="flex items-center gap-2">
                     <button class="btn-secondary" @click="cancel">Отмена</button>
-                    <button class="btn-primary" :disabled="form.processing" @click="submit">
+                    <button class="btn-primary" :disabled="form.processing || readOnly" @click="submit">
                         {{ form.processing ? 'Сохраняю…' : 'Создать заказ' }}
                     </button>
                 </div>
@@ -273,7 +273,10 @@ import { Inertia } from '@inertiajs/inertia'
 import { useForm } from '@inertiajs/inertia-vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import AddressInlinePicker from '@/Components/AddressInlinePicker.vue'
+import { useSubscription } from '@/composables/useSubscription'
 import { isInCatalog as checkInCatalog } from '@/utils/phone'
+
+const { readOnly } = useSubscription()
 
 const props = defineProps({
     statuses:      Array,
@@ -326,6 +329,7 @@ function removeGood(index) {
 }
 
 function submit() {
+    if (readOnly.value) return
     if (form.delivery_type === 'belpost' && pickerRef.value) {
         if (!pickerRef.value.validate()) return
     }

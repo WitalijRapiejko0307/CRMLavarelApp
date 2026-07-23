@@ -10,16 +10,16 @@
                     <button
                         type="button"
                         class="btn-secondary text-sm"
-                        :disabled="trackingRunning"
+                        :disabled="trackingRunning || readOnly"
                         @click="startRefreshTracking"
                     >
                         {{ trackingRunning ? 'Обновление…' : 'Обновить статусы' }}
                     </button>
                     <span class="text-sm text-muted">Всего: {{ orders.total }}</span>
-                    <Link href="/orders/import" class="btn-secondary text-sm">
+                    <Link v-if="!readOnly" href="/orders/import" class="btn-secondary text-sm">
                         Импорт CSV
                     </Link>
-                    <Link href="/orders/create" class="btn-primary text-sm">
+                    <Link v-if="!readOnly" href="/orders/create" class="btn-primary text-sm">
                         + Новый заказ
                     </Link>
                 </div>
@@ -135,6 +135,7 @@ import { Inertia } from '@inertiajs/inertia'
 import { Link } from '@inertiajs/inertia-vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import OrderStatusBadge from '@/Components/OrderStatusBadge.vue'
+import { useSubscription } from '@/composables/useSubscription'
 import { apiFetch } from '@/utils/api'
 import {
     useVueTable,
@@ -149,6 +150,8 @@ const props = defineProps({
     statuses:      Array,
     deliveryTypes: Object,
 })
+
+const { readOnly } = useSubscription()
 
 // --- Tracking refresh ---
 const trackingStatus = ref({
@@ -207,7 +210,7 @@ async function pollTrackingStatus() {
 }
 
 async function startRefreshTracking() {
-    if (trackingRunning.value) return
+    if (trackingRunning.value || readOnly.value) return
 
     try {
         const resp = await apiFetch('/orders/refresh-tracking', 'POST')

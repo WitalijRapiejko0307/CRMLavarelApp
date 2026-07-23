@@ -58,13 +58,17 @@
                         <span v-else>Войти</span>
                     </button>
                 </form>
+                <p class="mt-6 text-center text-sm text-muted">
+                    Нет аккаунта?
+                    <Link href="/register" class="text-indigo-600 dark:text-indigo-400 hover:underline">Зарегистрироваться</Link>
+                </p>
             </div>
         </div>
     </div>
 </template>
 
 <script setup>
-import { useForm } from '@inertiajs/inertia-vue3'
+import { Link, useForm } from '@inertiajs/inertia-vue3'
 
 const form = useForm({
     email:    '',

@@ -19,7 +19,7 @@
                     </div>
                     <button
                         class="btn-primary"
-                        :disabled="processing || orderQueue.length === 0"
+                        :disabled="processing || orderQueue.length === 0 || readOnly"
                         @click="processAll"
                     >
                         {{ processing
@@ -126,7 +126,10 @@
 <script setup>
 import { ref, computed } from 'vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import { useSubscription } from '@/composables/useSubscription'
 import { apiFetch } from '@/utils/api'
+
+const { readOnly } = useSubscription()
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 const props = defineProps({
@@ -158,6 +161,7 @@ const errorCount = computed(() =>
 // ── Methods ───────────────────────────────────────────────────────────────────
 
 async function processAll() {
+    if (readOnly.value) return
     if (processing.value) return
     processing.value = true
     processingIndex.value = 0
@@ -174,6 +178,7 @@ async function processAll() {
 }
 
 async function registerOne(order) {
+    if (readOnly.value) return
     try {
         const resp = await apiFetch(`/europochta/orders/${order.id}/register`, 'POST', {
             who_pays: whoPays.value,

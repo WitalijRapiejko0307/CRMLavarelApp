@@ -138,7 +138,7 @@
                     <p v-if="saved" class="text-sm text-green-600 dark:text-green-400 flex items-center gap-1 mr-auto">
                         ✓ Настройки сохранены
                     </p>
-                    <button type="submit" class="btn-primary" :disabled="saving">
+                    <button type="submit" class="btn-primary" :disabled="saving || readOnly">
                         {{ saving ? 'Сохраняю…' : 'Сохранить настройки' }}
                     </button>
                 </div>
@@ -153,7 +153,10 @@ import { Inertia } from '@inertiajs/inertia'
 import { usePage } from '@inertiajs/inertia-vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { useTheme } from '@/composables/useTheme'
+import { useSubscription } from '@/composables/useSubscription'
 import { apiFetch } from '@/utils/api'
+
+const { readOnly } = useSubscription()
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 const props = defineProps({
@@ -243,6 +246,7 @@ function toggleVisible(key) {
 
 // ── Save ──────────────────────────────────────────────────────────────────────
 function save() {
+    if (readOnly.value) return
     const settings = {}
 
     for (const group of Object.values(props.schema)) {
@@ -288,6 +292,7 @@ function save() {
 
 // ── Generate webhook secret ───────────────────────────────────────────────────
 async function generateSecret() {
+    if (readOnly.value) return
     generating.value = true
     try {
         const resp = await apiFetch('/settings/generate-webhook-secret', 'POST')

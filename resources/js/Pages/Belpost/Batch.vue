@@ -43,7 +43,7 @@
                         </div>
                         <button
                             class="btn-primary w-full justify-center"
-                            :disabled="creating || !newBatchType"
+                            :disabled="creating || !newBatchType || readOnly"
                             @click="createBatch"
                         >
                             {{ creating ? 'Создаю…' : 'Создать партию на Белпочте' }}
@@ -366,8 +366,11 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import AddressSearchModal from '@/Components/AddressSearchModal.vue'
+import { useSubscription } from '@/composables/useSubscription'
 import { Inertia } from '@inertiajs/inertia'
 import { apiFetch } from '@/utils/api'
+
+const { readOnly } = useSubscription()
 
 const SELLER_ONLY_TYPES = ['ecommerce_light', 'ecommerce_optima']
 
@@ -455,6 +458,7 @@ function selectBatch(b) {
 
 // Create batch
 async function createBatch() {
+    if (readOnly.value) return
     creating.value    = true
     createError.value = ''
 
@@ -480,6 +484,7 @@ async function createBatch() {
 
 // Process all eligible orders sequentially
 async function processAll() {
+    if (readOnly.value) return
     if (processing.value) return
     processing.value  = true
     processingIndex.value = 0
@@ -507,6 +512,7 @@ async function processAll() {
 }
 
 async function processOne(order, belpostAddressId) {
+    if (readOnly.value) return
     try {
         const resp = await apiFetch(`/belpost/batches/${activeBatch.value.id}/items`, 'POST', {
             order_id:           order.id,
@@ -530,6 +536,7 @@ async function retrySingle(order) {
 
 // Commit
 async function commitBatch() {
+    if (readOnly.value) return
     if (committing.value) return
     committing.value = true
     commitError.value = ''
@@ -555,6 +562,7 @@ async function commitBatch() {
 }
 
 async function retryDownload() {
+    if (readOnly.value) return
     if (retrying.value || !activeBatch.value) return
     retrying.value  = true
     retryError.value = ''

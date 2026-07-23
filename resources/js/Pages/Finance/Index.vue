@@ -41,7 +41,7 @@
             <div class="card">
                 <div class="flex items-center justify-between mb-4">
                     <h2 class="section-title">Расходы</h2>
-                    <button class="btn-primary btn-sm" @click="openExpenseModal">+ Добавить</button>
+                <button v-if="!readOnly" class="btn-primary btn-sm" @click="openExpenseModal">+ Добавить</button>
                 </div>
 
                 <!-- Category summary -->
@@ -93,7 +93,7 @@
             <div class="card">
                 <div class="flex items-center justify-between mb-4">
                     <h2 class="section-title">Доходы</h2>
-                    <button class="btn-primary btn-sm" @click="openIncomeModal">+ Добавить</button>
+                <button v-if="!readOnly" class="btn-primary btn-sm" @click="openIncomeModal">+ Добавить</button>
                 </div>
 
                 <div v-if="incomeListData.length === 0" class="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">
@@ -209,7 +209,10 @@
 import { ref, computed } from 'vue'
 import { Inertia } from '@inertiajs/inertia'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import { useSubscription } from '@/composables/useSubscription'
 import { apiFetch } from '@/utils/api'
+
+const { readOnly } = useSubscription()
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 const props = defineProps({
