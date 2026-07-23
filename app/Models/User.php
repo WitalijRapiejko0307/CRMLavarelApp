@@ -9,7 +9,7 @@ class User extends Authenticatable
 {
     use Notifiable;
 
-    public const ROLES = ['admin', 'manager', 'operator'];
+    public const ROLES = ['super_admin', 'admin', 'manager', 'operator'];
 
     public const THEMES = ['light', 'dark', 'system'];
 
@@ -36,6 +36,16 @@ class User extends Authenticatable
     public function tenant()
     {
         return $this->belongsTo(Tenant::class);
+    }
+
+    public function isSuperAdmin(): bool
+    {
+        return $this->role === 'super_admin';
+    }
+
+    public function isTenantUser(): bool
+    {
+        return $this->tenant_id !== null;
     }
 
     public function isAdmin(): bool
