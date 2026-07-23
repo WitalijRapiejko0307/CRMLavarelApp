@@ -19,7 +19,7 @@ class BelpostController extends Controller
 {
     public function __construct()
     {
-        $this->middleware(['auth', 'tenant']);
+        $this->middleware(['auth', 'tenant', 'tenant.writable']);
     }
 
     // ─── Page ────────────────────────────────────────────────────────────────

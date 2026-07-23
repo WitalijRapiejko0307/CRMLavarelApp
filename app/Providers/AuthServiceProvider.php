@@ -13,16 +13,19 @@ class AuthServiceProvider extends ServiceProvider
     {
         $this->registerPolicies();
 
+        Gate::define('super-admin', fn ($user) => $user->isSuperAdmin());
+        Gate::define('manage-tenants', fn ($user) => $user->isSuperAdmin());
+
         // Admin gate: true when the authenticated user has role 'admin'
-        Gate::define('admin', fn ($user) => $user->role === 'admin');
+        Gate::define('admin', fn ($user) => $user->isTenantUser() && $user->role === 'admin');
 
         // User management: only admin can create/update/delete users
-        Gate::define('manage-users', fn ($user) => $user->role === 'admin');
+        Gate::define('manage-users', fn ($user) => $user->isTenantUser() && $user->role === 'admin');
 
         // Settings: admin + manager can manage settings
-        Gate::define('manage-settings', fn ($user) => in_array($user->role, ['admin', 'manager']));
+        Gate::define('manage-settings', fn ($user) => $user->isTenantUser() && in_array($user->role, ['admin', 'manager']));
 
         // Finance: admin + manager can access finance module
-        Gate::define('view-finances', fn ($user) => in_array($user->role, ['admin', 'manager']));
+        Gate::define('view-finances', fn ($user) => $user->isTenantUser() && in_array($user->role, ['admin', 'manager']));
     }
 }

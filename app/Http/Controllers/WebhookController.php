@@ -58,6 +58,8 @@ class WebhookController extends Controller
             return response()->json(['result' => 'error', 'message' => 'Invalid token'], 401);
         }
 
+        $tenant = \App\Models\Tenant::find($tenantId);
+
         $data = $request->validate([
             'name'    => ['required', 'string', 'max:255'],
             'phone'   => ['required', 'string', 'max:30'],
@@ -114,7 +116,7 @@ class WebhookController extends Controller
             : null;
         $srItemId = $product?->sr_item_id;
 
-        if ($srEnabled && $apiToken && $companyId && $srItemId) {
+        if ($srEnabled && $apiToken && $companyId && $srItemId && $tenant && !$tenant->isReadOnly()) {
             $srService = new SalesRenderService($apiToken, $companyId, $projectId);
             $srOrderId = $srService->sendOrder($order, $srItemId);
 

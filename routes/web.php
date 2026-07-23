@@ -1,7 +1,9 @@
 <?php
 
 use App\Http\Controllers\AddressController;
+use App\Http\Controllers\Admin\TenantController as AdminTenantController;
 use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\BelpostController;
 use App\Http\Controllers\EvropostController;
 use App\Http\Controllers\FinanceController;
@@ -14,6 +16,8 @@ use Illuminate\Support\Facades\Route;
 // Auth
 Route::get('/login', [LoginController::class, 'showLoginForm'])->name('login')->middleware('guest');
 Route::post('/login', [LoginController::class, 'login'])->name('login.post')->middleware('guest');
+Route::get('/register', [RegisterController::class, 'showRegistrationForm'])->name('register')->middleware('guest');
+Route::post('/register', [RegisterController::class, 'register'])->name('register.post')->middleware(['guest', 'throttle:6,1']);
 Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
 
 // Root redirect
@@ -85,9 +89,17 @@ Route::prefix('users')->name('users.')->group(function () {
 });
 
 // Authenticated AJAX endpoints (session-based auth, inside web middleware group)
-Route::prefix('api')->name('api.')->group(function () {
-    Route::get('/address/search', [AddressController::class, 'search'])->name('address.search');
-    Route::get('/belpost/batches/{batch}/status', [BelpostController::class, 'batchStatus'])->name('belpost.batchStatus');
-    Route::get('/orders/tracking-status', [OrderController::class, 'trackingStatus'])->name('orders.trackingStatus');
+Route::prefix('api')->name('api.')->middleware(['auth', 'tenant', 'tenant.writable'])->group(function () {
+    Route::get('/address/search', [AddressController::class, 'search'])->name('address.search')->withoutMiddleware('tenant.writable');
+    Route::get('/belpost/batches/{batch}/status', [BelpostController::class, 'batchStatus'])->name('belpost.batchStatus')->withoutMiddleware('tenant.writable');
+    Route::get('/orders/tracking-status', [OrderController::class, 'trackingStatus'])->name('orders.trackingStatus')->withoutMiddleware('tenant.writable');
     Route::post('/tracking/auto-notice/dismiss', [OrderController::class, 'dismissTrackingNotice'])->name('tracking.dismissNotice');
+});
+
+// Super-admin panel
+Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
+    Route::get('/tenants', [AdminTenantController::class, 'index'])->name('tenants.index');
+    Route::patch('/tenants/{tenant}', [AdminTenantController::class, 'update'])->name('tenants.update');
+    Route::post('/tenants/{tenant}/activate', [AdminTenantController::class, 'activate'])->name('tenants.activate');
+    Route::post('/tenants/{tenant}/extend-trial', [AdminTenantController::class, 'extendTrial'])->name('tenants.extendTrial');
 });

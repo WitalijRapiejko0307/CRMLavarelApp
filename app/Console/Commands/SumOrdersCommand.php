@@ -30,7 +30,9 @@ class SumOrdersCommand extends Command
 
         $tenants = $tenantId
             ? Tenant::where('id', $tenantId)->get()
-            : Tenant::all();
+            : Tenant::whereIn('subscription_status', [Tenant::STATUS_TRIAL, Tenant::STATUS_ACTIVE])
+                ->get()
+                ->filter(fn (Tenant $tenant) => !$tenant->isReadOnly());
 
         if ($tenants->isEmpty()) {
             $this->warn('No tenants found.');

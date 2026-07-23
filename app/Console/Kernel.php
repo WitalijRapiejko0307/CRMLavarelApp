@@ -12,6 +12,13 @@ use Illuminate\Support\Facades\Log;
 
 class Kernel extends ConsoleKernel
 {
+    protected function writableTenants()
+    {
+        return Tenant::whereIn('subscription_status', [Tenant::STATUS_TRIAL, Tenant::STATUS_ACTIVE])
+            ->get()
+            ->filter(fn (Tenant $tenant) => !$tenant->isReadOnly());
+    }
+
     protected function schedule(Schedule $schedule): void
     {
         // Process queued jobs every minute (database driver, no Redis).
@@ -23,7 +30,7 @@ class Kernel extends ConsoleKernel
         // Morning auto tracking check at 07:30 Europe/Minsk — once per tenant per day.
         $schedule->call(function () {
             $service = app(TrackingRunService::class);
-            foreach (Tenant::all() as $tenant) {
+            foreach ($this->writableTenants() as $tenant) {
                 if ($service->alreadyRanAutoToday($tenant->id)) {
                     continue;
                 }
@@ -43,7 +50,7 @@ class Kernel extends ConsoleKernel
 
         // Phase 3: dispatch one SalesRender sync job per tenant every 5 minutes.
         $schedule->call(function () {
-            foreach (Tenant::all() as $tenant) {
+            foreach ($this->writableTenants() as $tenant) {
                 dispatch(new SyncSalesRenderJob($tenant->id));
             }
         })->everyFiveMinutes()->name('dispatch-salesrender')->withoutOverlapping();
