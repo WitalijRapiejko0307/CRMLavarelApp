@@ -13,6 +13,17 @@
                     <OrderStatusBadge :status="order.status" />
                 </div>
                 <div class="flex items-center gap-2">
+                    <button
+                        v-if="isAdmin && !readOnly && orderIsDeletable"
+                        type="button"
+                        class="text-red-500 hover:text-red-700 p-2"
+                        title="Удалить заказ"
+                        @click="deleteModalOpen = true"
+                    >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                    </button>
                     <button v-if="!editing && !readOnly" class="btn-secondary" @click="startEdit">Редактировать</button>
                     <template v-else>
                         <button class="btn-secondary" @click="cancelEdit">Отмена</button>
@@ -369,20 +380,30 @@
                 </div>
             </div>
         </div>
+
+        <DeleteOrderModal
+            :open="deleteModalOpen"
+            :order="order"
+            :deleting="deletingOrder"
+            @cancel="deleteModalOpen = false"
+            @confirm="confirmDeleteOrder"
+        />
     </AppLayout>
 </template>
 
 <script setup>
 import { ref, computed } from 'vue'
 import { Inertia } from '@inertiajs/inertia'
-import { useForm } from '@inertiajs/inertia-vue3'
+import { useForm, usePage } from '@inertiajs/inertia-vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import OrderStatusBadge from '@/Components/OrderStatusBadge.vue'
 import AddressInlinePicker from '@/Components/AddressInlinePicker.vue'
+import DeleteOrderModal from '@/Components/DeleteOrderModal.vue'
 import { useSubscription } from '@/composables/useSubscription'
 import { formatPhone, isFullNameComplete, isInCatalog as checkInCatalog } from '@/utils/phone'
 
 const { readOnly } = useSubscription()
+const page = usePage()
 
 const props = defineProps({
     order:         Object,
@@ -391,6 +412,12 @@ const props = defineProps({
     products:      Array,
     unknownGoods:  { type: Array, default: () => [] },
 })
+
+const isAdmin = computed(() => page.props.value.auth?.user?.role === 'admin')
+const blockedStatuses = computed(() => page.props.value.order_delete?.blocked_statuses ?? [])
+const orderIsDeletable = computed(() =>
+    !blockedStatuses.value.includes(props.order.status)
+)
 
 const productNames = computed(() => props.products.map(p => p.name))
 
@@ -405,6 +432,8 @@ function isInCatalog(name) {
 // --- Edit form ---
 const editing         = ref(false)
 const editWarningOpen = ref(false)
+const deleteModalOpen = ref(false)
+const deletingOrder   = ref(false)
 const pickerRef       = ref(null)
 
 const form = useForm({
@@ -443,6 +472,14 @@ function startEdit() {
 function confirmEdit() {
     editWarningOpen.value = false
     editing.value = true
+}
+
+function confirmDeleteOrder() {
+    if (deletingOrder.value) return
+    deletingOrder.value = true
+    Inertia.delete(`/orders/${props.order.id}`, {
+        onFinish: () => { deletingOrder.value = false },
+    })
 }
 
 function saveEdit() {

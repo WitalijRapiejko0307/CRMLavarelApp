@@ -14,6 +14,7 @@ use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -330,9 +331,21 @@ class OrderController extends Controller
         return back()->with('message', 'Тип доставки обновлён.');
     }
 
-    public function destroy(Order $order)
+    public function destroy(Request $request, Order $order)
     {
+        Gate::authorize('delete-orders');
+        abort_unless(
+            Order::isDeletable($order),
+            422,
+            'Заказ в текущем статусе удалить нельзя.'
+        );
+
         $order->delete();
+
+        if ($request->wantsJson()) {
+            return response()->json(null, 204);
+        }
+
         return redirect()->route('orders.index')->with('message', 'Заказ удалён.');
     }
 
@@ -357,6 +370,22 @@ class OrderController extends Controller
             'total'  => $result['total'],
             'status' => $result['status'],
         ], 202);
+    }
+
+    /**
+     * POST /orders/cancel-tracking
+     */
+    public function cancelTracking(TrackingRunService $service): JsonResponse
+    {
+        $tenantId = Auth::user()->tenant_id;
+
+        if (!$service->requestCancel($tenantId)) {
+            return response()->json([
+                'message' => 'Остановить можно только ручную проверку статусов',
+            ], 409);
+        }
+
+        return response()->json(null, 204);
     }
 
     /**

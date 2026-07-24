@@ -61,13 +61,14 @@ class TrackingRunService
             $total = $this->countActiveOrders($tenantId);
 
             $this->setProgress($tenantId, [
-                'status'      => 'running',
-                'checked'     => 0,
-                'total'       => $total,
-                'errors'      => 0,
-                'source'      => $source,
-                'started_at'  => now()->toIso8601String(),
-                'finished_at' => null,
+                'status'           => 'running',
+                'checked'          => 0,
+                'total'            => $total,
+                'errors'           => 0,
+                'source'           => $source,
+                'cancel_requested' => false,
+                'started_at'       => now()->toIso8601String(),
+                'finished_at'      => null,
             ]);
 
             dispatch(new UpdateTrackingJob($tenantId, $source));
@@ -116,9 +117,40 @@ class TrackingRunService
         $progress['errors']        = $stats['errors'] ?? ($progress['errors'] ?? 0);
         $progress['finished_at']   = now()->toIso8601String();
 
+        $this->clearCancelFlag($progress);
         $this->setProgress($tenantId, $progress);
 
         Cache::lock($this->lockKey($tenantId))->forceRelease();
+    }
+
+    public function requestCancel(int $tenantId): bool
+    {
+        $progress = $this->getProgress($tenantId);
+
+        if (
+            !$progress
+            || ($progress['status'] ?? null) !== 'running'
+            || ($progress['source'] ?? null) !== 'manual'
+        ) {
+            return false;
+        }
+
+        $progress['cancel_requested'] = true;
+        $this->setProgress($tenantId, $progress);
+
+        return true;
+    }
+
+    public function isCancelRequested(int $tenantId): bool
+    {
+        $progress = $this->getProgress($tenantId);
+
+        return (bool) ($progress['cancel_requested'] ?? false);
+    }
+
+    public function clearCancelFlag(array &$progress): void
+    {
+        unset($progress['cancel_requested']);
     }
 
     public function saveAutoStats(int $tenantId, int $total, int $checked, int $errors): void

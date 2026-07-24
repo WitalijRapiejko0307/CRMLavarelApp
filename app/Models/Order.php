@@ -40,6 +40,23 @@ class Order extends Model
         'Дубль',
     ];
 
+    /** Statuses that must not be deleted (revenue final, active tracking, active call-center). */
+    public const NON_DELETABLE_STATUSES = [
+        'Завершен',
+        'Посчитан',
+        'Оформлен',
+        'Передан на почту',
+        'Отправлено',
+        'В отделении',
+        'Забрать деньги',
+        'Позвонить',
+        'Перезвонить',
+        'Заказать',
+        'Отправить',
+        'Сомнения',
+        'Отдал заявку',
+    ];
+
     public const DELIVERY_TYPES = [
         'belpost'    => 'Белпочта',
         'europochta' => 'Европочта',
@@ -51,6 +68,11 @@ class Order extends Model
     public static function deliveryTypeRule(): string
     {
         return 'in:' . implode(',', array_keys(self::DELIVERY_TYPES));
+    }
+
+    public static function isDeletable(self $order): bool
+    {
+        return !in_array($order->status, self::NON_DELETABLE_STATUSES, true);
     }
 
     protected $fillable = [

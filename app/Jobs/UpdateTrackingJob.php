@@ -48,7 +48,10 @@ class UpdateTrackingJob implements ShouldQueue
         try {
             $smsService = $this->buildSmsService();
             $this->processBelpost($service, $smsService);
-            $this->processEvropost($service, $smsService);
+
+            if (!$service->isCancelRequested($this->tenantId)) {
+                $this->processEvropost($service, $smsService);
+            }
         } catch (\Throwable $e) {
             $jobFailed = true;
             Log::error("UpdateTrackingJob: fatal error", [
@@ -63,10 +66,13 @@ class UpdateTrackingJob implements ShouldQueue
                 'errors'  => $progress['errors'] ?? 0,
             ];
 
-            $status = $jobFailed ? 'failed' : 'done';
+            $status = $jobFailed
+                ? 'failed'
+                : ($service->isCancelRequested($this->tenantId) ? 'cancelled' : 'done');
+
             $service->finishRun($this->tenantId, $this->source, $status, $stats);
 
-            if ($this->source === 'auto' && !$jobFailed) {
+            if ($this->source === 'auto' && $status === 'done') {
                 $service->saveAutoStats(
                     $this->tenantId,
                     $stats['total'],
@@ -98,6 +104,9 @@ class UpdateTrackingJob implements ShouldQueue
             Log::debug("UpdateTrackingJob: no auth_token_bp for tenant {$this->tenantId}");
             foreach ($orders as $order) {
                 $service->incrementProgress($this->tenantId);
+                if ($service->isCancelRequested($this->tenantId)) {
+                    break;
+                }
             }
             return;
         }
@@ -139,6 +148,10 @@ class UpdateTrackingJob implements ShouldQueue
                 ]);
             } finally {
                 $service->incrementProgress($this->tenantId, $hadError);
+            }
+
+            if ($service->isCancelRequested($this->tenantId)) {
+                break;
             }
         }
     }
@@ -227,6 +240,10 @@ class UpdateTrackingJob implements ShouldQueue
                 ]);
             } finally {
                 $service->incrementProgress($this->tenantId, $hadError);
+            }
+
+            if ($service->isCancelRequested($this->tenantId)) {
+                break;
             }
 
             usleep(100000);

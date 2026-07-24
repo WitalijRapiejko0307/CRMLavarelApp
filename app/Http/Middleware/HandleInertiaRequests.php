@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\TenantSetting;
+use App\Models\Order;
 use App\Services\TrackingRunService;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -40,6 +41,9 @@ class HandleInertiaRequests extends Middleware
                 : 'BaseCRM',
             'tracking_auto_notice' => fn () => auth()->check() && auth()->user()->isTenantUser()
                 ? app(TrackingRunService::class)->buildAutoNoticeForUser(auth()->user())
+                : null,
+            'order_delete' => fn () => auth()->check() && auth()->user()->isTenantUser()
+                ? ['blocked_statuses' => Order::NON_DELETABLE_STATUSES]
                 : null,
         ]);
     }

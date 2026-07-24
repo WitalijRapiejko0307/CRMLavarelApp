@@ -4,16 +4,17 @@
             <div class="flex items-center justify-between gap-3">
                 <h1 class="page-title">Заказы</h1>
                 <div class="flex items-center gap-3 flex-wrap justify-end">
-                    <span v-if="trackingLabel" class="text-sm text-indigo-600 dark:text-indigo-400 whitespace-nowrap">
+                    <span v-if="trackingLabel" class="text-sm whitespace-nowrap" :class="trackingLabelClass">
                         {{ trackingLabel }}
                     </span>
                     <button
                         type="button"
                         class="btn-secondary text-sm"
-                        :disabled="trackingRunning || readOnly"
-                        @click="startRefreshTracking"
+                        :class="{ 'text-red-500': isManualRunning && !cancellingTracking }"
+                        :disabled="trackingButtonDisabled"
+                        @click="onTrackingButtonClick"
                     >
-                        {{ trackingRunning ? 'Обновление…' : 'Обновить статусы' }}
+                        {{ trackingButtonLabel }}
                     </button>
                     <span class="text-sm text-muted">Всего: {{ orders.total }}</span>
                     <Link v-if="!readOnly" href="/orders/import" class="btn-secondary text-sm">
@@ -126,15 +127,24 @@
                 </div>
             </div>
         </div>
+
+        <DeleteOrderModal
+            :open="deleteModalOpen"
+            :order="orderToDelete"
+            :deleting="deletingOrder"
+            @cancel="closeDeleteModal"
+            @confirm="confirmDeleteOrder"
+        />
     </AppLayout>
 </template>
 
 <script setup>
 import { ref, computed, h, onMounted, onUnmounted } from 'vue'
 import { Inertia } from '@inertiajs/inertia'
-import { Link } from '@inertiajs/inertia-vue3'
+import { Link, usePage } from '@inertiajs/inertia-vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import OrderStatusBadge from '@/Components/OrderStatusBadge.vue'
+import DeleteOrderModal from '@/Components/DeleteOrderModal.vue'
 import { useSubscription } from '@/composables/useSubscription'
 import { apiFetch } from '@/utils/api'
 import {
@@ -152,8 +162,47 @@ const props = defineProps({
 })
 
 const { readOnly } = useSubscription()
+const page = usePage()
+
+const isAdmin = computed(() => page.props.value.auth?.user?.role === 'admin')
+const blockedStatuses = computed(() => page.props.value.order_delete?.blocked_statuses ?? [])
+
+function canDeleteOrder(order) {
+    return isAdmin.value && !readOnly.value && !blockedStatuses.value.includes(order.status)
+}
+
+// --- Order delete ---
+const deleteModalOpen = ref(false)
+const orderToDelete   = ref(null)
+const deletingOrder   = ref(false)
+
+function openDeleteModal(order) {
+    orderToDelete.value = order
+    deleteModalOpen.value = true
+}
+
+function closeDeleteModal() {
+    deleteModalOpen.value = false
+    orderToDelete.value = null
+}
+
+async function confirmDeleteOrder() {
+    if (!orderToDelete.value || deletingOrder.value) return
+
+    deletingOrder.value = true
+    try {
+        const resp = await apiFetch(`/orders/${orderToDelete.value.id}`, 'DELETE')
+        if (resp.ok) {
+            closeDeleteModal()
+            Inertia.reload({ only: ['orders'] })
+        }
+    } finally {
+        deletingOrder.value = false
+    }
+}
 
 // --- Tracking refresh ---
+const cancellingTracking = ref(false)
 const trackingStatus = ref({
     status:      'idle',
     checked:     0,
@@ -163,15 +212,41 @@ const trackingStatus = ref({
     finished_at: null,
 })
 const trackingRunning = computed(() => trackingStatus.value.status === 'running')
+const isManualRunning = computed(() =>
+    trackingStatus.value.status === 'running' && trackingStatus.value.source === 'manual'
+)
+const trackingButtonDisabled = computed(() =>
+    readOnly.value
+    || cancellingTracking.value
+    || (trackingRunning.value && !isManualRunning.value)
+)
+const trackingButtonLabel = computed(() => {
+    if (cancellingTracking.value) return 'Останавливаем…'
+    if (isManualRunning.value) return 'Остановить'
+    if (trackingRunning.value) return 'Обновление…'
+    return 'Обновить статусы'
+})
 const trackingLabel   = computed(() => {
     const { status, checked, total } = trackingStatus.value
+    if (cancellingTracking.value && total > 0) {
+        return `Останавливаем: ${checked} из ${total}…`
+    }
     if (status === 'running') {
         return `Проверка: ${checked} из ${total}…`
+    }
+    if (status === 'cancelled' && total > 0) {
+        return `Остановлено: ${checked} из ${total}`
     }
     if (status === 'done' && total > 0) {
         return `Проверено ${checked} из ${total}`
     }
     return null
+})
+const trackingLabelClass = computed(() => {
+    if (cancellingTracking.value) {
+        return 'text-amber-600 dark:text-amber-400'
+    }
+    return 'text-indigo-600 dark:text-indigo-400'
 })
 
 let pollTimer = null
@@ -198,6 +273,10 @@ async function pollTrackingStatus() {
         const prevStatus = trackingStatus.value.status
         trackingStatus.value = data
 
+        if (data.status === 'cancelled' || data.status === 'done' || data.status === 'failed') {
+            cancellingTracking.value = false
+        }
+
         if (data.status !== 'running') {
             stopPolling()
             if (prevStatus === 'running' && data.status === 'done') {
@@ -209,6 +288,28 @@ async function pollTrackingStatus() {
     }
 }
 
+function onTrackingButtonClick() {
+    if (isManualRunning.value) {
+        cancelTracking()
+    } else {
+        startRefreshTracking()
+    }
+}
+
+async function cancelTracking() {
+    if (readOnly.value || !isManualRunning.value || cancellingTracking.value) return
+
+    try {
+        const resp = await apiFetch('/orders/cancel-tracking', 'POST')
+        if (resp.status === 204) {
+            cancellingTracking.value = true
+            startPolling()
+        }
+    } catch {
+        // silent
+    }
+}
+
 async function startRefreshTracking() {
     if (trackingRunning.value || readOnly.value) return
 
@@ -217,6 +318,7 @@ async function startRefreshTracking() {
         const data = await resp.json()
 
         if (resp.status === 202) {
+            cancellingTracking.value = false
             trackingStatus.value = {
                 status:      'running',
                 checked:     0,
@@ -362,6 +464,38 @@ const columns = [
                 class: 'text-indigo-600 dark:text-indigo-400 font-mono text-xs hover:underline',
                 onClick: (e) => e.stopPropagation(),
             }, () => batch.batch_id)
+        },
+    }),
+    columnHelper.display({
+        id: 'actions',
+        header: '',
+        cell: info => {
+            const row = info.row.original
+            if (!canDeleteOrder(row)) return null
+
+            return h('button', {
+                type: 'button',
+                class: 'text-red-500 hover:text-red-700 p-1',
+                title: 'Удалить заказ',
+                onClick: (e) => {
+                    e.stopPropagation()
+                    openDeleteModal(row)
+                },
+            }, [
+                h('svg', {
+                    class: 'w-4 h-4',
+                    fill: 'none',
+                    stroke: 'currentColor',
+                    viewBox: '0 0 24 24',
+                }, [
+                    h('path', {
+                        'stroke-linecap': 'round',
+                        'stroke-linejoin': 'round',
+                        'stroke-width': '2',
+                        d: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16',
+                    }),
+                ]),
+            ])
         },
     }),
 ]
