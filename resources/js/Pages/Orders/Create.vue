@@ -58,9 +58,12 @@
                             <label class="label">
                                 Статус <span class="text-red-500">*</span>
                             </label>
-                            <select v-model="form.status" class="w-full mt-1">
-                                <option v-for="s in statuses" :key="s" :value="s">{{ s }}</option>
-                            </select>
+                            <AppScrollSelect
+                                v-model="form.status"
+                                :options="statuses"
+                                class="mt-1"
+                                :option-class-fn="statusColorClass"
+                            />
                         </div>
                         <div>
                             <label class="label">Источник</label>
@@ -272,6 +275,8 @@ import { computed, ref, watch } from 'vue'
 import { Inertia } from '@inertiajs/inertia'
 import { useForm } from '@inertiajs/inertia-vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import AppScrollSelect from '@/Components/AppScrollSelect.vue'
+import { statusColorClass } from '@/utils/orderStatusColors'
 import AddressInlinePicker from '@/Components/AddressInlinePicker.vue'
 import { useSubscription } from '@/composables/useSubscription'
 import { isInCatalog as checkInCatalog } from '@/utils/phone'

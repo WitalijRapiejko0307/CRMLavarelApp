@@ -301,9 +301,12 @@
                         </div>
                         <div class="pt-2 border-t border-gray-200 dark:border-gray-700">
                             <label class="label block mb-1">Изменить статус:</label>
-                            <select v-model="newStatus" class="w-full mb-2">
-                                <option v-for="s in statuses" :key="s" :value="s">{{ s }}</option>
-                            </select>
+                            <AppScrollSelect
+                                v-model="newStatus"
+                                :options="statuses"
+                                class="mb-2 block"
+                                :option-class-fn="statusColorClass"
+                            />
                             <button
                                 class="btn-primary w-full justify-center"
                                 :disabled="statusForm.processing || newStatus === order.status || readOnly"
@@ -396,7 +399,9 @@ import { ref, computed } from 'vue'
 import { Inertia } from '@inertiajs/inertia'
 import { useForm, usePage } from '@inertiajs/inertia-vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import AppScrollSelect from '@/Components/AppScrollSelect.vue'
 import OrderStatusBadge from '@/Components/OrderStatusBadge.vue'
+import { statusColorClass } from '@/utils/orderStatusColors'
 import AddressInlinePicker from '@/Components/AddressInlinePicker.vue'
 import DeleteOrderModal from '@/Components/DeleteOrderModal.vue'
 import { useSubscription } from '@/composables/useSubscription'

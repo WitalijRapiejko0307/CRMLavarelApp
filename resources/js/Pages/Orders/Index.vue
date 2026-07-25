@@ -42,10 +42,13 @@
                 </div>
                 <div>
                     <label class="label mb-1">Статус</label>
-                    <select v-model="filters.status" class="w-full" @change="applyFilters">
-                        <option value="">Все статусы</option>
-                        <option v-for="s in statuses" :key="s" :value="s">{{ s }}</option>
-                    </select>
+                    <AppScrollSelect
+                        v-model="filters.status"
+                        :options="statuses"
+                        placeholder="Все статусы"
+                        :empty-option="{ value: '', label: 'Все статусы' }"
+                        @change="applyFilters"
+                    />
                 </div>
                 <div>
                     <label class="label mb-1">Дата от</label>
@@ -143,6 +146,7 @@ import { ref, computed, h, onMounted, onUnmounted } from 'vue'
 import { Inertia } from '@inertiajs/inertia'
 import { Link, usePage } from '@inertiajs/inertia-vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import AppScrollSelect from '@/Components/AppScrollSelect.vue'
 import OrderStatusSelect from '@/Components/OrderStatusSelect.vue'
 import DeleteOrderModal from '@/Components/DeleteOrderModal.vue'
 import { useSubscription } from '@/composables/useSubscription'

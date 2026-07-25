@@ -1,19 +1,21 @@
 <template>
     <div @click.stop @mousedown.stop>
-        <select
+        <AppScrollSelect
             v-model="selectedStatus"
-            class="text-xs py-1 max-w-[140px] truncate rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+            :options="statuses"
+            size="sm"
             :disabled="disabled || form.processing"
+            :option-class-fn="statusColorClass"
             @change="onChange"
-        >
-            <option v-for="s in statuses" :key="s" :value="s">{{ s }}</option>
-        </select>
+        />
     </div>
 </template>
 
 <script setup>
 import { ref, watch } from 'vue'
 import { useForm } from '@inertiajs/inertia-vue3'
+import AppScrollSelect from '@/Components/AppScrollSelect.vue'
+import { statusColorClass } from '@/utils/orderStatusColors'
 
 const props = defineProps({
     orderId:  { type: Number, required: true },
