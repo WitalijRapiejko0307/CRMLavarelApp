@@ -105,7 +105,7 @@ const displayLabel = computed(() => {
 })
 
 const triggerClass = computed(() => {
-    const base = 'w-full flex items-center justify-between gap-1 text-left border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 focus:outline-none focus:ring-1 disabled:opacity-50 disabled:cursor-not-allowed'
+    const base = 'w-full flex items-center justify-between gap-1 text-left border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 focus:outline-none focus:ring-1 disabled:opacity-50 disabled:cursor-not-allowed'
     return props.size === 'sm'
         ? `${base} text-xs py-1 px-2 max-w-[140px]`
         : `${base} text-sm px-3 py-2`

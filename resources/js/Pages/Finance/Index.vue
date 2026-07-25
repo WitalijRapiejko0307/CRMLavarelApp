@@ -9,7 +9,7 @@
                     <input
                         type="month"
                         v-model="currentMonth"
-                        class="border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 dark:focus:ring-indigo-500"
+                        class="input py-1.5"
                         @change="loadMonth"
                     />
                     <button class="btn-secondary btn-sm" @click="nextMonth">&#8250;</button>
