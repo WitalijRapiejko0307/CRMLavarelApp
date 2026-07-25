@@ -93,7 +93,7 @@
                                         <input
                                             :type="visibleKeys[key] ? 'text' : meta[1]"
                                             v-model="form[key]"
-                                            :placeholder="currentValues[key] ? maskedPlaceholder(key, meta[1]) : meta[2]"
+                                            :placeholder="passwordOrTextPlaceholder(key, meta)"
                                             class="input pr-10"
                                         />
                                         <button
@@ -123,8 +123,12 @@
                                 <!-- Hint -->
                                 <p v-if="meta[3]" class="text-xs text-gray-400 dark:text-gray-500 mt-1">{{ meta[3] }}</p>
 
-                                <!-- Current value indicator (non-toggle, non-textarea) -->
-                                <p v-if="meta[1] !== 'toggle' && meta[1] !== 'textarea' && currentValues[key] && !form[key]"
+                                <!-- Current value indicator (password only — text fields are prefilled) -->
+                                <p v-if="meta[1] === 'password' && secretPreviewsLocal[key] && !form[key]"
+                                   class="text-xs text-green-600 dark:text-green-400 mt-1">
+                                    ✓ Сохранено
+                                </p>
+                                <p v-else-if="meta[1] === 'select' && currentValues[key] && !form[key]"
                                    class="text-xs text-green-600 dark:text-green-400 mt-1">
                                     ✓ Сохранено
                                 </p>
@@ -162,6 +166,7 @@ const { readOnly } = useSubscription()
 const props = defineProps({
     schema:            { type: Object, default: () => ({}) },
     current:           { type: Object, default: () => ({}) },
+    secretPreviews:    { type: Object, default: () => ({}) },
     canManageSettings: { type: Boolean, default: false },
     theme:             { type: String, default: 'system' },
 })
@@ -192,6 +197,7 @@ async function selectTheme(value) {
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const currentValues = ref({ ...props.current })
+const secretPreviewsLocal = ref({ ...props.secretPreviews })
 
 const form = reactive((() => {
     const f = {}
@@ -202,8 +208,11 @@ const form = reactive((() => {
                 f[key] = props.current[key] ?? (meta[4] ? Object.keys(meta[4])[0] : '')
             } else if (type === 'toggle') {
                 f[key] = props.current[key] ?? ''
-            } else {
+            } else if (type === 'password') {
                 f[key] = ''
+            } else {
+                // text / textarea — show saved values
+                f[key] = props.current[key] ?? ''
             }
         }
     }
@@ -234,10 +243,28 @@ function toggleSwitch(key) {
     form[key] = next
 }
 
-function maskedPlaceholder(key, type) {
-    if (type !== 'password') return ''
-    const val = currentValues.value[key] ?? ''
-    return val.length > 0 ? val.slice(0, 4) + '••••••••' : ''
+function maskedPlaceholder(key) {
+    return secretPreviewsLocal.value[key] ?? ''
+}
+
+function passwordOrTextPlaceholder(key, meta) {
+    const type = meta[1]
+    if (type === 'password') {
+        return maskedPlaceholder(key) || meta[2]
+    }
+    return meta[2]
+}
+
+function maskClientSecret(value) {
+    if (!value) return ''
+    return String(value).slice(0, 4) + '••••••••'
+}
+
+function settingType(key) {
+    for (const group of Object.values(props.schema)) {
+        if (group.keys[key]) return group.keys[key][1]
+    }
+    return 'text'
 }
 
 function toggleVisible(key) {
@@ -273,13 +300,22 @@ function save() {
         preserveState: true,
         onSuccess: () => {
             Object.entries(settings).forEach(([k, v]) => {
-                currentValues.value[k] = v
+                const type = settingType(k)
+                if (type === 'password') {
+                    // Never keep full secret in client state after save
+                    secretPreviewsLocal.value[k] = maskClientSecret(v)
+                    delete currentValues.value[k]
+                } else {
+                    currentValues.value[k] = v
+                }
             })
             for (const group of Object.values(props.schema)) {
                 for (const [key, meta] of Object.entries(group.keys)) {
                     const type = meta[1]
-                    if (type !== 'toggle' && type !== 'select') {
+                    if (type === 'password') {
                         form[key] = ''
+                    } else if (type === 'text' || type === 'textarea') {
+                        form[key] = currentValues.value[key] ?? form[key]
                     }
                 }
             }
@@ -298,9 +334,11 @@ async function generateSecret() {
         const resp = await apiFetch('/settings/generate-webhook-secret', 'POST')
         const data = await resp.json()
         if (data.success) {
-            form['webhook_secret']                = data.secret
-            currentValues.value['webhook_secret'] = data.secret
-            visibleKeys['webhook_secret']         = true
+            // Show full secret once in the form; store only a mask for the "saved" indicator
+            form['webhook_secret'] = data.secret
+            secretPreviewsLocal.value['webhook_secret'] = maskClientSecret(data.secret)
+            delete currentValues.value['webhook_secret']
+            visibleKeys['webhook_secret'] = true
         }
     } finally {
         generating.value = false

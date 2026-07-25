@@ -288,7 +288,7 @@
                                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
                                 </svg>
                                 <span>
-                                    {{ activeBatch.status === 'committed' ? 'Белпочта формирует PDF…' : 'Скачиваю архив…' }}
+                                    {{ activeBatch.status === 'committed' ? 'Ожидание скачивания PDF…' : 'Скачиваю архив…' }}
                                     Обновляю статус каждые 10 с.
                                 </span>
                             </div>
@@ -301,7 +301,7 @@
                                     {{ retrying ? 'Запускаю…' : 'Повторить скачивание' }}
                                 </button>
                                 <p class="text-xs text-gray-400 dark:text-gray-500">
-                                    Подождите 30–60 сек, если PDF ещё формируется на стороне Белпочты.
+                                    Если статус не меняется более минуты — нажмите «Повторить скачивание»
                                 </p>
                             </div>
                         </div>
@@ -340,7 +340,7 @@
                                     {{ retrying ? 'Запускаю…' : 'Повторить скачивание' }}
                                 </button>
                                 <p class="text-xs text-gray-400 dark:text-gray-500">
-                                    Подождите 30–60 сек, если PDF ещё формируется на стороне Белпочты.
+                                    Если статус не меняется более минуты — нажмите «Повторить скачивание»
                                 </p>
                             </div>
                             <p v-if="retryError" class="text-xs text-red-600">{{ retryError }}</p>
@@ -404,7 +404,7 @@ const showRetryButton = computed(() => {
     if (activeBatch.value.status === 'failed') return true
     if (!['committed', 'downloading'].includes(activeBatch.value.status)) return false
     if (!pollingSince.value) return false
-    return Date.now() - pollingSince.value >= 120_000
+    return Date.now() - pollingSince.value >= 60_000
 })
 
 const activeBatchOrders = computed(() => {

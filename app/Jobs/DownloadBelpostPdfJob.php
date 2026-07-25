@@ -42,6 +42,11 @@ class DownloadBelpostPdfJob implements ShouldQueue
 
     public function handle(): void
     {
+        Log::info('DownloadBelpostPdfJob: start', [
+            'batch_id' => $this->batchId,
+            'attempt'  => $this->attempts(),
+        ]);
+
         /** @var MailBatch|null $batch */
         $batch = MailBatch::withoutGlobalScopes()->find($this->batchId);
 
@@ -76,14 +81,12 @@ class DownloadBelpostPdfJob implements ShouldQueue
 
             Log::info('DownloadBelpostPdfJob: done', ['batch_id' => $this->batchId, 'path' => $zipPath]);
         } catch (\Throwable $e) {
-            Log::error('DownloadBelpostPdfJob: failed', [
+            // Do not mark failed here — retries would briefly flip UI to error.
+            // Status failed is set only in failed() after all attempts are exhausted.
+            Log::error('DownloadBelpostPdfJob: attempt failed', [
                 'batch_id' => $this->batchId,
+                'attempt'  => $this->attempts(),
                 'error'    => $e->getMessage(),
-            ]);
-
-            $batch->update([
-                'status'        => MailBatch::STATUS_FAILED,
-                'error_message' => $e->getMessage(),
             ]);
 
             throw $e;

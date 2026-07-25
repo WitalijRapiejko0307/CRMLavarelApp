@@ -53,12 +53,34 @@ php artisan route:cache
 php artisan view:cache
 ```
 
-### Cron на hoster.by
+### Cron и очередь (обязательно для PDF Белпочты)
 
-Добавить в crontab:
+Без cron PDF после commit остаётся в статусе `committed` («Ожидание скачивания PDF…»), даже если бланки уже готовы в ЛК Белпочты. Job `DownloadBelpostPdfJob` обрабатывается через `schedule:run` → `queue:work --stop-when-empty`.
+
+**Чеклист prod:**
+
+1. В `.env`: `QUEUE_CONNECTION=database`
+2. Crontab:
 ```
 * * * * * cd /home/user/crm && php artisan schedule:run >> /dev/null 2>&1
 ```
+3. Таблица `jobs` существует (`php artisan queue:table && php artisan migrate`, если ещё нет)
+4. После commit появляется запись в `jobs` и в логах `DownloadBelpostPdfJob`
+
+**Диагностика застрявшей партии** (`status=committed` + pending job = проблема очереди, не Белпочты):
+
+```sql
+SELECT id, batch_id, status, id_to_download, error_message FROM mail_batches WHERE id = ?;
+
+SELECT id, queue, attempts, available_at FROM jobs
+WHERE payload LIKE '%DownloadBelpostPdfJob%';
+```
+
+```bash
+grep DownloadBelpostPdfJob storage/logs/laravel.log
+```
+
+**Что делать сейчас в UI:** на странице партии нажать «Повторить скачивание» (если статус не меняется > 1 мин).
 
 ### Webhook
 

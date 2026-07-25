@@ -10,6 +10,7 @@ use App\Services\BelpostService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -174,7 +175,12 @@ class BelpostController extends Controller
             $idToDownload = $service->commitActiveList($batch);
 
             DownloadBelpostPdfJob::dispatch($batch->id, Auth::user()->tenant_id)
-                ->delay(now()->addSeconds(15));
+                ->delay(now()->addSeconds(30));
+
+            Log::info('BelpostController::commit dispatched PDF job', [
+                'batch_id' => $batch->id,
+                'delay_s'  => 30,
+            ]);
 
             return response()->json([
                 'success'        => true,
@@ -223,12 +229,38 @@ class BelpostController extends Controller
             'error_message' => null,
         ]);
 
+        if ($this->hasPendingPdfDownloadJob($batch->id)) {
+            Log::info('BelpostController::retryDownload skipped — pending job exists', [
+                'batch_id' => $batch->id,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Скачивание уже в очереди. Если статус не меняется — проверьте cron / schedule:run.',
+            ]);
+        }
+
         DownloadBelpostPdfJob::dispatch($batch->id, Auth::user()->tenant_id);
+
+        Log::info('BelpostController::retryDownload dispatched PDF job', [
+            'batch_id' => $batch->id,
+        ]);
 
         return response()->json([
             'success' => true,
-            'message' => 'Скачивание запущено. Подождите 30–60 сек, если PDF ещё формируется на стороне Белпочты.',
+            'message' => 'Скачивание запущено. Если статус не меняется более минуты — проверьте очередь (cron).',
         ]);
+    }
+
+    /**
+     * True if a DownloadBelpostPdfJob for this batch is already waiting in the DB queue.
+     */
+    protected function hasPendingPdfDownloadJob(int $batchId): bool
+    {
+        return DB::table('jobs')
+            ->where('payload', 'like', '%DownloadBelpostPdfJob%')
+            ->where('payload', 'like', '%batchId";i:' . $batchId . ';%')
+            ->exists();
     }
 
     /**

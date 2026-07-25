@@ -131,12 +131,63 @@ class TenantSettingController extends Controller
                 ->toArray()
             : [];
 
+        [$current, $secretPreviews] = $canManage
+            ? static::buildCurrentForUi($stored)
+            : [[], []];
+
         return Inertia::render('Settings/Index', [
             'schema'              => $canManage ? static::schema() : [],
-            'current'             => $stored,
+            'current'             => $current,
+            'secretPreviews'      => $secretPreviews,
             'canManageSettings'   => $canManage,
             'theme'               => Auth::user()->theme ?? 'system',
         ]);
+    }
+
+    /**
+     * Mask a secret for UI preview: first N chars + dots. Never send full value to browser.
+     */
+    protected static function maskSecret(string $value, int $visible = 4): string
+    {
+        if ($value === '') {
+            return '';
+        }
+
+        $prefix = mb_substr($value, 0, $visible);
+
+        return $prefix . '••••••••';
+    }
+
+    /**
+     * Split stored settings into non-secret current values and masked secret previews.
+     *
+     * @param  array<string, string>  $stored
+     * @return array{0: array<string, string>, 1: array<string, string>}
+     */
+    protected static function buildCurrentForUi(array $stored): array
+    {
+        $current         = [];
+        $secretPreviews  = [];
+
+        foreach (static::schema() as $group) {
+            foreach ($group['keys'] as $key => $meta) {
+                $type  = $meta[1] ?? 'text';
+                $value = isset($stored[$key]) ? (string) $stored[$key] : '';
+
+                if ($value === '') {
+                    continue;
+                }
+
+                if ($type === 'password') {
+                    $secretPreviews[$key] = static::maskSecret($value);
+                } else {
+                    // text, select, toggle, textarea
+                    $current[$key] = $value;
+                }
+            }
+        }
+
+        return [$current, $secretPreviews];
     }
 
     // ─── Save ─────────────────────────────────────────────────────────────────

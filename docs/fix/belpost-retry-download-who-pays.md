@@ -87,6 +87,7 @@ DownloadBelpostPdfJob::dispatch($batch->id, Auth::user()->tenant_id)
 
 - Очередь: `QUEUE_CONNECTION=database`, worker через [`Kernel.php`](../app/Console/Kernel.php) schedule. Retry не поможет, если cron не запущен — проверить `schedule:run` на prod
 - Job уже имеет 3 auto-retry ([`DownloadBelpostPdfJob.php`](../app/Jobs/DownloadBelpostPdfJob.php)) — ручной retry дополняет, не заменяет
+- **Диагностика зависания в `committed`:** если в `jobs` есть pending `DownloadBelpostPdfJob` — проблема очереди/cron, не Белпочты. Чеклист: [`README.md`](../../README.md) (раздел «Cron и очередь»), детали в [`belpost-pdf-hang-and-settings-mask.md`](belpost-pdf-hang-and-settings-mask.md)
 
 ---
 
