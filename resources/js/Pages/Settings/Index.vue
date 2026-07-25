@@ -31,8 +31,16 @@
                 </div>
             </div>
 
-            <!-- Tenant settings (admin/manager only) -->
-            <form v-if="canManageSettings" @submit.prevent="save" class="space-y-6">
+            <!-- Tenant settings (admin/manager view; admin edit) -->
+            <form v-if="canViewSettings" @submit.prevent="save" class="space-y-6">
+
+                <div
+                    v-if="canViewSettings && !canEditSettings"
+                    class="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-md px-4 py-2"
+                >
+                    <span class="font-medium">Только просмотр</span>
+                    <span class="text-amber-600 dark:text-amber-400">— изменение настроек доступно только администратору</span>
+                </div>
 
                 <!-- Setting group cards -->
                 <div v-for="(group, groupKey) in schema" :key="groupKey" class="card">
@@ -53,7 +61,9 @@
                                         :class="[
                                             'relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-300',
                                             isToggleOn(key) ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-600',
+                                            (!canEditSettings || readOnly) && 'opacity-60 cursor-not-allowed',
                                         ]"
+                                        :disabled="!canEditSettings || readOnly"
                                         @click="toggleSwitch(key)"
                                     >
                                         <span :class="[
@@ -69,6 +79,7 @@
                                     v-else-if="meta[1] === 'select'"
                                     v-model="form[key]"
                                     class="input mt-1"
+                                    :disabled="!canEditSettings || readOnly"
                                 >
                                     <option v-if="!form[key] && !currentValues[key]" value="" disabled>— выберите —</option>
                                     <option
@@ -85,6 +96,7 @@
                                     :placeholder="meta[2]"
                                     rows="4"
                                     class="input mt-1 font-mono text-xs resize-y"
+                                    :disabled="!canEditSettings || readOnly"
                                 />
 
                                 <!-- text / password -->
@@ -95,9 +107,10 @@
                                             v-model="form[key]"
                                             :placeholder="passwordOrTextPlaceholder(key, meta)"
                                             class="input pr-10"
+                                            :disabled="!canEditSettings || readOnly"
                                         />
                                         <button
-                                            v-if="meta[1] === 'password'"
+                                            v-if="meta[1] === 'password' && canEditSettings"
                                             type="button"
                                             class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                                             @click="toggleVisible(key)"
@@ -110,10 +123,10 @@
 
                                     <!-- Generate button for webhook_secret -->
                                     <button
-                                        v-if="key === 'webhook_secret'"
+                                        v-if="key === 'webhook_secret' && canEditSettings"
                                         type="button"
                                         class="btn-secondary text-sm whitespace-nowrap"
-                                        :disabled="generating"
+                                        :disabled="generating || readOnly"
                                         @click="generateSecret"
                                     >
                                         {{ generating ? '…' : 'Сгенерировать' }}
@@ -137,8 +150,7 @@
                     </div>
                 </div>
 
-                <!-- Submit -->
-                <div class="flex justify-end gap-3">
+                <div v-if="canEditSettings" class="flex justify-end gap-3">
                     <p v-if="saved" class="text-sm text-green-600 dark:text-green-400 flex items-center gap-1 mr-auto">
                         ✓ Настройки сохранены
                     </p>
@@ -167,7 +179,8 @@ const props = defineProps({
     schema:            { type: Object, default: () => ({}) },
     current:           { type: Object, default: () => ({}) },
     secretPreviews:    { type: Object, default: () => ({}) },
-    canManageSettings: { type: Boolean, default: false },
+    canViewSettings: { type: Boolean, default: false },
+    canEditSettings: { type: Boolean, default: false },
     theme:             { type: String, default: 'system' },
 })
 
@@ -239,6 +252,7 @@ function isToggleOn(key) {
 }
 
 function toggleSwitch(key) {
+    if (!props.canEditSettings || readOnly.value) return
     const next = isToggleOn(key) ? '' : '1'
     form[key] = next
 }
@@ -273,7 +287,7 @@ function toggleVisible(key) {
 
 // ── Save ──────────────────────────────────────────────────────────────────────
 function save() {
-    if (readOnly.value) return
+    if (!props.canEditSettings || readOnly.value) return
     const settings = {}
 
     for (const group of Object.values(props.schema)) {
@@ -328,7 +342,7 @@ function save() {
 
 // ── Generate webhook secret ───────────────────────────────────────────────────
 async function generateSecret() {
-    if (readOnly.value) return
+    if (!props.canEditSettings || readOnly.value) return
     generating.value = true
     try {
         const resp = await apiFetch('/settings/generate-webhook-secret', 'POST')

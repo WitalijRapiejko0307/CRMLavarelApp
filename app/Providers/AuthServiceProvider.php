@@ -22,8 +22,9 @@ class AuthServiceProvider extends ServiceProvider
         // User management: only admin can create/update/delete users
         Gate::define('manage-users', fn ($user) => $user->isTenantUser() && $user->role === 'admin');
 
-        // Settings: admin + manager can manage settings
-        Gate::define('manage-settings', fn ($user) => $user->isTenantUser() && in_array($user->role, ['admin', 'manager']));
+        // Settings: admin + manager can view; only admin can edit
+        Gate::define('view-settings', fn ($user) => $user->isTenantUser() && in_array($user->role, ['admin', 'manager']));
+        Gate::define('manage-settings', fn ($user) => $user->isTenantUser() && $user->role === 'admin');
 
         // Finance: admin + manager can access finance module
         Gate::define('view-finances', fn ($user) => $user->isTenantUser() && in_array($user->role, ['admin', 'manager']));

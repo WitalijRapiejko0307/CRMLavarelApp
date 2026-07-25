@@ -143,7 +143,7 @@ import { ref, computed, h, onMounted, onUnmounted } from 'vue'
 import { Inertia } from '@inertiajs/inertia'
 import { Link, usePage } from '@inertiajs/inertia-vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
-import OrderStatusBadge from '@/Components/OrderStatusBadge.vue'
+import OrderStatusSelect from '@/Components/OrderStatusSelect.vue'
 import DeleteOrderModal from '@/Components/DeleteOrderModal.vue'
 import { useSubscription } from '@/composables/useSubscription'
 import { apiFetch } from '@/utils/api'
@@ -420,7 +420,15 @@ const columns = [
     }),
     columnHelper.accessor('status', {
         header: 'Статус',
-        cell:   info => h(OrderStatusBadge, { status: info.getValue() }),
+        cell:   info => {
+            const row = info.row.original
+            return h(OrderStatusSelect, {
+                orderId:  row.id,
+                status:   row.status,
+                statuses: props.statuses,
+                disabled: readOnly.value,
+            })
+        },
     }),
     columnHelper.display({
         id: 'goods',

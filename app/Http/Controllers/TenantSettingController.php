@@ -121,26 +121,28 @@ class TenantSettingController extends Controller
      */
     public function index(): Response
     {
-        $canManage = Gate::check('manage-settings');
+        $canView = Gate::check('view-settings');
+        $canEdit = Gate::check('manage-settings');
         $tenantId  = Auth::user()->tenant_id;
 
-        $stored = $canManage
+        $stored = $canView
             ? TenantSetting::withoutGlobalScopes()
                 ->where('tenant_id', $tenantId)
                 ->pluck('value', 'key')
                 ->toArray()
             : [];
 
-        [$current, $secretPreviews] = $canManage
+        [$current, $secretPreviews] = $canView
             ? static::buildCurrentForUi($stored)
             : [[], []];
 
         return Inertia::render('Settings/Index', [
-            'schema'              => $canManage ? static::schema() : [],
-            'current'             => $current,
-            'secretPreviews'      => $secretPreviews,
-            'canManageSettings'   => $canManage,
-            'theme'               => Auth::user()->theme ?? 'system',
+            'schema'           => $canView ? static::schema() : [],
+            'current'          => $current,
+            'secretPreviews'   => $secretPreviews,
+            'canViewSettings'  => $canView,
+            'canEditSettings'  => $canEdit,
+            'theme'            => Auth::user()->theme ?? 'system',
         ]);
     }
 

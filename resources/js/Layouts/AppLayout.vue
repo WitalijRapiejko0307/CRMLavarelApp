@@ -151,7 +151,6 @@ const flash = computed(() => ({
 const shopName          = computed(() => page.props.value.shop_name || 'BaseCRM')
 const currentRole       = computed(() => page.props.value.auth?.user?.role ?? '')
 const isAdmin           = computed(() => currentRole.value === 'admin')
-const canManageSettings = computed(() => ['admin', 'manager'].includes(currentRole.value))
 const canViewFinances   = computed(() => ['admin', 'manager'].includes(currentRole.value))
 
 const trackingNoticeDismissed = ref(false)
