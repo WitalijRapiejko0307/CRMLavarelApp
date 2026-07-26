@@ -52,11 +52,11 @@
                 </div>
                 <div>
                     <label class="label mb-1">Дата от</label>
-                    <input v-model="filters.date_from" type="date" class="w-full" @change="applyFilters" />
+                    <DateInput v-model="filters.date_from" @change="applyFilters" />
                 </div>
                 <div>
                     <label class="label mb-1">Дата до</label>
-                    <input v-model="filters.date_to" type="date" class="w-full" @change="applyFilters" />
+                    <DateInput v-model="filters.date_to" @change="applyFilters" />
                 </div>
             </div>
             <div v-if="hasActiveFilters" class="mt-3 flex justify-end">
@@ -147,10 +147,12 @@ import { Inertia } from '@inertiajs/inertia'
 import { Link, usePage } from '@inertiajs/inertia-vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import AppScrollSelect from '@/Components/AppScrollSelect.vue'
+import DateInput from '@/Components/DateInput.vue'
 import OrderStatusSelect from '@/Components/OrderStatusSelect.vue'
 import DeleteOrderModal from '@/Components/DeleteOrderModal.vue'
 import { useSubscription } from '@/composables/useSubscription'
 import { apiFetch } from '@/utils/api'
+import { formatDateDMY, isValidDateDMY, parseDateDMY } from '@/utils/date'
 import {
     useVueTable,
     createColumnHelper,
@@ -354,11 +356,15 @@ onMounted(() => {
 onUnmounted(stopPolling)
 
 // --- Filters ---
+function toDisplayDate(value) {
+    return formatDateDMY(value) || value || ''
+}
+
 const filters = ref({
     search:    props.filters?.search    ?? '',
     status:    props.filters?.status    ?? '',
-    date_from: props.filters?.date_from ?? '',
-    date_to:   props.filters?.date_to   ?? '',
+    date_from: toDisplayDate(props.filters?.date_from),
+    date_to:   toDisplayDate(props.filters?.date_to),
 })
 
 const hasActiveFilters = computed(() =>
@@ -366,10 +372,20 @@ const hasActiveFilters = computed(() =>
 )
 
 let filterTimer = null
+function buildFilterQuery() {
+    const query = {
+        search: filters.value.search,
+        status: filters.value.status,
+        date_from: isValidDateDMY(filters.value.date_from) ? parseDateDMY(filters.value.date_from) : '',
+        date_to:   isValidDateDMY(filters.value.date_to)   ? parseDateDMY(filters.value.date_to)   : '',
+    }
+    return query
+}
+
 function applyFilters() {
     clearTimeout(filterTimer)
     filterTimer = setTimeout(() => {
-        Inertia.get('/orders', filters.value, {
+        Inertia.get('/orders', buildFilterQuery(), {
             preserveState: true,
             replace: true,
         })
