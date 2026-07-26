@@ -48,4 +48,49 @@ class PhoneNormalizerTest extends TestCase
         $this->assertNull(PhoneNormalizer::normalize(null));
         $this->assertSame('', PhoneNormalizer::normalize(''));
     }
+
+    /** @dataProvider toInternationalDigitsProvider */
+    public function test_to_international_digits(string $input, string $expected): void
+    {
+        $this->assertSame($expected, PhoneNormalizer::toInternationalDigits($input));
+    }
+
+    public function toInternationalDigitsProvider(): array
+    {
+        return [
+            'real user number with plus'     => ['+375333771416', '375333771416'],
+            'already normalized from DB'     => ['375333771416', '375333771416'],
+            '9 local digits like GS row'     => ['333771416', '375333771416'],
+            '80 prefix'                      => ['80333771416', '375333771416'],
+            'must not ltrim to 3751416'      => ['375333771416', '375333771416'],
+        ];
+    }
+
+    /** @dataProvider toInternationalPlusProvider */
+    public function test_to_international_plus(string $input, string $expected): void
+    {
+        $this->assertSame($expected, PhoneNormalizer::toInternationalPlus($input));
+    }
+
+    public function toInternationalPlusProvider(): array
+    {
+        return [
+            'real user number'               => ['+375333771416', '+375333771416'],
+            'from normalized DB value'       => ['375333771416', '+375333771416'],
+            '9 local digits'                 => ['333771416', '+375333771416'],
+        ];
+    }
+
+    public function test_to_international_digits_empty(): void
+    {
+        $this->assertSame('', PhoneNormalizer::toInternationalDigits(null));
+        $this->assertSame('', PhoneNormalizer::toInternationalDigits(''));
+    }
+
+    public function test_ltrim_bug_regression(): void
+    {
+        $broken = '375' . ltrim('375333771416', '+375');
+        $this->assertSame('3751416', $broken);
+        $this->assertSame('375333771416', PhoneNormalizer::toInternationalDigits('375333771416'));
+    }
 }

@@ -53,4 +53,36 @@ class PhoneNormalizer
 
         return strlen($digits) >= 9 ? substr($digits, -9) : $digits;
     }
+
+    /**
+     * Format for carrier APIs: 375XXXXXXXXX (12 digits, no plus).
+     * Mirrors GS: "375" + String(row[13])
+     */
+    public static function toInternationalDigits(?string $phone): string
+    {
+        $normalized = self::normalize($phone);
+
+        if ($normalized === null || $normalized === '') {
+            return '';
+        }
+
+        if (strlen($normalized) === 12 && str_starts_with($normalized, '375')) {
+            return $normalized;
+        }
+
+        $nine = self::lastNineDigits($normalized);
+
+        return $nine !== '' ? '375' . $nine : '';
+    }
+
+    /**
+     * Format for SMS API: +375XXXXXXXXX
+     * Mirrors GS: '+375' + row[13]
+     */
+    public static function toInternationalPlus(?string $phone): string
+    {
+        $digits = self::toInternationalDigits($phone);
+
+        return $digits !== '' ? '+' . $digits : '';
+    }
 }

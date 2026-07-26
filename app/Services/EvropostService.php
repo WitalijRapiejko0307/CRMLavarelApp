@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\TenantSetting;
+use App\Support\PhoneNormalizer;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -171,7 +172,7 @@ class EvropostService
 
         // ── 4. FIO + phone ──
         [$lastName, $firstName, $secondName] = $this->splitFio((string)$order->full_name);
-        $phone = '375' . ltrim((string)$order->phone, '+375');
+        $phone = PhoneNormalizer::toInternationalDigits($order->phone);
 
         // ── 5. Who pays ──
         $shipmentPayer = $whoPays === 'Продавец' ? 0 : 1;
@@ -302,7 +303,7 @@ class EvropostService
 
         // ── 6. FIO + phone ──
         [$lastName, $firstName, $secondName] = $this->splitFio((string)$order->full_name);
-        $phone = '375' . ltrim((string)$order->phone, '+375');
+        $phone = PhoneNormalizer::toInternationalDigits($order->phone);
 
         // ── 7. Who pays ──
         $recipientPayment = $whoPays === 'Продавец' ? '0' : '1';

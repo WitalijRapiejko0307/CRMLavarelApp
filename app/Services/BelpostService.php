@@ -6,6 +6,7 @@ use App\Models\MailBatch;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\TenantSetting;
+use App\Support\PhoneNormalizer;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -148,7 +149,7 @@ class BelpostService
                     'last_name'   => $lastName,
                     'second_name' => $secondName,
                     'email'       => null,
-                    'phone'       => '375' . ltrim((string)$order->phone, '+375'),
+                    'phone'       => PhoneNormalizer::toInternationalDigits($order->phone),
                 ],
                 'address' => [
                     'id'           => $addressId,

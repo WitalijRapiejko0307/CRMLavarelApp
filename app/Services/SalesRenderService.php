@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Order;
+use App\Support\PhoneNormalizer;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -57,7 +58,7 @@ class SalesRenderService
 
         $goods  = $order->goods   ?? [];
         $prices = $order->prices  ?? [];
-        $phone  = '375' . preg_replace('/\D/', '', (string) $order->phone);
+        $phone  = PhoneNormalizer::toInternationalDigits($order->phone);
 
         // Price in kopecks (as in GAS: price * 100)
         $price = isset($prices[0]) ? (int) round((float) $prices[0] * 100) : 0;

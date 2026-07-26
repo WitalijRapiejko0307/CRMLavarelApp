@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Order;
+use App\Support\PhoneNormalizer;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -58,7 +59,7 @@ class SmsService
             return false;
         }
 
-        $phone = '+375' . preg_replace('/\D/', '', (string) $order->phone);
+        $phone = PhoneNormalizer::toInternationalPlus($order->phone);
 
         $url = self::SEND_URL . '?' . http_build_query([
             'token'        => $this->token,
