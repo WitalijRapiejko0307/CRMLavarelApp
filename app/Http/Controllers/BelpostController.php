@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Jobs\DownloadBelpostPdfJob;
 use App\Models\MailBatch;
 use App\Models\Order;
+use App\Models\TenantSetting;
 use App\Rules\FullNameThreeParts;
 use App\Services\BelpostService;
 use Illuminate\Http\JsonResponse;
@@ -46,11 +47,13 @@ class BelpostController extends Controller
             ->groupBy('mail_batch_id');
 
         return Inertia::render('Belpost/Batch', [
-            'batches'         => $batches,
-            'eligibleOrders'  => $eligibleOrders,
-            'deliveryTypes'   => MailBatch::DELIVERY_TYPES,
-            'batchOrders'     => $batchOrders->map(fn ($group) => $group->values())->all(),
-            'selectedBatchId' => ($batchId = (int) $request->query('batch')) > 0 ? $batchId : null,
+            'batches'          => $batches,
+            'eligibleOrders'   => $eligibleOrders,
+            'deliveryTypes'    => MailBatch::DELIVERY_TYPES,
+            'batchOrders'      => $batchOrders->map(fn ($group) => $group->values())->all(),
+            'selectedBatchId'  => ($batchId = (int) $request->query('batch')) > 0 ? $batchId : null,
+            'labelSizes'       => MailBatch::LABEL_SIZES,
+            'defaultLabelSize' => TenantSetting::get('belpost_label_size', '150x100'),
         ]);
     }
 
@@ -116,10 +119,10 @@ class BelpostController extends Controller
             'belpost_address_id' => ['nullable', 'string'],
         ]);
 
-        if ($batch->status !== MailBatch::STATUS_DRAFT) {
+        if ($batch->isBelpostCommitted() || $batch->status === MailBatch::STATUS_DOWNLOADING) {
             return response()->json([
                 'success' => false,
-                'message' => 'Партия уже закрыта или в другом статусе',
+                'message' => 'Партия уже сформирована на Белпочте или идёт скачивание PDF',
             ], 422);
         }
 
@@ -159,14 +162,21 @@ class BelpostController extends Controller
 
     /**
      * POST /belpost/batches/{batch}/commit
-     * Commit the batch and dispatch PDF download job.
+     * Commit the batch on Belpost (does not trigger PDF download).
      */
     public function commit(MailBatch $batch): JsonResponse
     {
-        if ($batch->status !== MailBatch::STATUS_DRAFT) {
+        if ($batch->isBelpostCommitted()) {
             return response()->json([
                 'success' => false,
-                'message' => 'Партия не в статусе «Черновик»',
+                'message' => 'Партия уже сформирована на Белпочте',
+            ], 422);
+        }
+
+        if (!$batch->orders()->exists()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'В партии нет оформленных бланков',
             ], 422);
         }
 
@@ -174,24 +184,96 @@ class BelpostController extends Controller
             $service      = new BelpostService(Auth::user()->tenant_id);
             $idToDownload = $service->commitActiveList($batch);
 
-            DownloadBelpostPdfJob::dispatch($batch->id, Auth::user()->tenant_id)
-                ->delay(now()->addSeconds(30));
-
-            Log::info('BelpostController::commit dispatched PDF job', [
-                'batch_id' => $batch->id,
-                'delay_s'  => 30,
+            $batch->update([
+                'belpost_committed' => true,
+                'status'            => MailBatch::STATUS_COMMITTED,
+                'id_to_download'    => $idToDownload,
             ]);
 
             return response()->json([
-                'success'        => true,
-                'id_to_download' => $idToDownload,
-                'message'        => 'Партия зафиксирована. PDF готовится в фоне.',
+                'success'           => true,
+                'belpost_committed' => true,
+                'message'           => 'Партия сформирована на Белпочте',
             ]);
         } catch (\Throwable $e) {
             Log::error('BelpostController::commit error', ['batch_id' => $batch->id, 'error' => $e->getMessage()]);
             return response()->json([
                 'success' => false,
                 'message' => 'Ошибка commit: ' . $e->getMessage(),
+            ], 422);
+        }
+    }
+
+    /**
+     * POST /belpost/batches/{batch}/download-blanks
+     * Generate blanks PDF (before or after commit) and dispatch download job.
+     */
+    public function downloadBlanks(Request $request, MailBatch $batch): JsonResponse
+    {
+        $request->validate([
+            'label_size' => ['nullable', 'string', 'in:' . implode(',', MailBatch::LABEL_SIZES)],
+        ]);
+
+        if (!$batch->orders()->exists()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'В партии нет оформленных бланков',
+            ], 422);
+        }
+
+        if ($batch->status === MailBatch::STATUS_DOWNLOADING) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Скачивание уже выполняется',
+            ], 422);
+        }
+
+        if ($this->hasPendingPdfDownloadJob($batch->id)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Скачивание уже в очереди',
+            ], 422);
+        }
+
+        $labelSize = $request->input('label_size')
+            ?? $batch->label_size
+            ?? TenantSetting::get('belpost_label_size', '150x100');
+
+        try {
+            $service      = new BelpostService(Auth::user()->tenant_id);
+            $idToDownload = $service->prepareBlankDownload($batch, $labelSize);
+
+            $batch->update([
+                'id_to_download' => $idToDownload,
+                'label_size'     => $labelSize,
+                'status'         => MailBatch::STATUS_DOWNLOADING,
+                'error_message'  => null,
+                'pdf_path'       => null,
+            ]);
+
+            DownloadBelpostPdfJob::dispatch($batch->id, Auth::user()->tenant_id)
+                ->delay(now()->addSeconds(15));
+
+            Log::info('BelpostController::downloadBlanks dispatched PDF job', [
+                'batch_id'   => $batch->id,
+                'label_size' => $labelSize,
+                'delay_s'    => 15,
+            ]);
+
+            return response()->json([
+                'success'        => true,
+                'id_to_download' => $idToDownload,
+                'label_size'     => $labelSize,
+                'message'        => 'Бланки генерируются. PDF будет готов через ~15–30 с.',
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('BelpostController::downloadBlanks error', [
+                'batch_id' => $batch->id,
+                'error'    => $e->getMessage(),
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Ошибка генерации бланков: ' . $e->getMessage(),
             ], 422);
         }
     }
@@ -208,25 +290,28 @@ class BelpostController extends Controller
             MailBatch::STATUS_FAILED,
             MailBatch::STATUS_COMMITTED,
             MailBatch::STATUS_DOWNLOADING,
+            MailBatch::STATUS_READY,
+            MailBatch::STATUS_DRAFT,
         ];
 
         if (!in_array($batch->status, $allowed, true)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Повторное скачивание доступно только для партий в статусе «Ошибка», «Ожидание PDF» или «Загрузка»',
+                'message' => 'Повторное скачивание недоступно для текущего статуса партии',
             ], 422);
         }
 
         if (!$batch->id_to_download) {
             return response()->json([
                 'success' => false,
-                'message' => 'Нет ID для скачивания — партия не была зафиксирована на Белпочте',
+                'message' => 'Нет ID для скачивания — сначала нажмите «Скачать бланки»',
             ], 422);
         }
 
         $batch->update([
-            'status'        => MailBatch::STATUS_COMMITTED,
+            'status'        => MailBatch::STATUS_DOWNLOADING,
             'error_message' => null,
+            'pdf_path'      => null,
         ]);
 
         if ($this->hasPendingPdfDownloadJob($batch->id)) {
@@ -270,11 +355,13 @@ class BelpostController extends Controller
     public function batchStatus(MailBatch $batch): JsonResponse
     {
         return response()->json([
-            'status'         => $batch->status,
-            'pdf_ready'      => $batch->isPdfReady(),
-            'id_to_download' => $batch->id_to_download,
-            'error_message'  => $batch->error_message,
-            'who_pays'       => $batch->who_pays,
+            'status'            => $batch->status,
+            'pdf_ready'         => $batch->isPdfReady(),
+            'id_to_download'    => $batch->id_to_download,
+            'error_message'     => $batch->error_message,
+            'who_pays'          => $batch->who_pays,
+            'label_size'        => $batch->label_size,
+            'belpost_committed' => $batch->isBelpostCommitted(),
         ]);
     }
 

@@ -27,9 +27,9 @@ class DownloadBelpostPdfJob implements ShouldQueue
     public array $backoff = [60, 120, 240];
 
     /**
-     * Allow up to 3 minutes per attempt (ZIP download can be slow).
+     * Allow up to 5 minutes per attempt (20+ blanks can be slow).
      */
-    public int $timeout = 180;
+    public int $timeout = 300;
 
     private int $batchId;
     private int $tenantId;
@@ -59,7 +59,7 @@ class DownloadBelpostPdfJob implements ShouldQueue
             Log::error('DownloadBelpostPdfJob: no id_to_download', ['batch_id' => $this->batchId]);
             $batch->update([
                 'status'        => MailBatch::STATUS_FAILED,
-                'error_message' => 'Нет id_to_download — commit не завершён корректно',
+                'error_message' => 'Нет id_to_download — сначала нажмите «Скачать бланки»',
             ]);
             return;
         }
@@ -70,6 +70,10 @@ class DownloadBelpostPdfJob implements ShouldQueue
         $this->setTenantContext($batch->tenant_id);
 
         try {
+            if ($this->attempts() === 1) {
+                sleep(10);
+            }
+
             $service = new BelpostService($batch->tenant_id);
             $zipPath = $service->downloadDocuments($batch->id_to_download, $batch->batch_id);
 

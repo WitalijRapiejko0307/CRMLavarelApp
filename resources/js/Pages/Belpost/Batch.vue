@@ -110,20 +110,20 @@
                                     ID для скачивания: <span class="font-mono text-gray-600 dark:text-gray-400">{{ activeBatch.id_to_download }}</span>
                                 </p>
                             </div>
-                            <span :class="badgeClass(activeBatch.status)" class="inline-flex items-center rounded-full font-medium px-3 py-1 text-sm">{{ badgeLabel(activeBatch.status) }}</span>
+                            <span :class="commitBadgeClass(activeBatch)" class="inline-flex items-center rounded-full font-medium px-3 py-1 text-sm">{{ commitBadgeLabel(activeBatch) }}</span>
                         </div>
                     </div>
 
                     <!-- Draft: payer is fixed at creation -->
-                    <div v-if="activeBatch.status === 'draft'" class="card bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+                    <div v-if="!activeBatch.belpost_committed" class="card bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
                         <p class="text-sm text-blue-800 dark:text-blue-200">
                             Плательщик за доставку зафиксирован при создании партии
                             (<strong>{{ activeBatch.who_pays ?? '—' }}</strong>) и не меняется.
                         </p>
                     </div>
 
-                    <!-- Orders to process (only when draft) -->
-                    <div v-if="activeBatch.status === 'draft'" class="card">
+                    <!-- Orders to process (until batch is committed on Belpost) -->
+                    <div v-if="!activeBatch.belpost_committed" class="card">
                         <div class="flex items-center justify-between mb-4">
                             <h2 class="card-title">Заявки для оформления</h2>
                             <button
@@ -256,40 +256,59 @@
                         </div>
                     </div>
 
-                    <!-- Commit section (draft only) -->
-                    <div v-if="activeBatch.status === 'draft'" class="card">
-                        <div class="flex items-center justify-between">
+                    <!-- Blanks PDF: download + commit -->
+                    <div class="card">
+                        <h2 class="card-title mb-4">Бланки PDF</h2>
+
+                        <div class="space-y-4">
                             <div>
-                                <h2 class="card-title">Зафиксировать партию</h2>
-                                <p class="text-sm text-muted mt-1">
-                                    После фиксации Белпочта сформирует PDF с бланками.
-                                </p>
+                                <label class="label block mb-1">Размер бланка</label>
+                                <select
+                                    v-model="selectedLabelSize"
+                                    class="w-full max-w-xs"
+                                    :disabled="activeBatch.status === 'downloading' || downloadingBlanks"
+                                >
+                                    <option v-for="size in labelSizeOptions" :key="size" :value="size">
+                                        {{ labelSizeDisplay(size) }}
+                                    </option>
+                                </select>
                             </div>
-                            <button
-                                class="btn-primary"
-                                :disabled="committing"
-                                @click="commitBatch"
-                            >
-                                {{ committing ? 'Фиксирую…' : 'Commit → PDF' }}
-                            </button>
+
+                            <div class="flex flex-wrap items-center gap-3">
+                                <button
+                                    class="btn-primary"
+                                    :disabled="downloadingBlanks || activeBatch.status === 'downloading' || activeBatchOrders.length === 0 || readOnly"
+                                    @click="downloadBlanks"
+                                >
+                                    {{ downloadingBlanks ? 'Запускаю…' : 'Скачать бланки' }}
+                                </button>
+                                <button
+                                    class="btn-secondary"
+                                    :disabled="committing || activeBatch.belpost_committed || activeBatch.status === 'downloading' || activeBatchOrders.length === 0 || readOnly"
+                                    @click="commitBatch"
+                                >
+                                    {{ committing ? 'Формирую…' : 'Сформировать партию' }}
+                                </button>
+                            </div>
+
+                            <p v-if="downloadError" class="text-xs text-red-600">{{ downloadError }}</p>
+                            <p v-if="commitError" class="text-xs text-red-600">{{ commitError }}</p>
                         </div>
-                        <p v-if="commitError" class="text-xs text-red-600 mt-2">{{ commitError }}</p>
                     </div>
 
-                    <!-- PDF status section (committed / downloading / ready / failed) -->
-                    <div v-if="['committed', 'downloading', 'ready', 'failed'].includes(activeBatch.status)" class="card">
+                    <!-- PDF status section -->
+                    <div v-if="['downloading', 'ready', 'failed'].includes(activeBatch.status)" class="card">
                         <h2 class="card-title mb-4">PDF бланки</h2>
 
                         <!-- Polling -->
-                        <div v-if="['committed', 'downloading'].includes(activeBatch.status)" class="space-y-3">
+                        <div v-if="activeBatch.status === 'downloading'" class="space-y-3">
                             <div class="flex items-center gap-3 text-sm text-muted">
                                 <svg class="w-5 h-5 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24">
                                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
                                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
                                 </svg>
                                 <span>
-                                    {{ activeBatch.status === 'committed' ? 'Ожидание скачивания PDF…' : 'Скачиваю архив…' }}
-                                    Обновляю статус каждые 10 с.
+                                    Скачиваю архив с бланками… Обновляю статус каждые 10 с.
                                 </span>
                             </div>
                             <div v-if="showRetryButton" class="flex items-center gap-3">
@@ -376,11 +395,13 @@ const SELLER_ONLY_TYPES = ['ecommerce_light', 'ecommerce_optima']
 
 // ── Props from controller ──────────────────────────────────────────────────
 const props = defineProps({
-    batches:         { type: Array,  default: () => [] },
-    eligibleOrders:  { type: Array,  default: () => [] },
-    deliveryTypes:   { type: Object, default: () => ({}) },
-    batchOrders:     { type: Object, default: () => ({}) },
-    selectedBatchId: { type: Number, default: null },
+    batches:          { type: Array,  default: () => [] },
+    eligibleOrders:   { type: Array,  default: () => [] },
+    deliveryTypes:    { type: Object, default: () => ({}) },
+    batchOrders:      { type: Object, default: () => ({}) },
+    selectedBatchId:  { type: Number, default: null },
+    labelSizes:       { type: Array,  default: () => ['210x150', '150x100', '120x80'] },
+    defaultLabelSize: { type: String, default: '150x100' },
 })
 
 // ── Reactive state ─────────────────────────────────────────────────────────
@@ -402,10 +423,14 @@ const showRetryButton = computed(() => {
     void pollTick.value
     if (!activeBatch.value) return false
     if (activeBatch.value.status === 'failed') return true
-    if (!['committed', 'downloading'].includes(activeBatch.value.status)) return false
+    if (activeBatch.value.status !== 'downloading') return false
     if (!pollingSince.value) return false
     return Date.now() - pollingSince.value >= 60_000
 })
+
+const labelSizeOptions = computed(() => props.labelSizes)
+
+const selectedLabelSize = ref(props.defaultLabelSize)
 
 const activeBatchOrders = computed(() => {
     if (!activeBatch.value) return []
@@ -422,6 +447,10 @@ const results       = ref({})        // { [orderId]: { success, track_number, er
 // Commit
 const committing    = ref(false)
 const commitError   = ref('')
+
+// Download blanks
+const downloadingBlanks = ref(false)
+const downloadError     = ref('')
 
 // PDF retry
 const retrying      = ref(false)
@@ -447,10 +476,13 @@ function onTypeChange() {
 
 function selectBatch(b) {
     activeBatch.value = b
+    selectedLabelSize.value = b.label_size ?? props.defaultLabelSize
     stopPolling()
     pollingSince.value = null
     retryError.value = ''
-    if (['committed', 'downloading'].includes(b.status)) {
+    downloadError.value = ''
+    commitError.value = ''
+    if (b.status === 'downloading') {
         pollingSince.value = Date.now()
         startPolling()
     }
@@ -534,6 +566,38 @@ async function retrySingle(order) {
     await processOne(order, null)
 }
 
+// Download blanks
+async function downloadBlanks() {
+    if (readOnly.value) return
+    if (downloadingBlanks.value || !activeBatch.value) return
+    downloadingBlanks.value = true
+    downloadError.value     = ''
+
+    try {
+        const resp = await apiFetch(`/belpost/batches/${activeBatch.value.id}/download-blanks`, 'POST', {
+            label_size: selectedLabelSize.value,
+        })
+        const data = await resp.json()
+
+        if (data.success) {
+            activeBatch.value.status         = 'downloading'
+            activeBatch.value.label_size     = data.label_size ?? selectedLabelSize.value
+            activeBatch.value.id_to_download = data.id_to_download ?? null
+            activeBatch.value.error_message  = null
+            activeBatch.value.pdf_path       = null
+            pollingSince.value = Date.now()
+            syncBatchInList(activeBatch.value)
+            startPolling()
+        } else {
+            downloadError.value = data.message ?? 'Ошибка'
+        }
+    } catch (e) {
+        downloadError.value = e.message
+    } finally {
+        downloadingBlanks.value = false
+    }
+}
+
 // Commit
 async function commitBatch() {
     if (readOnly.value) return
@@ -546,11 +610,9 @@ async function commitBatch() {
         const data = await resp.json()
 
         if (data.success) {
-            activeBatch.value.status        = 'committed'
-            activeBatch.value.id_to_download = data.id_to_download ?? null
-            pollingSince.value = Date.now()
+            activeBatch.value.belpost_committed = true
+            activeBatch.value.status            = 'committed'
             syncBatchInList(activeBatch.value)
-            startPolling()
         } else {
             commitError.value = data.message ?? 'Ошибка'
         }
@@ -572,7 +634,7 @@ async function retryDownload() {
         const data = await resp.json()
 
         if (data.success) {
-            activeBatch.value.status        = 'committed'
+            activeBatch.value.status        = 'downloading'
             activeBatch.value.error_message = null
             pollingSince.value = Date.now()
             syncBatchInList(activeBatch.value)
@@ -644,14 +706,16 @@ async function pollStatus() {
         })
         const data = await resp.json()
 
-        activeBatch.value.status         = data.status
-        activeBatch.value.error_message  = data.error_message
+        activeBatch.value.status            = data.status
+        activeBatch.value.error_message     = data.error_message
+        activeBatch.value.belpost_committed = data.belpost_committed ?? activeBatch.value.belpost_committed
         if (data.id_to_download) activeBatch.value.id_to_download = data.id_to_download
         if (data.who_pays) activeBatch.value.who_pays = data.who_pays
+        if (data.label_size) activeBatch.value.label_size = data.label_size
 
         syncBatchInList(activeBatch.value)
 
-        if (!['committed', 'downloading'].includes(data.status)) {
+        if (data.status !== 'downloading') {
             stopPolling()
         }
     } catch {
@@ -734,6 +798,20 @@ function errorLabel(code) {
         exception:         '✕ Исключение',
     }
     return map[code] ?? code
+}
+
+function labelSizeDisplay(size) {
+    return (size ?? '').replace('x', '×')
+}
+
+function commitBadgeClass(batch) {
+    return batch.belpost_committed
+        ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+        : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+}
+
+function commitBadgeLabel(batch) {
+    return batch.belpost_committed ? 'Сформирована' : 'Черновик'
 }
 
 function badgeClass(status) {

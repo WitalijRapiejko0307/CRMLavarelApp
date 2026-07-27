@@ -13,11 +13,13 @@ use Illuminate\Support\Facades\Storage;
 
 class BelpostService
 {
-    private const API_BASE    = 'https://api.belpost.by';
-    private const LIST_V1     = '/api/v1/batch-mailing/list';
-    private const ITEM_V2     = '/api/v2/batch-mailing/list/{id}/item';
-    private const COMMIT_V2   = '/api/v2/batch-mailing/list/{id}/commit';
-    private const DOWNLOAD_V1 = '/api/v1/batch-mailing/documents/{id}/download';
+    private const API_BASE         = 'https://api.belpost.by';
+    private const LIST_V1          = '/api/v1/batch-mailing/list';
+    private const ITEM_V2          = '/api/v2/batch-mailing/list/{id}/item';
+    private const LIST_PATCH_V2    = '/api/v2/batch-mailing/list/{id}';
+    private const GENERATE_BLANK_V1 = '/api/v1/batch-mailing/list/{id}/generate-blank';
+    private const COMMIT_V2        = '/api/v2/batch-mailing/list/{id}/commit';
+    private const DOWNLOAD_V1      = '/api/v1/batch-mailing/documents/{id}/download';
 
     private string $authToken;
     private string $elc;
@@ -68,11 +70,12 @@ class BelpostService
         }
 
         return MailBatch::withoutGlobalScopes()->create([
-            'tenant_id' => $this->tenantId,
-            'batch_id'  => $batchId,
-            'type'      => $postalDeliveryType,
-            'who_pays'  => $whoPays,
-            'status'    => MailBatch::STATUS_DRAFT,
+            'tenant_id'  => $this->tenantId,
+            'batch_id'   => $batchId,
+            'type'       => $postalDeliveryType,
+            'who_pays'   => $whoPays,
+            'label_size' => TenantSetting::get('belpost_label_size', '150x100'),
+            'status'     => MailBatch::STATUS_DRAFT,
         ]);
     }
 
@@ -264,14 +267,84 @@ class BelpostService
         ];
     }
 
+    // ─── label size + blank generation ──────────────────────────────────────
+
+    /**
+     * Set label size on Belpost API v2 (PATCH).
+     *
+     * @throws \InvalidArgumentException
+     * @throws \RuntimeException
+     */
+    public function setLabelSize(MailBatch $batch, string $labelSize): void
+    {
+        if (!in_array($labelSize, MailBatch::LABEL_SIZES, true)) {
+            throw new \InvalidArgumentException("Invalid label size: {$labelSize}");
+        }
+
+        $url = self::API_BASE . str_replace('{id}', $batch->batch_id, self::LIST_PATCH_V2);
+
+        $response = Http::timeout(30)
+            ->withHeaders($this->headers())
+            ->patch($url, ['label_size' => $labelSize]);
+
+        if (!$response->successful()) {
+            $this->throwApiError('setLabelSize', $response);
+        }
+    }
+
+    /**
+     * Generate blank PDF on Belpost (POST generate-blank, uncommitted).
+     *
+     * @return string  documents.id for download
+     * @throws \RuntimeException
+     */
+    public function generateBlank(MailBatch $batch): string
+    {
+        $url = self::API_BASE . str_replace('{id}', $batch->batch_id, self::GENERATE_BLANK_V1);
+
+        $response = Http::timeout(30)
+            ->withHeaders($this->headers())
+            ->post($url, []);
+
+        if (!$response->successful()) {
+            $this->throwApiError('generateBlank', $response);
+        }
+
+        $data      = $response->json();
+        $documents = $data['documents'] ?? [];
+        $id        = (string) ($documents['id'] ?? '');
+
+        Log::info('BelpostService::generateBlank', [
+            'batch_id' => $batch->batch_id,
+            'doc_id'   => $id,
+            'status'   => $documents['status'] ?? null,
+        ]);
+
+        if (!$id) {
+            throw new \RuntimeException('Belpost generateBlank: no documents.id in response. Body: ' . $response->body());
+        }
+
+        return $id;
+    }
+
+    /**
+     * PATCH label_size → POST generate-blank → return id_to_download.
+     *
+     * @throws \RuntimeException
+     */
+    public function prepareBlankDownload(MailBatch $batch, string $labelSize): string
+    {
+        $this->setLabelSize($batch, $labelSize);
+
+        return $this->generateBlank($batch);
+    }
+
     // ─── commitActiveList ─────────────────────────────────────────────────────
 
     /**
      * Commit the batch on Belpost API v2.
-     * Updates batch status to STATUS_COMMITTED and stores id_to_download.
      *
-     * @param  MailBatch $batch
-     * @return string  id_to_download
+     * @return string  id_to_download from commit response (optional for retry)
      * @throws \RuntimeException
      */
     public function commitActiveList(MailBatch $batch): string
@@ -286,17 +359,12 @@ class BelpostService
             $this->throwApiError('commitActiveList', $response);
         }
 
-        $data        = $response->json();
-        $idToDownload = (string)($data['documents']['id'] ?? '');
+        $data         = $response->json();
+        $idToDownload = (string) ($data['documents']['id'] ?? '');
 
         if (!$idToDownload) {
             throw new \RuntimeException('Belpost commitActiveList: no documents.id in response. Body: ' . $response->body());
         }
-
-        $batch->update([
-            'status'         => MailBatch::STATUS_COMMITTED,
-            'id_to_download' => $idToDownload,
-        ]);
 
         return $idToDownload;
     }

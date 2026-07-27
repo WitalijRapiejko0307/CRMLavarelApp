@@ -10,17 +10,19 @@ class MailBatch extends Model
 {
     /**
      * Lifecycle statuses for a batch.
-     * draft      → items being added
-     * committed  → POST /commit sent, Belpost generating PDF
+     * draft       → items being added
+     * committed   → batch formed on Belpost (belpost_committed=true); PDF may be any state
      * downloading → DownloadBelpostPdfJob dispatched
-     * ready      → PDF downloaded and available
-     * failed     → unrecoverable error
+     * ready       → PDF downloaded and available
+     * failed      → unrecoverable PDF download error
      */
     public const STATUS_DRAFT       = 'draft';
     public const STATUS_COMMITTED   = 'committed';
     public const STATUS_DOWNLOADING = 'downloading';
     public const STATUS_READY       = 'ready';
     public const STATUS_FAILED      = 'failed';
+
+    public const LABEL_SIZES = ['210x150', '150x100', '120x80'];
 
     /** Types where the seller always pays (cannot select «Покупатель»). */
     public const SELLER_ONLY_TYPES = ['ecommerce_light', 'ecommerce_optima'];
@@ -49,6 +51,8 @@ class MailBatch extends Model
         'batch_id',
         'type',
         'who_pays',
+        'label_size',
+        'belpost_committed',
         'status',
         'id_to_download',
         'pdf_path',
@@ -56,8 +60,9 @@ class MailBatch extends Model
     ];
 
     protected $casts = [
-        'created_at' => 'datetime',
-        'updated_at' => 'datetime',
+        'belpost_committed' => 'boolean',
+        'created_at'        => 'datetime',
+        'updated_at'        => 'datetime',
     ];
 
     protected static function booted(): void
@@ -73,6 +78,22 @@ class MailBatch extends Model
     public function orders(): HasMany
     {
         return $this->hasMany(Order::class);
+    }
+
+    public function isBelpostCommitted(): bool
+    {
+        return (bool) $this->belpost_committed;
+    }
+
+    public function canProcessItems(): bool
+    {
+        return !$this->belpost_committed && $this->status !== self::STATUS_DOWNLOADING;
+    }
+
+    public function isPdfInProgress(): bool
+    {
+        return in_array($this->status, [self::STATUS_DOWNLOADING, self::STATUS_COMMITTED], true)
+            && !$this->isPdfReady();
     }
 
     public function isPdfReady(): bool

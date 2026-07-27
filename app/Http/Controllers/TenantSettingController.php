@@ -43,6 +43,7 @@ class TenantSettingController extends Controller
                     'elc'                  => ['ELC (код отправителя)',          'text',     '…',               ''],
                     'belpost_sender_email' => ['Email отправителя (ecommerce)', 'text',     'shop@example.by', 'Уведомление о выдаче; обязателен для ecommerce-типов'],
                     'shelf_life'           => ['Срок хранения в ПВЗ, дней',    'text',     '10',              'По умолчанию 10 дней'],
+                    'belpost_label_size'   => ['Размер бланка по умолчанию',   'select',   '', '', ['210x150' => '210×150', '150x100' => '150×100', '120x80' => '120×80']],
                 ],
             ],
             'europochta' => [
