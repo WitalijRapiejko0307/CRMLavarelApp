@@ -1,13 +1,17 @@
 <template>
     <AppLayout>
         <template #header>
-            <div class="flex items-center gap-3">
-                <Link href="/orders" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
-                    ← Заказы
-                </Link>
-                <span class="text-gray-300 dark:text-gray-600">/</span>
-                <h1 class="page-title">Импорт CSV</h1>
-            </div>
+            <PageHeader>
+                <template #title>
+                    <div class="flex items-center gap-3">
+                        <Link href="/orders" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+                            ← Заказы
+                        </Link>
+                        <span class="text-gray-300 dark:text-gray-600">/</span>
+                        <h1 class="page-title">Импорт CSV</h1>
+                    </div>
+                </template>
+            </PageHeader>
         </template>
 
         <div class="max-w-2xl mx-auto space-y-6">
@@ -130,6 +134,7 @@
 import { ref } from 'vue'
 import { Link } from '@inertiajs/inertia-vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import PageHeader from '@/Components/PageHeader.vue'
 import { useSubscription } from '@/composables/useSubscription'
 
 defineProps({

@@ -9,12 +9,12 @@
             <p v-if="order?.status" class="text-sm text-muted mb-6">
                 Статус: {{ order.status }}
             </p>
-            <div class="flex justify-end gap-2">
-                <button class="btn-secondary" :disabled="deleting" @click="emit('cancel')">
+            <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+                <button class="btn-secondary justify-center" :disabled="deleting" @click="emit('cancel')">
                     Отмена
                 </button>
                 <button
-                    class="btn-secondary text-red-500"
+                    class="btn-secondary text-red-500 justify-center"
                     :disabled="deleting"
                     @click="emit('confirm')"
                 >

@@ -104,4 +104,29 @@
     .stat-value {
         @apply text-2xl font-bold text-gray-800 dark:text-gray-200;
     }
+
+    /* ── Mobile-adaptive utilities ─────────────────────────────────────── */
+    .card-compact {
+        @apply p-4 md:p-6;
+    }
+
+    .touch-target {
+        @apply min-h-[44px] min-w-[44px];
+    }
+
+    .nav-drawer-overlay {
+        @apply fixed inset-0 z-40 bg-black/40 dark:bg-black/60;
+    }
+
+    .nav-drawer-panel {
+        @apply fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] overflow-y-auto bg-indigo-700 dark:bg-indigo-950 text-white shadow-xl flex flex-col;
+    }
+
+    .list-card {
+        @apply block w-full text-left rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-sm transition-colors;
+    }
+
+    .list-card-clickable {
+        @apply cursor-pointer active:bg-gray-50 dark:active:bg-gray-700/60 hover:border-gray-300 dark:hover:border-gray-600;
+    }
 }

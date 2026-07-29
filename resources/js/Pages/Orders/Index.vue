@@ -1,9 +1,11 @@
 <template>
     <AppLayout>
         <template #header>
-            <div class="flex items-center justify-between gap-3">
-                <h1 class="page-title">Заказы</h1>
-                <div class="flex items-center gap-3 flex-wrap justify-end">
+            <PageHeader>
+                <template #title>
+                    <h1 class="page-title">Заказы</h1>
+                </template>
+                <template #actions>
                     <span v-if="trackingLabel" class="text-sm whitespace-nowrap" :class="trackingLabelClass">
                         {{ trackingLabel }}
                     </span>
@@ -16,20 +18,20 @@
                     >
                         {{ trackingButtonLabel }}
                     </button>
-                    <span class="text-sm text-muted">Всего: {{ orders.total }}</span>
+                    <span class="text-sm text-muted whitespace-nowrap">Всего: {{ orders.total }}</span>
                     <Link v-if="!readOnly" href="/orders/import" class="btn-secondary text-sm">
                         Импорт CSV
                     </Link>
                     <Link v-if="!readOnly" href="/orders/create" class="btn-primary text-sm">
                         + Новый заказ
                     </Link>
-                </div>
-            </div>
+                </template>
+            </PageHeader>
         </template>
 
         <!-- Filters -->
         <div class="card mb-4">
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
                     <label class="label mb-1">Поиск</label>
                     <input
@@ -64,72 +66,151 @@
             </div>
         </div>
 
-        <!-- Table -->
-        <div class="card p-0 overflow-hidden">
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr v-for="headerGroup in table.getHeaderGroups()" :key="headerGroup.id"
-                            class="table-head">
-                            <th
-                                v-for="header in headerGroup.headers"
-                                :key="header.id"
-                                class="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap"
-                            >
-                                <FlexRender
-                                    v-if="!header.isPlaceholder"
-                                    :render="header.column.columnDef.header"
-                                    :props="header.getContext()"
-                                />
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody class="table-divide">
-                        <tr v-if="orders.data.length === 0">
-                            <td :colspan="columns.length" class="px-4 py-12 text-center text-gray-400 dark:text-gray-500 text-sm">
-                                Заказы не найдены
-                            </td>
-                        </tr>
-                        <tr
-                            v-for="row in table.getRowModel().rows"
-                            :key="row.id"
-                            class="table-row-hover cursor-pointer transition-colors"
-                            @click="goToOrder(row.original.id)"
-                        >
-                            <td
-                                v-for="cell in row.getVisibleCells()"
-                                :key="cell.id"
-                                class="px-4 py-3"
-                            >
-                                <FlexRender :render="cell.column.columnDef.cell" :props="cell.getContext()" />
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+        <ResponsiveList>
+            <!-- Desktop table -->
+            <template #table>
+                <div class="card p-0 overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr v-for="headerGroup in table.getHeaderGroups()" :key="headerGroup.id"
+                                    class="table-head">
+                                    <th
+                                        v-for="header in headerGroup.headers"
+                                        :key="header.id"
+                                        class="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap"
+                                    >
+                                        <FlexRender
+                                            v-if="!header.isPlaceholder"
+                                            :render="header.column.columnDef.header"
+                                            :props="header.getContext()"
+                                        />
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody class="table-divide">
+                                <tr v-if="orders.data.length === 0">
+                                    <td :colspan="columns.length" class="px-4 py-12 text-center text-gray-400 dark:text-gray-500 text-sm">
+                                        Заказы не найдены
+                                    </td>
+                                </tr>
+                                <tr
+                                    v-for="row in table.getRowModel().rows"
+                                    :key="row.id"
+                                    class="table-row-hover cursor-pointer transition-colors"
+                                    @click="goToOrder(row.original.id)"
+                                >
+                                    <td
+                                        v-for="cell in row.getVisibleCells()"
+                                        :key="cell.id"
+                                        class="px-4 py-3"
+                                    >
+                                        <FlexRender :render="cell.column.columnDef.cell" :props="cell.getContext()" />
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
 
-            <!-- Pagination -->
-            <div class="flex items-center justify-between px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
-                <div class="text-xs text-muted">
-                    Показано {{ orders.from }}–{{ orders.to }} из {{ orders.total }}
+                    <!-- Pagination -->
+                    <div class="flex items-center justify-between px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                        <div class="text-xs text-muted">
+                            Показано {{ orders.from }}–{{ orders.to }} из {{ orders.total }}
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <button
+                                v-for="link in paginationLinks"
+                                :key="link.label"
+                                :disabled="!link.url"
+                                class="px-3 py-1.5 text-xs rounded border transition-colors"
+                                    :class="link.active
+                                    ? 'bg-indigo-600 text-white border-indigo-600'
+                                    : link.url
+                                        ? 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                        : 'bg-white dark:bg-gray-800 text-gray-300 dark:text-gray-600 border-gray-200 dark:border-gray-700 cursor-not-allowed'"
+                                @click="link.url && goToPage(link.url)"
+                                v-html="link.label"
+                            />
+                        </div>
+                    </div>
                 </div>
-                <div class="flex items-center gap-1">
+            </template>
+
+            <!-- Mobile cards -->
+            <template #cards>
+                <div v-if="orders.data.length === 0" class="card text-center py-12 text-gray-400 dark:text-gray-500 text-sm">
+                    Заказы не найдены
+                </div>
+
+                <ListCard
+                    v-for="order in orders.data"
+                    :key="order.id"
+                    clickable
+                    @click="goToOrder(order.id)"
+                >
+                    <div class="flex items-start justify-between gap-2">
+                        <span class="text-gray-400 dark:text-gray-500 font-mono text-xs pt-1">#{{ order.id }}</span>
+                        <div class="flex items-center gap-1">
+                            <OrderStatusSelect
+                                :order-id="order.id"
+                                :status="order.status"
+                                :statuses="statuses"
+                                :disabled="readOnly"
+                            />
+                            <button
+                                v-if="canDeleteOrder(order)"
+                                type="button"
+                                class="touch-target text-red-500 hover:text-red-700 p-1 -mr-1 shrink-0"
+                                title="Удалить заказ"
+                                @click.stop="openDeleteModal(order)"
+                            >
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <p class="mt-1 font-medium text-gray-900 dark:text-gray-100">{{ order.full_name }}</p>
+
+                    <p class="mt-0.5 text-sm text-gray-600 dark:text-gray-400">
+                        <a v-if="order.phone" :href="`tel:${order.phone}`" class="text-indigo-600 dark:text-indigo-400" @click.stop>
+                            {{ order.phone }}
+                        </a>
+                        <span v-if="order.city"> · {{ order.city }}</span>
+                    </p>
+
+                    <p class="mt-0.5 text-sm text-gray-700 dark:text-gray-300 truncate">
+                        Товары: {{ formatGoods(order.goods, order.quantities) }}
+                    </p>
+
+                    <p class="mt-1 text-xs text-gray-400 dark:text-gray-500 flex flex-wrap items-center gap-x-1">
+                        <span>{{ formatDate(order.created_at) }}</span>
+                        <span v-if="order.delivery_type">· {{ deliveryTypes[order.delivery_type] ?? order.delivery_type }}</span>
+                        <span v-if="order.track_number" class="font-mono text-indigo-600 dark:text-indigo-400">· {{ order.track_number }}</span>
+                    </p>
+                </ListCard>
+
+                <!-- Compact pagination -->
+                <div v-if="orders.last_page > 1" class="flex items-center justify-between pt-1">
                     <button
-                        v-for="link in paginationLinks"
-                        :key="link.label"
-                        :disabled="!link.url"
-                        class="px-3 py-1.5 text-xs rounded border transition-colors"
-                            :class="link.active
-                            ? 'bg-indigo-600 text-white border-indigo-600'
-                            : link.url
-                                ? 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
-                                : 'bg-white dark:bg-gray-800 text-gray-300 dark:text-gray-600 border-gray-200 dark:border-gray-700 cursor-not-allowed'"
-                        @click="link.url && goToPage(link.url)"
-                        v-html="link.label"
-                    />
+                        class="btn-secondary btn-sm touch-target"
+                        :disabled="!orders.prev_page_url"
+                        @click="orders.prev_page_url && goToPage(orders.prev_page_url)"
+                    >
+                        ← Пред.
+                    </button>
+                    <span class="text-xs text-muted">стр. {{ orders.current_page }} из {{ orders.last_page }}</span>
+                    <button
+                        class="btn-secondary btn-sm touch-target"
+                        :disabled="!orders.next_page_url"
+                        @click="orders.next_page_url && goToPage(orders.next_page_url)"
+                    >
+                        След. →
+                    </button>
                 </div>
-            </div>
-        </div>
+            </template>
+        </ResponsiveList>
 
         <DeleteOrderModal
             :open="deleteModalOpen"
@@ -146,6 +227,9 @@ import { ref, computed, h, onMounted, onUnmounted } from 'vue'
 import { Inertia } from '@inertiajs/inertia'
 import { Link, usePage } from '@inertiajs/inertia-vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import PageHeader from '@/Components/PageHeader.vue'
+import ResponsiveList from '@/Components/ResponsiveList.vue'
+import ListCard from '@/Components/ListCard.vue'
 import AppScrollSelect from '@/Components/AppScrollSelect.vue'
 import DateInput from '@/Components/DateInput.vue'
 import OrderStatusSelect from '@/Components/OrderStatusSelect.vue'

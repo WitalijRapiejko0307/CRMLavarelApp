@@ -1,22 +1,24 @@
 <template>
     <AppLayout>
         <template #header>
-            <div class="flex items-center justify-between">
-                <div class="flex items-center gap-3">
-                    <button class="btn-secondary btn-sm" @click="back">← Назад</button>
-                    <h1 class="page-title">
-                        Заказ #{{ order.id }}
-                        <span v-if="order.external_id" class="text-sm font-normal text-gray-400 dark:text-gray-500">
-                            ({{ order.external_id }})
-                        </span>
-                    </h1>
-                    <OrderStatusBadge :status="order.status" />
-                </div>
-                <div class="flex items-center gap-2">
+            <PageHeader>
+                <template #title>
+                    <div class="flex items-center gap-3 flex-wrap">
+                        <button class="btn-secondary btn-sm shrink-0" @click="back">← Назад</button>
+                        <h1 class="page-title">
+                            Заказ #{{ order.id }}
+                            <span v-if="order.external_id" class="text-sm font-normal text-gray-400 dark:text-gray-500">
+                                ({{ order.external_id }})
+                            </span>
+                        </h1>
+                        <OrderStatusBadge :status="order.status" />
+                    </div>
+                </template>
+                <template #actions>
                     <button
                         v-if="isAdmin && !readOnly && orderIsDeletable"
                         type="button"
-                        class="text-red-500 hover:text-red-700 p-2"
+                        class="text-red-500 hover:text-red-700 p-2 touch-target"
                         title="Удалить заказ"
                         @click="deleteModalOpen = true"
                     >
@@ -31,8 +33,8 @@
                             {{ form.processing ? 'Сохраняю…' : 'Сохранить' }}
                         </button>
                     </template>
-                </div>
-            </div>
+                </template>
+            </PageHeader>
         </template>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -142,7 +144,7 @@
                                 :initial-query="pickerInitialQuery"
                             />
                             <!-- Housing + apartment remain plain inputs -->
-                            <div class="grid grid-cols-2 gap-3 mt-3">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
                                 <div>
                                     <label class="label">Корпус</label>
                                     <input v-model="form.housing" type="text" class="w-full mt-1" />
@@ -155,12 +157,12 @@
                         </template>
 
                         <!-- Non-belpost: plain text fields -->
-                        <div v-else class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                            <div class="col-span-2 sm:col-span-3">
+                        <div v-else class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div class="sm:col-span-3">
                                 <label class="label">Город</label>
                                 <input v-model="form.city" type="text" class="w-full mt-1" placeholder="Минск" />
                             </div>
-                            <div class="col-span-2">
+                            <div class="sm:col-span-2">
                                 <label class="label">Улица</label>
                                 <input v-model="form.street" type="text" class="w-full mt-1" />
                             </div>
@@ -232,8 +234,8 @@
                             :key="i"
                             class="space-y-1"
                         >
-                            <div class="flex items-center gap-3">
-                                <select v-model="form.goods[i]" class="flex-1">
+                            <div class="flex flex-wrap items-center gap-3">
+                                <select v-model="form.goods[i]" class="w-full sm:flex-1 sm:w-auto">
                                     <option value="">— выберите товар —</option>
                                     <option
                                         v-if="form.goods[i] && !isInCatalog(form.goods[i])"
@@ -255,10 +257,10 @@
                                     type="number"
                                     min="0"
                                     step="0.01"
-                                    class="w-28 text-right"
+                                    class="w-24 sm:w-28 text-right"
                                     placeholder="цена"
                                 />
-                                <button class="text-red-400 hover:text-red-600 p-1" @click="removeGood(i)">
+                                <button class="touch-target text-red-400 hover:text-red-600 p-1 shrink-0" @click="removeGood(i)">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                                     </svg>
@@ -399,6 +401,7 @@ import { ref, computed } from 'vue'
 import { Inertia } from '@inertiajs/inertia'
 import { useForm, usePage } from '@inertiajs/inertia-vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import PageHeader from '@/Components/PageHeader.vue'
 import AppScrollSelect from '@/Components/AppScrollSelect.vue'
 import OrderStatusBadge from '@/Components/OrderStatusBadge.vue'
 import { statusColorClass } from '@/utils/orderStatusColors'

@@ -1,18 +1,20 @@
 <template>
     <AppLayout>
         <template #header>
-            <div class="flex items-center justify-between">
-                <div class="flex items-center gap-3">
-                    <button class="btn-secondary btn-sm" @click="cancel">← Назад</button>
-                    <h1 class="page-title">Новый заказ</h1>
-                </div>
-                <div class="flex items-center gap-2">
+            <PageHeader>
+                <template #title>
+                    <div class="flex items-center gap-3">
+                        <button class="btn-secondary btn-sm shrink-0" @click="cancel">← Назад</button>
+                        <h1 class="page-title">Новый заказ</h1>
+                    </div>
+                </template>
+                <template #actions>
                     <button class="btn-secondary" @click="cancel">Отмена</button>
                     <button class="btn-primary" :disabled="form.processing || readOnly" @click="submit">
                         {{ form.processing ? 'Сохраняю…' : 'Создать заказ' }}
                     </button>
-                </div>
-            </div>
+                </template>
+            </PageHeader>
         </template>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -103,7 +105,7 @@
                             v-model:building="form.building"
                             v-model:belpostAddressId="form.belpost_address_id"
                         />
-                        <div class="grid grid-cols-2 gap-3 mt-3">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
                             <div>
                                 <label class="label">Корпус</label>
                                 <input v-model="form.housing" type="text" class="w-full mt-1" />
@@ -114,12 +116,12 @@
                             </div>
                         </div>
                     </template>
-                    <div v-else class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                        <div class="col-span-2 sm:col-span-3">
+                    <div v-else class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div class="sm:col-span-3">
                             <label class="label">Город</label>
                             <input v-model="form.city" type="text" class="w-full mt-1" placeholder="Минск" />
                         </div>
-                        <div class="col-span-2">
+                        <div class="sm:col-span-2">
                             <label class="label">Улица</label>
                             <input v-model="form.street" type="text" class="w-full mt-1" />
                         </div>
@@ -152,8 +154,8 @@
                             :key="i"
                             class="space-y-1"
                         >
-                            <div class="flex items-center gap-3">
-                                <select v-model="form.goods[i]" class="flex-1">
+                            <div class="flex flex-wrap items-center gap-3">
+                                <select v-model="form.goods[i]" class="w-full sm:flex-1 sm:w-auto">
                                     <option value="">— выберите товар —</option>
                                     <option
                                         v-if="form.goods[i] && !isInCatalog(form.goods[i])"
@@ -175,11 +177,11 @@
                                     type="number"
                                     min="0"
                                     step="0.01"
-                                    class="w-28 text-right"
+                                    class="w-24 sm:w-28 text-right"
                                     placeholder="цена"
                                 />
                                 <button
-                                    class="text-red-400 hover:text-red-600 p-1 shrink-0"
+                                    class="touch-target text-red-400 hover:text-red-600 p-1 shrink-0"
                                     @click="removeGood(i)"
                                 >
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -275,6 +277,7 @@ import { computed, ref, watch } from 'vue'
 import { Inertia } from '@inertiajs/inertia'
 import { useForm } from '@inertiajs/inertia-vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import PageHeader from '@/Components/PageHeader.vue'
 import AppScrollSelect from '@/Components/AppScrollSelect.vue'
 import { statusColorClass } from '@/utils/orderStatusColors'
 import AddressInlinePicker from '@/Components/AddressInlinePicker.vue'

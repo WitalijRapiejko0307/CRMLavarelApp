@@ -1,64 +1,101 @@
 <template>
     <AppLayout>
         <template #header>
-            <div class="flex items-center justify-between">
-                <h1 class="page-title">Пользователи</h1>
-                <button v-if="!readOnly" class="btn-primary" @click="openCreateModal">+ Добавить</button>
-            </div>
+            <PageHeader>
+                <template #title>
+                    <h1 class="page-title">Пользователи</h1>
+                </template>
+                <template #actions>
+                    <button v-if="!readOnly" class="btn-primary" @click="openCreateModal">+ Добавить</button>
+                </template>
+            </PageHeader>
         </template>
 
-        <div class="card">
-            <div v-if="userList.length === 0" class="text-center py-12 text-gray-400 dark:text-gray-500 text-sm">
-                Пользователи не найдены
-            </div>
-
-            <div v-else class="overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr class="border-b border-gray-200 dark:border-gray-700 text-left">
-                            <th class="pb-3 font-medium text-muted">Имя</th>
-                            <th class="pb-3 font-medium text-muted">Email</th>
-                            <th class="pb-3 font-medium text-muted w-32">Роль</th>
-                            <th class="pb-3 font-medium text-muted w-28 text-right">Добавлен</th>
-                            <th class="pb-3 w-36"></th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
-                        <tr v-for="user in userList" :key="user.id" class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                            <td class="py-3 font-medium text-gray-800 dark:text-gray-200">
-                                {{ user.name }}
-                                <span v-if="user.id === currentUserId" class="text-xs text-indigo-400 ml-1">(вы)</span>
-                            </td>
-                            <td class="py-3 text-gray-600 dark:text-gray-400">{{ user.email }}</td>
-                            <td class="py-3">
-                                <span class="text-xs rounded-full px-2 py-0.5 font-medium"
-                                    :class="roleBadgeClass(user.role)">
-                                    {{ roleLabel(user.role) }}
-                                </span>
-                            </td>
-                            <td class="py-3 text-right text-gray-400 dark:text-gray-500 text-xs whitespace-nowrap">
-                                {{ fmtDate(user.created_at) }}
-                            </td>
-                            <td class="py-3 text-right">
-                                <div class="flex items-center justify-end gap-2">
-                                    <button class="btn-secondary btn-xs" @click="openEditModal(user)">
-                                        Изменить
-                                    </button>
-                                    <button
-                                        class="btn-secondary btn-xs text-red-500"
-                                        :disabled="user.id === currentUserId"
-                                        :title="user.id === currentUserId ? 'Нельзя удалить самого себя' : ''"
-                                        @click="confirmDelete(user)"
-                                    >
-                                        Удалить
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+        <div v-if="userList.length === 0" class="card text-center py-12 text-gray-400 dark:text-gray-500 text-sm">
+            Пользователи не найдены
         </div>
+
+        <ResponsiveList v-else>
+            <template #table>
+                <div class="card overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-gray-200 dark:border-gray-700 text-left">
+                                <th class="pb-3 font-medium text-muted">Имя</th>
+                                <th class="pb-3 font-medium text-muted">Email</th>
+                                <th class="pb-3 font-medium text-muted w-32">Роль</th>
+                                <th class="pb-3 font-medium text-muted w-28 text-right">Добавлен</th>
+                                <th class="pb-3 w-36"></th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                            <tr v-for="user in userList" :key="user.id" class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                                <td class="py-3 font-medium text-gray-800 dark:text-gray-200">
+                                    {{ user.name }}
+                                    <span v-if="user.id === currentUserId" class="text-xs text-indigo-400 ml-1">(вы)</span>
+                                </td>
+                                <td class="py-3 text-gray-600 dark:text-gray-400">{{ user.email }}</td>
+                                <td class="py-3">
+                                    <span class="text-xs rounded-full px-2 py-0.5 font-medium"
+                                        :class="roleBadgeClass(user.role)">
+                                        {{ roleLabel(user.role) }}
+                                    </span>
+                                </td>
+                                <td class="py-3 text-right text-gray-400 dark:text-gray-500 text-xs whitespace-nowrap">
+                                    {{ fmtDate(user.created_at) }}
+                                </td>
+                                <td class="py-3 text-right">
+                                    <div class="flex items-center justify-end gap-2">
+                                        <button class="btn-secondary btn-xs" @click="openEditModal(user)">
+                                            Изменить
+                                        </button>
+                                        <button
+                                            class="btn-secondary btn-xs text-red-500"
+                                            :disabled="user.id === currentUserId"
+                                            :title="user.id === currentUserId ? 'Нельзя удалить самого себя' : ''"
+                                            @click="confirmDelete(user)"
+                                        >
+                                            Удалить
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </template>
+
+            <template #cards>
+                <ListCard v-for="user in userList" :key="user.id">
+                    <div class="flex items-start justify-between gap-2">
+                        <p class="font-medium text-gray-800 dark:text-gray-200">
+                            {{ user.name }}
+                            <span v-if="user.id === currentUserId" class="text-xs text-indigo-400 ml-1">(вы)</span>
+                        </p>
+                        <span class="text-xs rounded-full px-2 py-0.5 font-medium shrink-0"
+                            :class="roleBadgeClass(user.role)">
+                            {{ roleLabel(user.role) }}
+                        </span>
+                    </div>
+                    <p class="mt-1 text-sm text-gray-600 dark:text-gray-400 truncate">{{ user.email }}</p>
+                    <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">Добавлен: {{ fmtDate(user.created_at) }}</p>
+
+                    <div class="mt-3 flex gap-2">
+                        <button class="btn-secondary btn-xs flex-1 justify-center touch-target" @click="openEditModal(user)">
+                            Изменить
+                        </button>
+                        <button
+                            class="btn-secondary btn-xs flex-1 justify-center touch-target text-red-500"
+                            :disabled="user.id === currentUserId"
+                            :title="user.id === currentUserId ? 'Нельзя удалить самого себя' : ''"
+                            @click="confirmDelete(user)"
+                        >
+                            Удалить
+                        </button>
+                    </div>
+                </ListCard>
+            </template>
+        </ResponsiveList>
 
         <!-- ── Create modal ── -->
         <div v-if="createModal" class="modal-backdrop" @click.self="createModal = false">
@@ -85,9 +122,9 @@
                     </div>
                     <p v-if="formError" class="text-xs text-red-600">{{ formError }}</p>
                 </div>
-                <div class="flex justify-end gap-3 mt-5">
-                    <button class="btn-secondary" @click="createModal = false">Отмена</button>
-                    <button class="btn-primary" :disabled="saving" @click="createUser">
+                <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3 mt-5">
+                    <button class="btn-secondary justify-center" @click="createModal = false">Отмена</button>
+                    <button class="btn-primary justify-center" :disabled="saving" @click="createUser">
                         {{ saving ? 'Создаю…' : 'Создать' }}
                     </button>
                 </div>
@@ -120,9 +157,9 @@
                     </div>
                     <p v-if="formError" class="text-xs text-red-600">{{ formError }}</p>
                 </div>
-                <div class="flex justify-end gap-3 mt-5">
-                    <button class="btn-secondary" @click="editModal = false">Отмена</button>
-                    <button class="btn-primary" :disabled="saving" @click="saveEdit">
+                <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3 mt-5">
+                    <button class="btn-secondary justify-center" @click="editModal = false">Отмена</button>
+                    <button class="btn-primary justify-center" :disabled="saving" @click="saveEdit">
                         {{ saving ? 'Сохраняю…' : 'Сохранить' }}
                     </button>
                 </div>
@@ -135,6 +172,9 @@
 import { ref } from 'vue'
 import { usePage } from '@inertiajs/inertia-vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import PageHeader from '@/Components/PageHeader.vue'
+import ResponsiveList from '@/Components/ResponsiveList.vue'
+import ListCard from '@/Components/ListCard.vue'
 import { useSubscription } from '@/composables/useSubscription'
 import { apiFetch } from '@/utils/api'
 

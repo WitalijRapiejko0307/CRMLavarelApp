@@ -1,15 +1,19 @@
 <template>
     <AppLayout>
         <template #header>
-            <div class="flex items-center justify-between">
-                <h1 class="page-title">Белпочта — Партии</h1>
-                <span class="text-sm text-muted">
-                    Заявок «Отправить»: <strong>{{ eligibleOrders.length }}</strong>
-                </span>
-            </div>
+            <PageHeader>
+                <template #title>
+                    <h1 class="page-title">Белпочта — Партии</h1>
+                </template>
+                <template #actions>
+                    <span class="text-sm text-muted whitespace-nowrap">
+                        Заявок «Отправить»: <strong>{{ eligibleOrders.length }}</strong>
+                    </span>
+                </template>
+            </PageHeader>
         </template>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
             <!-- ── Left column: create batch + history ── -->
             <div class="space-y-6">
@@ -139,7 +143,7 @@
                             Нет заявок со статусом «Отправить» и доставкой «Белпочта»
                         </div>
 
-                        <div v-else class="overflow-x-auto">
+                        <div v-else class="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
                             <table class="w-full text-sm">
                                 <thead>
                                     <tr class="border-b border-gray-200 dark:border-gray-700 text-left">
@@ -218,7 +222,7 @@
                             В этой партии пока нет оформленных бланков
                         </div>
 
-                        <div v-else class="overflow-x-auto">
+                        <div v-else class="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
                             <table class="w-full text-sm">
                                 <thead>
                                     <tr class="border-b border-gray-200 dark:border-gray-700 text-left">
@@ -384,6 +388,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import PageHeader from '@/Components/PageHeader.vue'
 import AddressSearchModal from '@/Components/AddressSearchModal.vue'
 import { useSubscription } from '@/composables/useSubscription'
 import { Inertia } from '@inertiajs/inertia'

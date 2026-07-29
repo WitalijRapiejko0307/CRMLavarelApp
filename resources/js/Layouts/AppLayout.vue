@@ -3,12 +3,47 @@
         <!-- Navigation -->
         <nav class="bg-indigo-700 dark:bg-indigo-950 text-white shadow-md dark:border-b dark:border-indigo-900">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div class="flex items-center justify-between h-14">
-                    <!-- Logo + links -->
-                    <div class="flex items-center gap-5">
-                        <Link href="/orders" class="text-lg font-bold tracking-tight hover:text-indigo-200 transition-colors">
+                <div class="flex items-center justify-between h-14 gap-3">
+                    <!-- Mobile: burger + logo -->
+                    <div class="flex items-center gap-3 min-w-0">
+                        <MobileNav :title="shopName" :links="mobileLinks">
+                            <template #actions>
+                                <div class="px-4 py-2 text-sm text-indigo-200 truncate">
+                                    {{ $page.props.auth.user?.name }}
+                                </div>
+                                <Link
+                                    href="/settings"
+                                    class="touch-target flex items-center gap-2 px-4 text-base font-medium transition-colors"
+                                    :class="isActive('/settings') ? 'text-white bg-white/10' : 'text-indigo-200 hover:text-white hover:bg-white/5'"
+                                >
+                                    <span aria-hidden="true">⚙</span> Настройки
+                                </Link>
+                                <Link
+                                    v-if="isAdmin"
+                                    href="/users"
+                                    class="touch-target flex items-center gap-2 px-4 text-base font-medium transition-colors"
+                                    :class="isActive('/users') ? 'text-white bg-white/10' : 'text-indigo-200 hover:text-white hover:bg-white/5'"
+                                >
+                                    <span aria-hidden="true">👥</span> Пользователи
+                                </Link>
+                                <form @submit.prevent="logout">
+                                    <button
+                                        type="submit"
+                                        class="touch-target w-full flex items-center gap-2 px-4 text-base font-medium text-indigo-200 hover:text-white hover:bg-white/5 transition-colors"
+                                    >
+                                        Выйти
+                                    </button>
+                                </form>
+                            </template>
+                        </MobileNav>
+
+                        <Link href="/orders" class="text-lg font-bold tracking-tight hover:text-indigo-200 transition-colors truncate">
                             {{ shopName }}
                         </Link>
+                    </div>
+
+                    <!-- Desktop links -->
+                    <div class="hidden md:flex items-center gap-5">
                         <Link
                             href="/orders"
                             :class="navLinkClass('/orders')"
@@ -42,8 +77,8 @@
                         </Link>
                     </div>
 
-                    <!-- User menu -->
-                    <div class="flex items-center gap-4 text-sm">
+                    <!-- Desktop user menu -->
+                    <div class="hidden md:flex items-center gap-4 text-sm">
                         <span class="text-indigo-300 hidden sm:inline">{{ $page.props.auth.user?.name }}</span>
 
                         <!-- Settings -->
@@ -140,6 +175,7 @@ import { Link, usePage } from '@inertiajs/inertia-vue3'
 import { Inertia } from '@inertiajs/inertia'
 import { apiFetch } from '@/utils/api'
 import TrialBanner from '@/Components/TrialBanner.vue'
+import MobileNav from '@/Components/MobileNav.vue'
 
 const page = usePage()
 
@@ -152,6 +188,19 @@ const shopName          = computed(() => page.props.value.shop_name || 'BaseCRM'
 const currentRole       = computed(() => page.props.value.auth?.user?.role ?? '')
 const isAdmin           = computed(() => currentRole.value === 'admin')
 const canViewFinances   = computed(() => ['admin', 'manager'].includes(currentRole.value))
+
+const mobileLinks = computed(() => {
+    const links = [
+        { href: '/orders',     label: 'Заказы',    active: isActive('/orders') },
+        { href: '/belpost',    label: 'Белпочта',  active: isActive('/belpost') },
+        { href: '/europochta', label: 'Европочта', active: isActive('/europochta') },
+        { href: '/products',   label: 'Склад',     active: isActive('/products') },
+    ]
+    if (canViewFinances.value) {
+        links.push({ href: '/finances', label: 'Финансы', active: isActive('/finances') })
+    }
+    return links
+})
 
 const trackingNoticeDismissed = ref(false)
 const trackingNotice = computed(() => page.props.value.tracking_auto_notice)

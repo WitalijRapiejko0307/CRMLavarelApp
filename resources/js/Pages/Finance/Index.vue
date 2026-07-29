@@ -1,20 +1,21 @@
 <template>
     <AppLayout>
         <template #header>
-            <div class="flex items-center justify-between flex-wrap gap-3">
-                <h1 class="page-title">Финансы</h1>
-
-                <div class="flex items-center gap-2">
-                    <button class="btn-secondary btn-sm" @click="prevMonth">&#8249;</button>
+            <PageHeader>
+                <template #title>
+                    <h1 class="page-title">Финансы</h1>
+                </template>
+                <template #actions>
+                    <button class="btn-secondary btn-sm touch-target" @click="prevMonth">&#8249;</button>
                     <input
                         type="month"
                         v-model="currentMonth"
                         class="input py-1.5"
                         @change="loadMonth"
                     />
-                    <button class="btn-secondary btn-sm" @click="nextMonth">&#8250;</button>
-                </div>
-            </div>
+                    <button class="btn-secondary btn-sm touch-target" @click="nextMonth">&#8250;</button>
+                </template>
+            </PageHeader>
         </template>
 
         <!-- Summary cards -->
@@ -27,7 +28,7 @@
                 <p class="stat-label">Расходы</p>
                 <p class="text-2xl font-bold text-red-500 dark:text-red-400 mt-1">{{ fmt(totalExpenses) }}</p>
             </div>
-            <div class="card py-4 col-span-2">
+            <div class="card py-4 col-span-2 sm:col-span-1">
                 <p class="stat-label">Прибыль</p>
                 <p class="text-2xl font-bold mt-1" :class="profit >= 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-red-600 dark:text-red-400'">
                     {{ fmt(profit) }}
@@ -57,36 +58,60 @@
                 <div v-if="expenseList.length === 0" class="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">
                     Нет расходов за этот месяц
                 </div>
-                <div v-else class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr class="border-b border-gray-200 dark:border-gray-700 text-left">
-                                <th class="pb-2 font-medium text-muted">Дата</th>
-                                <th class="pb-2 font-medium text-muted">Категория</th>
-                                <th class="pb-2 font-medium text-muted">Описание</th>
-                                <th class="pb-2 font-medium text-muted text-right">Сумма</th>
-                                <th class="pb-2 w-8"></th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
-                            <tr v-for="exp in expenseList" :key="exp.id" class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                                <td class="py-2 text-muted whitespace-nowrap">{{ fmtDate(exp.date) }}</td>
-                                <td class="py-2">
-                                    <span class="text-xs bg-indigo-50 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-200 rounded px-1.5 py-0.5">{{ exp.category ?? '—' }}</span>
-                                </td>
-                                <td class="py-2 text-gray-600 dark:text-gray-400 max-w-[160px] truncate">{{ exp.description ?? '—' }}</td>
-                                <td class="py-2 text-right font-medium text-red-500 dark:text-red-400">{{ fmt(exp.amount) }}</td>
-                                <td class="py-2 text-right">
+                <ResponsiveList v-else>
+                    <template #table>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead>
+                                    <tr class="border-b border-gray-200 dark:border-gray-700 text-left">
+                                        <th class="pb-2 font-medium text-muted">Дата</th>
+                                        <th class="pb-2 font-medium text-muted">Категория</th>
+                                        <th class="pb-2 font-medium text-muted">Описание</th>
+                                        <th class="pb-2 font-medium text-muted text-right">Сумма</th>
+                                        <th class="pb-2 w-8"></th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                                    <tr v-for="exp in expenseList" :key="exp.id" class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                        <td class="py-2 text-muted whitespace-nowrap">{{ fmtDate(exp.date) }}</td>
+                                        <td class="py-2">
+                                            <span class="text-xs bg-indigo-50 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-200 rounded px-1.5 py-0.5">{{ exp.category ?? '—' }}</span>
+                                        </td>
+                                        <td class="py-2 text-gray-600 dark:text-gray-400 max-w-[160px] truncate">{{ exp.description ?? '—' }}</td>
+                                        <td class="py-2 text-right font-medium text-red-500 dark:text-red-400">{{ fmt(exp.amount) }}</td>
+                                        <td class="py-2 text-right">
+                                            <button
+                                                class="text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                                                title="Удалить"
+                                                @click="deleteExpense(exp)"
+                                            >✕</button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </template>
+
+                    <template #cards>
+                        <ListCard v-for="exp in expenseList" :key="exp.id">
+                            <div class="flex items-start justify-between gap-2">
+                                <span class="text-xs bg-indigo-50 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-200 rounded px-1.5 py-0.5">
+                                    {{ exp.category ?? '—' }}
+                                </span>
+                                <div class="flex items-center gap-2 shrink-0">
+                                    <span class="font-medium text-red-500 dark:text-red-400">{{ fmt(exp.amount) }}</span>
                                     <button
-                                        class="text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                                        class="touch-target text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 transition-colors"
                                         title="Удалить"
                                         @click="deleteExpense(exp)"
                                     >✕</button>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
+                                </div>
+                            </div>
+                            <p class="mt-1 text-sm text-gray-600 dark:text-gray-400 truncate">{{ exp.description ?? '—' }}</p>
+                            <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">{{ fmtDate(exp.date) }}</p>
+                        </ListCard>
+                    </template>
+                </ResponsiveList>
             </div>
 
             <!-- ── Income ── -->
@@ -99,37 +124,62 @@
                 <div v-if="incomeListData.length === 0" class="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">
                     Нет доходов за этот месяц
                 </div>
-                <div v-else class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr class="border-b border-gray-200 dark:border-gray-700 text-left">
-                                <th class="pb-2 font-medium text-muted">Дата</th>
-                                <th class="pb-2 font-medium text-muted">Источник</th>
-                                <th class="pb-2 font-medium text-muted">Описание</th>
-                                <th class="pb-2 font-medium text-muted text-right">Сумма</th>
-                                <th class="pb-2 w-8"></th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
-                            <tr v-for="inc in incomeListData" :key="inc.id" class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                                <td class="py-2 text-muted whitespace-nowrap">{{ fmtDate(inc.date) }}</td>
-                                <td class="py-2">
-                                    <span v-if="inc.source" class="text-xs bg-green-50 text-green-700 dark:bg-green-900/40 dark:text-green-200 rounded px-1.5 py-0.5">{{ inc.source }}</span>
-                                    <span v-else class="text-gray-400 dark:text-gray-500">—</span>
-                                </td>
-                                <td class="py-2 text-gray-600 dark:text-gray-400 max-w-[160px] truncate">{{ inc.description ?? '—' }}</td>
-                                <td class="py-2 text-right font-medium text-green-600 dark:text-green-400">{{ fmt(inc.amount) }}</td>
-                                <td class="py-2 text-right">
+                <ResponsiveList v-else>
+                    <template #table>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead>
+                                    <tr class="border-b border-gray-200 dark:border-gray-700 text-left">
+                                        <th class="pb-2 font-medium text-muted">Дата</th>
+                                        <th class="pb-2 font-medium text-muted">Источник</th>
+                                        <th class="pb-2 font-medium text-muted">Описание</th>
+                                        <th class="pb-2 font-medium text-muted text-right">Сумма</th>
+                                        <th class="pb-2 w-8"></th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                                    <tr v-for="inc in incomeListData" :key="inc.id" class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                        <td class="py-2 text-muted whitespace-nowrap">{{ fmtDate(inc.date) }}</td>
+                                        <td class="py-2">
+                                            <span v-if="inc.source" class="text-xs bg-green-50 text-green-700 dark:bg-green-900/40 dark:text-green-200 rounded px-1.5 py-0.5">{{ inc.source }}</span>
+                                            <span v-else class="text-gray-400 dark:text-gray-500">—</span>
+                                        </td>
+                                        <td class="py-2 text-gray-600 dark:text-gray-400 max-w-[160px] truncate">{{ inc.description ?? '—' }}</td>
+                                        <td class="py-2 text-right font-medium text-green-600 dark:text-green-400">{{ fmt(inc.amount) }}</td>
+                                        <td class="py-2 text-right">
+                                            <button
+                                                class="text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                                                title="Удалить"
+                                                @click="deleteIncome(inc)"
+                                            >✕</button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </template>
+
+                    <template #cards>
+                        <ListCard v-for="inc in incomeListData" :key="inc.id">
+                            <div class="flex items-start justify-between gap-2">
+                                <span v-if="inc.source" class="text-xs bg-green-50 text-green-700 dark:bg-green-900/40 dark:text-green-200 rounded px-1.5 py-0.5">
+                                    {{ inc.source }}
+                                </span>
+                                <span v-else class="text-xs text-gray-400 dark:text-gray-500">—</span>
+                                <div class="flex items-center gap-2 shrink-0">
+                                    <span class="font-medium text-green-600 dark:text-green-400">{{ fmt(inc.amount) }}</span>
                                     <button
-                                        class="text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                                        class="touch-target text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 transition-colors"
                                         title="Удалить"
                                         @click="deleteIncome(inc)"
                                     >✕</button>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
+                                </div>
+                            </div>
+                            <p class="mt-1 text-sm text-gray-600 dark:text-gray-400 truncate">{{ inc.description ?? '—' }}</p>
+                            <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">{{ fmtDate(inc.date) }}</p>
+                        </ListCard>
+                    </template>
+                </ResponsiveList>
             </div>
         </div>
 
@@ -160,9 +210,9 @@
                     </div>
                     <p v-if="formError" class="text-xs text-red-600">{{ formError }}</p>
                 </div>
-                <div class="flex justify-end gap-3 mt-5">
-                    <button class="btn-secondary" @click="expenseModal = false">Отмена</button>
-                    <button class="btn-primary" :disabled="saving" @click="saveExpense">
+                <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3 mt-5">
+                    <button class="btn-secondary justify-center" @click="expenseModal = false">Отмена</button>
+                    <button class="btn-primary justify-center" :disabled="saving" @click="saveExpense">
                         {{ saving ? 'Сохраняю…' : 'Добавить' }}
                     </button>
                 </div>
@@ -194,9 +244,9 @@
                     </div>
                     <p v-if="formError" class="text-xs text-red-600">{{ formError }}</p>
                 </div>
-                <div class="flex justify-end gap-3 mt-5">
-                    <button class="btn-secondary" @click="incomeModal = false">Отмена</button>
-                    <button class="btn-primary" :disabled="saving" @click="saveIncome">
+                <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3 mt-5">
+                    <button class="btn-secondary justify-center" @click="incomeModal = false">Отмена</button>
+                    <button class="btn-primary justify-center" :disabled="saving" @click="saveIncome">
                         {{ saving ? 'Сохраняю…' : 'Добавить' }}
                     </button>
                 </div>
@@ -209,6 +259,9 @@
 import { ref, computed } from 'vue'
 import { Inertia } from '@inertiajs/inertia'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import PageHeader from '@/Components/PageHeader.vue'
+import ResponsiveList from '@/Components/ResponsiveList.vue'
+import ListCard from '@/Components/ListCard.vue'
 import { useSubscription } from '@/composables/useSubscription'
 import { apiFetch } from '@/utils/api'
 

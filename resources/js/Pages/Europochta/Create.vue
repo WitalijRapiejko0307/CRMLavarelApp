@@ -1,15 +1,14 @@
 <template>
     <AppLayout>
         <template #header>
-            <div class="flex items-center justify-between flex-wrap gap-3">
-                <div>
+            <PageHeader>
+                <template #title>
                     <h1 class="page-title">Европочта — Оформление бланков</h1>
                     <p class="text-sm text-muted mt-0.5">
                         Заявок «Отправить»: <strong>{{ orderQueue.length }}</strong>
                     </p>
-                </div>
-
-                <div class="flex items-center gap-3">
+                </template>
+                <template #actions>
                     <div class="flex items-center gap-2">
                         <label class="label whitespace-nowrap">Кто платит:</label>
                         <select v-model="whoPays" class="text-sm border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-300">
@@ -26,8 +25,8 @@
                             ? `Обрабатываю ${processingIndex + 1}/${pendingQueue.length}…`
                             : 'Оформить все бланки' }}
                     </button>
-                </div>
-            </div>
+                </template>
+            </PageHeader>
         </template>
 
         <!-- Empty state -->
@@ -41,7 +40,7 @@
 
         <!-- Orders table -->
         <div v-else class="card">
-            <div class="overflow-x-auto">
+            <div class="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
                 <table class="w-full text-sm">
                     <thead>
                         <tr class="border-b border-gray-200 dark:border-gray-700 text-left">
@@ -126,6 +125,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import PageHeader from '@/Components/PageHeader.vue'
 import { useSubscription } from '@/composables/useSubscription'
 import { apiFetch } from '@/utils/api'
 

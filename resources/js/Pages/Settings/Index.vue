@@ -1,7 +1,11 @@
 <template>
     <AppLayout>
         <template #header>
-            <h1 class="page-title">Настройки</h1>
+            <PageHeader>
+                <template #title>
+                    <h1 class="page-title">Настройки</h1>
+                </template>
+            </PageHeader>
         </template>
 
         <div class="max-w-3xl mx-auto space-y-6">
@@ -13,13 +17,13 @@
                 </h2>
                 <div>
                     <p class="label mb-2">Тема</p>
-                    <div class="theme-segment">
+                    <div class="theme-segment flex-wrap w-full sm:w-auto sm:flex-nowrap">
                         <button
                             v-for="option in themeOptions"
                             :key="option.value"
                             type="button"
                             :class="[
-                                'theme-segment-btn',
+                                'theme-segment-btn flex-1 sm:flex-initial text-center touch-target',
                                 preference === option.value && 'theme-segment-btn-active',
                             ]"
                             :disabled="savingTheme"
@@ -100,7 +104,7 @@
                                 />
 
                                 <!-- text / password -->
-                                <div v-else class="flex gap-2 mt-1">
+                                <div v-else class="flex flex-col sm:flex-row gap-2 mt-1">
                                     <div class="relative flex-1">
                                         <input
                                             :type="visibleKeys[key] ? 'text' : meta[1]"
@@ -125,7 +129,7 @@
                                     <button
                                         v-if="key === 'webhook_secret' && canEditSettings"
                                         type="button"
-                                        class="btn-secondary text-sm whitespace-nowrap"
+                                        class="btn-secondary text-sm whitespace-nowrap justify-center sm:w-auto"
                                         :disabled="generating || readOnly"
                                         @click="generateSecret"
                                     >
@@ -168,6 +172,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { Inertia } from '@inertiajs/inertia'
 import { usePage } from '@inertiajs/inertia-vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import PageHeader from '@/Components/PageHeader.vue'
 import { useTheme } from '@/composables/useTheme'
 import { useSubscription } from '@/composables/useSubscription'
 import { apiFetch } from '@/utils/api'
