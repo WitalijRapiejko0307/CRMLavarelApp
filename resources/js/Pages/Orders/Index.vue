@@ -6,10 +6,14 @@
                     <h1 class="page-title">Заказы</h1>
                 </template>
                 <template #actions>
-                    <span v-if="trackingLabel" class="text-sm whitespace-nowrap" :class="trackingLabelClass">
+                    <span v-if="feedUpdated" class="text-xs text-green-600 dark:text-green-400 whitespace-nowrap">
+                        Обновлено
+                    </span>
+                    <span v-if="!isCallCenter && trackingLabel" class="text-sm whitespace-nowrap" :class="trackingLabelClass">
                         {{ trackingLabel }}
                     </span>
                     <button
+                        v-if="!isCallCenter"
                         type="button"
                         class="btn-secondary text-sm"
                         :class="{ 'text-red-500': isManualRunning && !cancellingTracking }"
@@ -19,10 +23,10 @@
                         {{ trackingButtonLabel }}
                     </button>
                     <span class="text-sm text-muted whitespace-nowrap">Всего: {{ orders.total }}</span>
-                    <Link v-if="!readOnly" href="/orders/import" class="btn-secondary text-sm">
+                    <Link v-if="!readOnly && !isCallCenter" href="/orders/import" class="btn-secondary text-sm">
                         Импорт CSV
                     </Link>
-                    <Link v-if="!readOnly" href="/orders/create" class="btn-primary text-sm">
+                    <Link v-if="!readOnly && !isCallCenter" href="/orders/create" class="btn-primary text-sm">
                         + Новый заказ
                     </Link>
                 </template>
@@ -32,6 +36,16 @@
         <!-- Filters -->
         <div class="card mb-4">
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div v-if="isCallCenter && connectedStores.length">
+                    <label class="label mb-1">Магазин</label>
+                    <AppScrollSelect
+                        v-model="filters.store_id"
+                        :options="storeFilterOptions"
+                        placeholder="Все магазины"
+                        :empty-option="{ value: '', label: 'Все магазины' }"
+                        @change="applyFilters"
+                    />
+                </div>
                 <div>
                     <label class="label mb-1">Поиск</label>
                     <input
@@ -235,6 +249,7 @@ import DateInput from '@/Components/DateInput.vue'
 import OrderStatusSelect from '@/Components/OrderStatusSelect.vue'
 import DeleteOrderModal from '@/Components/DeleteOrderModal.vue'
 import { useSubscription } from '@/composables/useSubscription'
+import { useOrderFeed } from '@/composables/useOrderFeed'
 import { apiFetch } from '@/utils/api'
 import { formatDateDMY, isValidDateDMY, parseDateDMY } from '@/utils/date'
 import {
@@ -245,14 +260,18 @@ import {
 } from '@tanstack/vue-table'
 
 const props = defineProps({
-    orders:        Object,
-    filters:       Object,
-    statuses:      Array,
-    deliveryTypes: Object,
+    orders:          Object,
+    filters:         Object,
+    statuses:        Array,
+    deliveryTypes:   Object,
+    isCallCenter:    { type: Boolean, default: false },
+    connectedStores: { type: Array, default: () => [] },
 })
 
 const { readOnly } = useSubscription()
 const page = usePage()
+
+const { feedUpdated } = useOrderFeed()
 
 const isAdmin = computed(() => page.props.value.auth?.user?.role === 'admin')
 const blockedStatuses = computed(() => page.props.value.order_delete?.blocked_statuses ?? [])
@@ -430,6 +449,7 @@ async function startRefreshTracking() {
 }
 
 onMounted(() => {
+    if (props.isCallCenter) return
     pollTrackingStatus().then(() => {
         if (trackingStatus.value.status === 'running') {
             startPolling()
@@ -449,7 +469,12 @@ const filters = ref({
     status:    props.filters?.status    ?? '',
     date_from: toDisplayDate(props.filters?.date_from),
     date_to:   toDisplayDate(props.filters?.date_to),
+    store_id:  props.filters?.store_id  ?? '',
 })
+
+const storeFilterOptions = computed(() =>
+    props.connectedStores.map(s => ({ value: String(s.id), label: s.name }))
+)
 
 const hasActiveFilters = computed(() =>
     Object.values(filters.value).some(v => v !== '')
@@ -462,6 +487,9 @@ function buildFilterQuery() {
         status: filters.value.status,
         date_from: isValidDateDMY(filters.value.date_from) ? parseDateDMY(filters.value.date_from) : '',
         date_to:   isValidDateDMY(filters.value.date_to)   ? parseDateDMY(filters.value.date_to)   : '',
+    }
+    if (props.isCallCenter && filters.value.store_id) {
+        query.store_id = filters.value.store_id
     }
     return query
 }
@@ -477,7 +505,7 @@ function applyFilters() {
 }
 
 function resetFilters() {
-    filters.value = { search: '', status: '', date_from: '', date_to: '' }
+    filters.value = { search: '', status: '', date_from: '', date_to: '', store_id: '' }
     applyFilters()
 }
 
@@ -509,76 +537,97 @@ function formatGoods(goods, quantities) {
 // --- TanStack Table ---
 const columnHelper = createColumnHelper()
 
-const columns = [
-    columnHelper.accessor('id', {
-        header: '#',
-        cell:   info => h('span', { class: 'text-gray-400 dark:text-gray-500 font-mono text-xs' }, '#' + info.getValue()),
-    }),
-    columnHelper.accessor('created_at', {
-        header: 'Дата',
-        cell:   info => h('span', { class: 'whitespace-nowrap text-gray-600 dark:text-gray-400' }, formatDate(info.getValue())),
-    }),
-    columnHelper.accessor('full_name', {
-        header: 'ФИО',
-        cell:   info => h('span', { class: 'font-medium text-gray-900 dark:text-gray-100' }, info.getValue()),
-    }),
-    columnHelper.accessor('status', {
-        header: 'Статус',
-        cell:   info => {
-            const row = info.row.original
-            return h(OrderStatusSelect, {
-                orderId:  row.id,
-                status:   row.status,
-                statuses: props.statuses,
-                disabled: readOnly.value,
-            })
-        },
-    }),
-    columnHelper.display({
-        id: 'goods',
-        header: 'Товары',
-        cell: info => {
-            const row = info.row.original
-            return h('span', { class: 'text-gray-700 dark:text-gray-300 truncate max-w-xs block' },
-                formatGoods(row.goods, row.quantities)
-            )
-        },
-    }),
-    columnHelper.accessor('phone', {
-        header: 'Телефон',
-        cell:   info => h('span', { class: 'text-gray-600 dark:text-gray-400 whitespace-nowrap' }, info.getValue() ?? '—'),
-    }),
-    columnHelper.accessor('city', {
-        header: 'Город',
-        cell:   info => h('span', { class: 'text-gray-600 dark:text-gray-400' }, info.getValue() ?? '—'),
-    }),
-    columnHelper.accessor('track_number', {
-        header: 'Трек',
-        cell:   info => h('span', {
-            class: info.getValue() ? 'text-indigo-600 dark:text-indigo-400 font-mono text-xs' : 'text-gray-400 dark:text-gray-500',
-        }, info.getValue() ?? '—'),
-    }),
-    columnHelper.accessor('delivery_type', {
-        header: 'Доставка',
-        cell:   info => h('span', { class: 'text-gray-600 dark:text-gray-400 text-xs' },
-            props.deliveryTypes[info.getValue()] ?? '—'
-        ),
-    }),
-    columnHelper.display({
-        id: 'batch',
-        header: 'Партия',
-        cell: info => {
-            const row = info.row.original
-            const batch = row.mail_batch
-            if (!batch?.batch_id) return h('span', { class: 'text-gray-400 dark:text-gray-500' }, '—')
-            return h(Link, {
-                href: `/belpost?batch=${batch.id}`,
-                class: 'text-indigo-600 dark:text-indigo-400 font-mono text-xs hover:underline',
-                onClick: (e) => e.stopPropagation(),
-            }, () => batch.batch_id)
-        },
-    }),
-    columnHelper.display({
+const columns = computed(() => {
+    const cols = [
+        columnHelper.accessor('id', {
+            header: '#',
+            cell:   info => h('span', { class: 'text-gray-400 dark:text-gray-500 font-mono text-xs' }, '#' + info.getValue()),
+        }),
+    ]
+
+    if (props.isCallCenter) {
+        cols.push(columnHelper.display({
+            id: 'store',
+            header: 'Магазин',
+            cell: info => h('span', { class: 'text-gray-600 dark:text-gray-400 text-xs' },
+                info.row.original.tenant?.name ?? '—'
+            ),
+        }))
+    }
+
+    cols.push(
+        columnHelper.accessor('created_at', {
+            header: 'Дата',
+            cell:   info => h('span', { class: 'whitespace-nowrap text-gray-600 dark:text-gray-400' }, formatDate(info.getValue())),
+        }),
+        columnHelper.accessor('full_name', {
+            header: 'ФИО',
+            cell:   info => h('span', { class: 'font-medium text-gray-900 dark:text-gray-100' }, info.getValue()),
+        }),
+        columnHelper.accessor('status', {
+            header: 'Статус',
+            cell:   info => {
+                const row = info.row.original
+                return h(OrderStatusSelect, {
+                    orderId:  row.id,
+                    status:   row.status,
+                    statuses: props.statuses,
+                    disabled: readOnly.value,
+                })
+            },
+        }),
+        columnHelper.display({
+            id: 'goods',
+            header: 'Товары',
+            cell: info => {
+                const row = info.row.original
+                return h('span', { class: 'text-gray-700 dark:text-gray-300 truncate max-w-xs block' },
+                    formatGoods(row.goods, row.quantities)
+                )
+            },
+        }),
+        columnHelper.accessor('phone', {
+            header: 'Телефон',
+            cell:   info => h('span', { class: 'text-gray-600 dark:text-gray-400 whitespace-nowrap' }, info.getValue() ?? '—'),
+        }),
+        columnHelper.accessor('city', {
+            header: 'Город',
+            cell:   info => h('span', { class: 'text-gray-600 dark:text-gray-400' }, info.getValue() ?? '—'),
+        }),
+    )
+
+    if (!props.isCallCenter) {
+        cols.push(
+            columnHelper.accessor('track_number', {
+                header: 'Трек',
+                cell:   info => h('span', {
+                    class: info.getValue() ? 'text-indigo-600 dark:text-indigo-400 font-mono text-xs' : 'text-gray-400 dark:text-gray-500',
+                }, info.getValue() ?? '—'),
+            }),
+            columnHelper.accessor('delivery_type', {
+                header: 'Доставка',
+                cell:   info => h('span', { class: 'text-gray-600 dark:text-gray-400 text-xs' },
+                    props.deliveryTypes[info.getValue()] ?? '—'
+                ),
+            }),
+            columnHelper.display({
+                id: 'batch',
+                header: 'Партия',
+                cell: info => {
+                    const row = info.row.original
+                    const batch = row.mail_batch
+                    if (!batch?.batch_id) return h('span', { class: 'text-gray-400 dark:text-gray-500' }, '—')
+                    return h(Link, {
+                        href: `/belpost?batch=${batch.id}`,
+                        class: 'text-indigo-600 dark:text-indigo-400 font-mono text-xs hover:underline',
+                        onClick: (e) => e.stopPropagation(),
+                    }, () => batch.batch_id)
+                },
+            }),
+        )
+    }
+
+    cols.push(columnHelper.display({
         id: 'actions',
         header: '',
         cell: info => {
@@ -609,12 +658,14 @@ const columns = [
                 ]),
             ])
         },
-    }),
-]
+    }))
+
+    return cols
+})
 
 const table = useVueTable({
     get data() { return props.orders.data },
-    columns,
+    get columns() { return columns.value },
     getCoreRowModel: getCoreRowModel(),
     manualPagination: true,
     pageCount: props.orders.last_page ?? 1,

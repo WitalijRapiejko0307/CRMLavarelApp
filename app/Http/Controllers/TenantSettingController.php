@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\TenantSetting;
+use App\Services\ConnectionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -12,8 +13,9 @@ use Inertia\Response;
 
 class TenantSettingController extends Controller
 {
-    public function __construct()
-    {
+    public function __construct(
+        protected ConnectionService $connectionService
+    ) {
         $this->middleware(['auth', 'tenant', 'tenant.writable']);
     }
 
@@ -92,26 +94,48 @@ class TenantSettingController extends Controller
     /** Flat list of all known setting keys. */
     protected static function allKeys(): array
     {
+        return static::keysFromSchema(static::schema());
+    }
+
+    protected static function keysForTenant($tenant): array
+    {
+        return static::keysFromSchema(static::schemaForTenant($tenant));
+    }
+
+    protected static function keysFromSchema(array $schema): array
+    {
         $keys = [];
-        foreach (static::schema() as $group) {
+        foreach ($schema as $group) {
             foreach ($group['keys'] as $key => $meta) {
                 $keys[] = $key;
             }
         }
+
         return $keys;
     }
 
     /** Flat list of keys whose type is 'toggle' (must always be persisted). */
     protected static function toggleKeys(): array
     {
+        return static::toggleKeysFromSchema(static::schema());
+    }
+
+    protected static function toggleKeysForTenant($tenant): array
+    {
+        return static::toggleKeysFromSchema(static::schemaForTenant($tenant));
+    }
+
+    protected static function toggleKeysFromSchema(array $schema): array
+    {
         $keys = [];
-        foreach (static::schema() as $group) {
+        foreach ($schema as $group) {
             foreach ($group['keys'] as $key => $meta) {
                 if (($meta[1] ?? '') === 'toggle') {
                     $keys[] = $key;
                 }
             }
         }
+
         return $keys;
     }
 
@@ -124,6 +148,7 @@ class TenantSettingController extends Controller
     {
         $canView = Gate::check('view-settings');
         $canEdit = Gate::check('manage-settings');
+        $tenant  = Auth::user()->tenant;
         $tenantId  = Auth::user()->tenant_id;
 
         $stored = $canView
@@ -134,16 +159,21 @@ class TenantSettingController extends Controller
             : [];
 
         [$current, $secretPreviews] = $canView
-            ? static::buildCurrentForUi($stored)
+            ? static::buildCurrentForUi($stored, $tenant)
             : [[], []];
 
+        $connectionData = $canView
+            ? $this->connectionService->connectionsForSettings($tenant)
+            : [];
+
         return Inertia::render('Settings/Index', [
-            'schema'           => $canView ? static::schema() : [],
+            'schema'           => $canView ? static::schemaForTenant($tenant) : [],
             'current'          => $current,
             'secretPreviews'   => $secretPreviews,
             'canViewSettings'  => $canView,
             'canEditSettings'  => $canEdit,
             'theme'            => Auth::user()->theme ?? 'system',
+            'connectionData'   => $connectionData,
         ]);
     }
 
@@ -161,18 +191,29 @@ class TenantSettingController extends Controller
         return $prefix . '••••••••';
     }
 
+    protected static function schemaForTenant($tenant): array
+    {
+        $schema = static::schema();
+
+        if ($tenant->isCallCenter()) {
+            return array_intersect_key($schema, array_flip(['shop']));
+        }
+
+        return $schema;
+    }
+
     /**
      * Split stored settings into non-secret current values and masked secret previews.
      *
      * @param  array<string, string>  $stored
      * @return array{0: array<string, string>, 1: array<string, string>}
      */
-    protected static function buildCurrentForUi(array $stored): array
+    protected static function buildCurrentForUi(array $stored, $tenant): array
     {
         $current         = [];
         $secretPreviews  = [];
 
-        foreach (static::schema() as $group) {
+        foreach (static::schemaForTenant($tenant) as $group) {
             foreach ($group['keys'] as $key => $meta) {
                 $type  = $meta[1] ?? 'text';
                 $value = isset($stored[$key]) ? (string) $stored[$key] : '';
@@ -212,9 +253,10 @@ class TenantSettingController extends Controller
         ]);
 
         $tenantId = Auth::user()->tenant_id;
+        $tenant   = Auth::user()->tenant;
         $input    = $request->input('settings', []);
-        $allowed  = static::allKeys();
-        $toggles  = static::toggleKeys();
+        $allowed  = static::keysForTenant($tenant);
+        $toggles  = static::toggleKeysForTenant($tenant);
 
         foreach ($allowed as $key) {
             $value = isset($input[$key]) ? trim((string)$input[$key]) : '';

@@ -39,6 +39,7 @@ class HandleInertiaRequests extends Middleware
             'shop_name' => fn () => auth()->check() && auth()->user()->isTenantUser()
                 ? TenantSetting::get('shop_name', 'BaseCRM') ?: 'BaseCRM'
                 : 'BaseCRM',
+            'tenant' => fn () => $this->shareTenant($user),
             'tracking_auto_notice' => fn () => auth()->check() && auth()->user()->isTenantUser()
                 ? app(TrackingRunService::class)->buildAutoNoticeForUser(auth()->user())
                 : null,
@@ -65,6 +66,25 @@ class HandleInertiaRequests extends Middleware
             'readOnly'      => $tenant->isReadOnly(),
             'trialDaysLeft' => $tenant->trialDaysLeft(),
             'trialEndsAt'   => $tenant->trial_ends_at?->toIso8601String(),
+        ];
+    }
+
+    protected function shareTenant($user): ?array
+    {
+        if (!$user || !$user->isTenantUser()) {
+            return null;
+        }
+
+        $tenant = $user->tenant;
+
+        if (!$tenant) {
+            return null;
+        }
+
+        return [
+            'id'   => $tenant->id,
+            'type' => $tenant->type ?? \App\Models\Tenant::TYPE_STORE,
+            'name' => $tenant->name,
         ];
     }
 }

@@ -25,9 +25,10 @@ class OrderObserver
 
         // Record history entry
         OrderStatusHistory::create([
-            'order_id'   => $order->id,
+            'order_id'    => $order->id,
             'from_status' => $fromStatus,
             'to_status'   => $toStatus,
+            'user_id'     => auth()->id(),
             'created_at'  => Carbon::now(),
         ]);
 

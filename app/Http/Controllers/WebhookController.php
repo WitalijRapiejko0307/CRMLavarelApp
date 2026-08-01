@@ -6,6 +6,7 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Models\TenantSetting;
 use App\Services\BlacklistService;
+use App\Services\OrderAssignmentService;
 use App\Services\SalesRenderService;
 use App\Support\PhoneNormalizer;
 use Illuminate\Http\JsonResponse;
@@ -14,6 +15,10 @@ use Illuminate\Support\Facades\Log;
 
 class WebhookController extends Controller
 {
+    public function __construct(
+        protected OrderAssignmentService $orderAssignment
+    ) {}
+
     /**
      * POST /api/webhook/lead
      *
@@ -101,7 +106,10 @@ class WebhookController extends Controller
 
         Log::info('Webhook: order created', ['order_id' => $order->id, 'tenant_id' => $tenantId]);
 
+        $this->orderAssignment->assignCallCenter($order);
+
         // ── 3. Optional: push to SalesRender ─────────────────────────────────
+        $hasInternalCc = $this->orderAssignment->storeHasInternalCallCenter($tenantId);
         $srEnabled = TenantSetting::get('sr_enabled', '') === '1';
         $apiToken  = TenantSetting::get('api_token_call_centr', '');
         $companyId = TenantSetting::get('company_id_in_call_centre', '');
@@ -116,7 +124,7 @@ class WebhookController extends Controller
             : null;
         $srItemId = $product?->sr_item_id;
 
-        if ($srEnabled && $apiToken && $companyId && $srItemId && $tenant && !$tenant->isReadOnly()) {
+        if (!$hasInternalCc && $srEnabled && $apiToken && $companyId && $srItemId && $tenant && !$tenant->isReadOnly()) {
             $srService = new SalesRenderService($apiToken, $companyId, $projectId);
             $srOrderId = $srService->sendOrder($order, $srItemId);
 

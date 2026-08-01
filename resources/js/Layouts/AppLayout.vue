@@ -51,12 +51,14 @@
                             Заказы
                         </Link>
                         <Link
+                            v-if="isStore"
                             href="/belpost"
                             :class="navLinkClass('/belpost')"
                         >
                             Белпочта
                         </Link>
                         <Link
+                            v-if="isStore"
                             href="/europochta"
                             :class="navLinkClass('/europochta')"
                         >
@@ -114,7 +116,7 @@
 
         <!-- Auto tracking notice -->
         <div
-            v-if="showTrackingNotice"
+            v-if="showTrackingNotice && isStore"
             class="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 mt-4"
         >
             <div class="bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 text-indigo-900 dark:text-indigo-100 rounded-md px-4 py-3 text-sm flex items-start justify-between gap-3">
@@ -185,17 +187,24 @@ const flash = computed(() => ({
 }))
 
 const shopName          = computed(() => page.props.value.shop_name || 'BaseCRM')
+const tenantType        = computed(() => page.props.value.tenant?.type ?? 'store')
+const isCallCenter      = computed(() => tenantType.value === 'call_center')
+const isStore           = computed(() => !isCallCenter.value)
 const currentRole       = computed(() => page.props.value.auth?.user?.role ?? '')
 const isAdmin           = computed(() => currentRole.value === 'admin')
-const canViewFinances   = computed(() => ['admin', 'manager'].includes(currentRole.value))
+const canViewFinances   = computed(() => isStore.value && ['admin', 'manager'].includes(currentRole.value))
 
 const mobileLinks = computed(() => {
     const links = [
-        { href: '/orders',     label: 'Заказы',    active: isActive('/orders') },
-        { href: '/belpost',    label: 'Белпочта',  active: isActive('/belpost') },
-        { href: '/europochta', label: 'Европочта', active: isActive('/europochta') },
-        { href: '/products',   label: 'Склад',     active: isActive('/products') },
+        { href: '/orders', label: 'Заказы', active: isActive('/orders') },
     ]
+    if (isStore.value) {
+        links.push(
+            { href: '/belpost', label: 'Белпочта', active: isActive('/belpost') },
+            { href: '/europochta', label: 'Европочта', active: isActive('/europochta') },
+        )
+    }
+    links.push({ href: '/products', label: 'Склад', active: isActive('/products') })
     if (canViewFinances.value) {
         links.push({ href: '/finances', label: 'Финансы', active: isActive('/finances') })
     }

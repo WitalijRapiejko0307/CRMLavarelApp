@@ -9,12 +9,31 @@ use Illuminate\Support\Str;
 
 class TenantProvisioner
 {
+    public function __construct(
+        protected ConnectionService $connectionService
+    ) {}
+
     /**
      * Seed default tenant_settings for a new tenant.
      */
     public function provision(Tenant $tenant, string $shopName = 'BaseCRM'): void
     {
-        $settings = [
+        $settings = $tenant->isCallCenter()
+            ? $this->callCenterSettings($shopName)
+            : $this->storeSettings($shopName);
+
+        foreach ($settings as $key => $value) {
+            DB::table('tenant_settings')->insert([
+                'tenant_id' => $tenant->id,
+                'key'       => $key,
+                'value'     => Crypt::encryptString($value),
+            ]);
+        }
+    }
+
+    protected function storeSettings(string $shopName): array
+    {
+        return [
             'shop_name'                  => $shopName,
             'auth_token_bp'              => '',
             'elc'                        => '',
@@ -30,20 +49,20 @@ class TenantProvisioner
             'sr_enabled'                 => '',
             'api_token_call_centr'       => '',
             'company_id_in_call_centre'  => '',
-            'project_id_in_call_centre'  => '',
+            'project_id_in_call_centr'  => '',
             'api_key_blacks_by'          => '',
             'token_sms_by'               => '',
             'alphaname_id'               => '',
             'tracking_checkpoint'        => '1',
             'webhook_secret'             => Str::random(40),
         ];
+    }
 
-        foreach ($settings as $key => $value) {
-            DB::table('tenant_settings')->insert([
-                'tenant_id' => $tenant->id,
-                'key'       => $key,
-                'value'     => Crypt::encryptString($value),
-            ]);
-        }
+    protected function callCenterSettings(string $shopName): array
+    {
+        return [
+            'shop_name'       => $shopName,
+            'connection_code' => $this->connectionService->generateConnectionCode(),
+        ];
     }
 }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\TenantConnection;
 use App\Models\TenantSetting;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -26,6 +27,28 @@ class ProductController extends Controller
      */
     public function index(): Response
     {
+        $tenant = Auth::user()->tenant;
+
+        if ($tenant->isCallCenter()) {
+            $storeIds = TenantConnection::where('call_center_tenant_id', $tenant->id)
+                ->where('status', TenantConnection::STATUS_ACTIVE)
+                ->pluck('store_tenant_id');
+
+            $products = Product::withoutGlobalScopes()
+                ->whereIn('tenant_id', $storeIds)
+                ->with('tenant:id,name')
+                ->orderBy('name')
+                ->get();
+
+            return Inertia::render('Products/Index', [
+                'products'    => $products,
+                'counted'     => [],
+                'srEnabled'   => false,
+                'isCallCenter' => true,
+                'readOnly'    => true,
+            ]);
+        }
+
         $products = Product::orderBy('name')->get();
 
         // sumOrder stats: count of "Посчитан" orders per delivery type
@@ -38,9 +61,11 @@ class ProductController extends Controller
         $srEnabled = TenantSetting::get('sr_enabled', '') === '1';
 
         return Inertia::render('Products/Index', [
-            'products'  => $products,
-            'counted'   => $counted,
-            'srEnabled' => $srEnabled,
+            'products'     => $products,
+            'counted'      => $counted,
+            'srEnabled'    => $srEnabled,
+            'isCallCenter' => false,
+            'readOnly'     => false,
         ]);
     }
 
@@ -51,6 +76,8 @@ class ProductController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        abort_if(Auth::user()->tenant->isCallCenter(), 403);
+
         $data = $request->validate([
             'name'       => ['required', 'string', 'max:255'],
             'stock'      => ['required', 'integer', 'min:0'],
@@ -80,6 +107,7 @@ class ProductController extends Controller
      */
     public function update(Request $request, Product $product): JsonResponse
     {
+        abort_if(Auth::user()->tenant->isCallCenter(), 403);
         $data = $request->validate([
             'name'        => ['sometimes', 'string', 'max:255'],
             'weight'      => ['sometimes', 'numeric', 'min:0'],
@@ -123,6 +151,7 @@ class ProductController extends Controller
      */
     public function destroy(Product $product): JsonResponse
     {
+        abort_if(Auth::user()->tenant->isCallCenter(), 403);
         $product->delete();
 
         return response()->json(['success' => true]);

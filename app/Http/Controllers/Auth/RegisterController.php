@@ -24,6 +24,7 @@ class RegisterController extends Controller
     {
         $data = $request->validate([
             'company_name' => ['required', 'string', 'max:255'],
+            'tenant_type'  => ['required', 'in:store,call_center'],
             'name'         => ['required', 'string', 'max:255'],
             'email'        => ['required', 'email', 'max:255', 'unique:users,email'],
             'password'     => ['required', 'string', 'min:8', 'confirmed'],
@@ -32,6 +33,7 @@ class RegisterController extends Controller
         $user = DB::transaction(function () use ($data) {
             $tenant = Tenant::create([
                 'name'                => $data['company_name'],
+                'type'                => $data['tenant_type'],
                 'created_at'          => now(),
                 'subscription_status' => Tenant::STATUS_TRIAL,
                 'trial_ends_at'       => now()->addDays(config('subscription.trial_days', 14)),

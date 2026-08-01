@@ -4,9 +4,13 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Tenant extends Model
 {
+    public const TYPE_STORE = 'store';
+    public const TYPE_CALL_CENTER = 'call_center';
+
     public const STATUS_TRIAL = 'trial';
     public const STATUS_ACTIVE = 'active';
     public const STATUS_EXPIRED = 'expired';
@@ -14,6 +18,7 @@ class Tenant extends Model
 
     protected $fillable = [
         'name',
+        'type',
         'subscription_status',
         'trial_ends_at',
         'subscribed_at',
@@ -40,6 +45,32 @@ class Tenant extends Model
     public function settings(): HasMany
     {
         return $this->hasMany(TenantSetting::class);
+    }
+
+    public function storeConnections(): HasMany
+    {
+        return $this->hasMany(TenantConnection::class, 'store_tenant_id');
+    }
+
+    public function callCenterConnections(): HasMany
+    {
+        return $this->hasMany(TenantConnection::class, 'call_center_tenant_id');
+    }
+
+    public function activeStoreConnection(): HasOne
+    {
+        return $this->hasOne(TenantConnection::class, 'store_tenant_id')
+            ->where('status', TenantConnection::STATUS_ACTIVE);
+    }
+
+    public function isStore(): bool
+    {
+        return ($this->type ?? self::TYPE_STORE) === self::TYPE_STORE;
+    }
+
+    public function isCallCenter(): bool
+    {
+        return $this->type === self::TYPE_CALL_CENTER;
     }
 
     public function setting(string $key): ?string

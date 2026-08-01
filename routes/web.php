@@ -5,9 +5,11 @@ use App\Http\Controllers\Admin\TenantController as AdminTenantController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\BelpostController;
+use App\Http\Controllers\ConnectionController;
 use App\Http\Controllers\EvropostController;
 use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\OrderController;
+use App\Http\Controllers\OrderFeedController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\TenantSettingController;
 use App\Http\Controllers\UserController;
@@ -40,7 +42,7 @@ Route::prefix('orders')->name('orders.')->group(function () {
 });
 
 // Belpost (protected, tenant-scoped via middleware in controller)
-Route::prefix('belpost')->name('belpost.')->group(function () {
+Route::prefix('belpost')->name('belpost.')->middleware('tenant.type:store')->group(function () {
     Route::get('/', [BelpostController::class, 'index'])->name('index');
     Route::post('/batches', [BelpostController::class, 'createBatch'])->name('batches.create');
     Route::post('/batches/{batch}/items', [BelpostController::class, 'processOrder'])->name('batches.processOrder');
@@ -51,7 +53,7 @@ Route::prefix('belpost')->name('belpost.')->group(function () {
 });
 
 // Europochta (Phase 4)
-Route::prefix('europochta')->name('europochta.')->group(function () {
+Route::prefix('europochta')->name('europochta.')->middleware('tenant.type:store')->group(function () {
     Route::get('/', [EvropostController::class, 'index'])->name('index');
     Route::post('/orders/{order}/register', [EvropostController::class, 'register'])->name('register');
     Route::post('/register-all', [EvropostController::class, 'registerAll'])->name('registerAll');
@@ -66,7 +68,7 @@ Route::prefix('products')->name('products.')->group(function () {
 });
 
 // Finance (Phase 5)
-Route::prefix('finances')->name('finances.')->group(function () {
+Route::prefix('finances')->name('finances.')->middleware('tenant.type:store')->group(function () {
     Route::get('/', [FinanceController::class, 'index'])->name('index');
     Route::post('/expenses', [FinanceController::class, 'storeExpense'])->name('expenses.store');
     Route::delete('/expenses/{expense}', [FinanceController::class, 'destroyExpense'])->name('expenses.destroy');
@@ -80,6 +82,16 @@ Route::prefix('settings')->name('settings.')->group(function () {
     Route::patch('/theme', [TenantSettingController::class, 'updateTheme'])->name('theme');
     Route::post('/', [TenantSettingController::class, 'update'])->name('update');
     Route::post('/generate-webhook-secret', [TenantSettingController::class, 'generateWebhookSecret'])->name('generateWebhookSecret');
+    Route::post('/regenerate-connection-code', [ConnectionController::class, 'regenerateConnectionCode'])->name('regenerateConnectionCode');
+});
+
+// Tenant connections
+Route::prefix('connections')->name('connections.')->middleware(['auth', 'tenant'])->group(function () {
+    Route::get('/', [ConnectionController::class, 'index'])->name('index');
+    Route::post('/', [ConnectionController::class, 'store'])->name('store')->middleware('throttle:connections');
+    Route::post('/{connection}/approve', [ConnectionController::class, 'approve'])->name('approve');
+    Route::post('/{connection}/reject', [ConnectionController::class, 'reject'])->name('reject');
+    Route::post('/{connection}/disconnect', [ConnectionController::class, 'disconnect'])->name('disconnect');
 });
 
 // User management (Phase 5 — admin only)
@@ -95,6 +107,7 @@ Route::prefix('api')->name('api.')->middleware(['auth', 'tenant', 'tenant.writab
     Route::get('/address/search', [AddressController::class, 'search'])->name('address.search')->withoutMiddleware('tenant.writable');
     Route::get('/belpost/batches/{batch}/status', [BelpostController::class, 'batchStatus'])->name('belpost.batchStatus')->withoutMiddleware('tenant.writable');
     Route::get('/orders/tracking-status', [OrderController::class, 'trackingStatus'])->name('orders.trackingStatus')->withoutMiddleware('tenant.writable');
+    Route::get('/orders/feed', [OrderFeedController::class, 'index'])->name('orders.feed')->withoutMiddleware('tenant.writable');
     Route::post('/tracking/auto-notice/dismiss', [OrderController::class, 'dismissTrackingNotice'])->name('tracking.dismissNotice');
 });
 

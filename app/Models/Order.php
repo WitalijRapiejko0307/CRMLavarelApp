@@ -40,6 +40,40 @@ class Order extends Model
         'Дубль',
     ];
 
+    /** Statuses a call-center operator may set (call phase + closing). */
+    public const CALL_CENTER_STATUSES = [
+        'Позвонить',
+        'Перезвонить',
+        'Недозвон',
+        'Недозвон1',
+        'Недозвон2',
+        'Сомнения',
+        'Отдал заявку',
+        'Заказать',
+        'Отправить',
+        'Отказ',
+        'Отказ(Ошибка)',
+        'Дубль',
+    ];
+
+    /** Fields a call-center operator may update. */
+    public const CALL_CENTER_EDITABLE_FIELDS = [
+        'status',
+        'full_name',
+        'phone',
+        'city',
+        'street',
+        'building',
+        'housing',
+        'apartment',
+        'goods',
+        'quantities',
+        'prices',
+        'delivery_type',
+        'source',
+        'sms_log',
+    ];
+
     /** Statuses that must not be deleted (revenue final, active tracking, active call-center). */
     public const NON_DELETABLE_STATUSES = [
         'Завершен',
@@ -77,6 +111,8 @@ class Order extends Model
 
     protected $fillable = [
         'tenant_id',
+        'call_center_tenant_id',
+        'last_updated_by_user_id',
         'external_id',
         'full_name',
         'status',
@@ -116,6 +152,22 @@ class Order extends Model
     public function tenant(): BelongsTo
     {
         return $this->belongsTo(Tenant::class);
+    }
+
+    public function callCenterTenant(): BelongsTo
+    {
+        return $this->belongsTo(Tenant::class, 'call_center_tenant_id');
+    }
+
+    public function lastUpdatedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'last_updated_by_user_id');
+    }
+
+    public function storeConnection()
+    {
+        return $this->hasOne(TenantConnection::class, 'store_tenant_id', 'tenant_id')
+            ->where('call_center_tenant_id', $this->call_center_tenant_id);
     }
 
     public function statusHistory(): HasMany

@@ -4,9 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\Tenant;
+use App\Models\TenantConnection;
 use App\Models\TenantSetting;
 use App\Rules\FullNameThreeParts;
+use App\Services\OrderAssignmentService;
 use App\Services\TrackingRunService;
+use App\Support\CallCenterOrderQuery;
 use App\Support\CsvOrderLineParser;
 use App\Support\CsvOrderReader;
 use App\Support\PhoneNormalizer;
@@ -20,9 +24,20 @@ use Inertia\Response;
 
 class OrderController extends Controller
 {
-    public function __construct()
-    {
+    public function __construct(
+        protected OrderAssignmentService $orderAssignment
+    ) {
         $this->middleware(['auth', 'tenant', 'tenant.writable']);
+    }
+
+    protected function tenant(): Tenant
+    {
+        return Auth::user()->tenant;
+    }
+
+    protected function isCallCenter(): bool
+    {
+        return $this->tenant()->isCallCenter();
     }
 
     // ─── Manual create ────────────────────────────────────────────────────────
@@ -32,6 +47,8 @@ class OrderController extends Controller
      */
     public function create(): Response
     {
+        abort_if($this->isCallCenter(), 403);
+
         return Inertia::render('Orders/Create', [
             'statuses'       => Order::STATUSES,
             'deliveryTypes'  => Order::DELIVERY_TYPES,
@@ -44,6 +61,8 @@ class OrderController extends Controller
      */
     public function store(Request $request)
     {
+        abort_if($this->isCallCenter(), 403);
+
         $data = $request->validate([
             'full_name'  => ['required', 'string', 'max:255', new FullNameThreeParts],
             'phone'      => ['nullable', 'string', 'max:20'],
@@ -70,6 +89,7 @@ class OrderController extends Controller
         }
 
         $order = Order::create($data);
+        $this->orderAssignment->assignCallCenter($order);
 
         return redirect()->route('orders.show', $order)
             ->with('message', 'Заказ создан.');
@@ -82,6 +102,8 @@ class OrderController extends Controller
      */
     public function importPage(): Response
     {
+        abort_if($this->isCallCenter(), 403);
+
         return Inertia::render('Orders/Import', [
             'statuses' => Order::STATUSES,
         ]);
@@ -96,6 +118,8 @@ class OrderController extends Controller
      */
     public function importCsv(Request $request): JsonResponse
     {
+        abort_if($this->isCallCenter(), 403);
+
         $request->validate([
             'file' => ['required', 'file', 'mimes:csv,txt', 'max:10240'],
         ]);
@@ -197,7 +221,8 @@ class OrderController extends Controller
 
                 $data['status'] ??= 'Позвонить';
 
-                Order::create($data);
+                $order = Order::create($data);
+                $this->orderAssignment->assignCallCenter($order);
                 $created++;
             } catch (\Exception $e) {
                 $errors++;
@@ -232,7 +257,15 @@ class OrderController extends Controller
 
     public function index(Request $request): Response
     {
-        $query = Order::query()->orderByDesc('created_at');
+        $tenant = $this->tenant();
+
+        if ($tenant->isCallCenter()) {
+            $query = CallCenterOrderQuery::forTenant($tenant->id)
+                ->with('tenant:id,name')
+                ->orderByDesc('created_at');
+        } else {
+            $query = Order::query()->orderByDesc('created_at');
+        }
 
         if ($search = $request->input('search')) {
             $query->where(function ($q) use ($search) {
@@ -254,37 +287,65 @@ class OrderController extends Controller
             $query->whereDate('created_at', '<=', $dateTo);
         }
 
+        if ($tenant->isCallCenter() && ($storeId = $request->input('store_id'))) {
+            $query->where('tenant_id', $storeId);
+        }
+
         $orders = $query
             ->with('mailBatch:id,batch_id')
             ->paginate(50)
             ->withQueryString();
 
+        $connectedStores = $tenant->isCallCenter()
+            ? TenantConnection::where('call_center_tenant_id', $tenant->id)
+                ->where('status', TenantConnection::STATUS_ACTIVE)
+                ->with('store:id,name')
+                ->get()
+                ->map(fn ($c) => ['id' => $c->store->id, 'name' => $c->store->name])
+            : [];
+
         return Inertia::render('Orders/Index', [
-            'orders'        => $orders,
-            'filters'       => $request->only('search', 'status', 'date_from', 'date_to'),
-            'statuses'      => Order::STATUSES,
-            'deliveryTypes' => Order::DELIVERY_TYPES,
+            'orders'          => $orders,
+            'filters'         => $request->only('search', 'status', 'date_from', 'date_to', 'store_id'),
+            'statuses'        => $tenant->isCallCenter() ? Order::CALL_CENTER_STATUSES : Order::STATUSES,
+            'deliveryTypes'   => Order::DELIVERY_TYPES,
+            'isCallCenter'    => $tenant->isCallCenter(),
+            'connectedStores' => $connectedStores,
         ]);
     }
 
     public function show(Order $order): Response
     {
-        $order->load('statusHistory');
+        $this->authorize('view', $order);
 
-        $catalogNames = Product::pluck('name')->all();
+        $order->load(['statusHistory', 'tenant:id,name', 'lastUpdatedBy:id,name,tenant_id']);
+
+        $catalogQuery = Product::query();
+        if ($this->isCallCenter()) {
+            $catalogQuery = Product::withoutGlobalScopes()
+                ->where('tenant_id', $order->tenant_id);
+        }
+
+        $catalogNames = $catalogQuery->pluck('name')->all();
 
         return Inertia::render('Orders/Show', [
-            'order'         => $order,
-            'statuses'      => Order::STATUSES,
-            'deliveryTypes' => Order::DELIVERY_TYPES,
-            'products'      => Product::orderBy('name')->get(['id', 'name', 'stock']),
-            'unknownGoods'  => array_values(array_diff($order->goods ?? [], $catalogNames)),
+            'order'               => $order,
+            'statuses'            => $this->isCallCenter() ? Order::CALL_CENTER_STATUSES : Order::STATUSES,
+            'deliveryTypes'       => Order::DELIVERY_TYPES,
+            'products'              => $catalogQuery->orderBy('name')->get(['id', 'name', 'stock']),
+            'unknownGoods'          => array_values(array_diff($order->goods ?? [], $catalogNames)),
+            'isCallCenter'          => $this->isCallCenter(),
+            'updatedByCallCenter'   => !$this->isCallCenter()
+                && $order->lastUpdatedBy
+                && $order->lastUpdatedBy->tenant_id !== $order->tenant_id,
         ]);
     }
 
     public function update(Request $request, Order $order)
     {
-        $data = $request->validate([
+        $this->authorize('update', $order);
+
+        $rules = [
             'full_name'     => ['sometimes', 'required', 'string', 'max:255', new FullNameThreeParts],
             'phone'         => ['sometimes', 'nullable', 'string', 'max:20'],
             'city'          => ['sometimes', 'nullable', 'string', 'max:100'],
@@ -298,11 +359,28 @@ class OrderController extends Controller
             'track_number'       => ['sometimes', 'nullable', 'string', 'max:50'],
             'source'             => ['sometimes', 'nullable', 'string', 'max:50'],
             'belpost_address_id' => ['sometimes', 'nullable', 'string', 'max:50'],
-        ]);
+            'delivery_type'      => ['sometimes', 'nullable', Order::deliveryTypeRule()],
+            'sms_log'            => ['sometimes', 'nullable', 'string', 'max:1000'],
+        ];
+
+        if ($this->isCallCenter()) {
+            $rules = array_intersect_key($rules, array_flip([
+                'full_name', 'phone', 'city', 'street', 'building', 'housing', 'apartment',
+                'goods', 'quantities', 'prices', 'source', 'delivery_type', 'sms_log',
+            ]));
+        }
+
+        $data = $request->validate($rules);
+
+        if ($this->isCallCenter()) {
+            $data = array_intersect_key($data, array_flip(Order::CALL_CENTER_EDITABLE_FIELDS));
+        }
 
         if (array_key_exists('phone', $data) && !empty($data['phone'])) {
             $data['phone'] = PhoneNormalizer::normalize($data['phone']);
         }
+
+        $data['last_updated_by_user_id'] = Auth::id();
 
         $order->update($data);
 
@@ -311,29 +389,41 @@ class OrderController extends Controller
 
     public function updateStatus(Request $request, Order $order)
     {
+        $this->authorize('updateStatus', $order);
+
+        $allowed = $this->isCallCenter() ? Order::CALL_CENTER_STATUSES : Order::STATUSES;
+
         $request->validate([
-            'status' => ['required', 'in:' . implode(',', Order::STATUSES)],
+            'status' => ['required', 'in:' . implode(',', $allowed)],
         ]);
 
-        $order->update(['status' => $request->input('status')]);
+        $order->update([
+            'status'                  => $request->input('status'),
+            'last_updated_by_user_id' => Auth::id(),
+        ]);
 
         return back()->with('message', 'Статус обновлён.');
     }
 
     public function updateDeliveryType(Request $request, Order $order)
     {
+        $this->authorize('updateDeliveryType', $order);
+
         $request->validate([
             'delivery_type' => ['required', Order::deliveryTypeRule()],
         ]);
 
-        $order->update(['delivery_type' => $request->input('delivery_type')]);
+        $order->update([
+            'delivery_type'           => $request->input('delivery_type'),
+            'last_updated_by_user_id' => Auth::id(),
+        ]);
 
         return back()->with('message', 'Тип доставки обновлён.');
     }
 
     public function destroy(Request $request, Order $order)
     {
-        Gate::authorize('delete-orders');
+        $this->authorize('delete', $order);
         abort_unless(
             Order::isDeletable($order),
             422,
@@ -356,6 +446,8 @@ class OrderController extends Controller
      */
     public function refreshTracking(TrackingRunService $service): JsonResponse
     {
+        abort_if($this->isCallCenter(), 403);
+
         $tenantId = Auth::user()->tenant_id;
         $result   = $service->startRun($tenantId, 'manual');
 
@@ -377,6 +469,8 @@ class OrderController extends Controller
      */
     public function cancelTracking(TrackingRunService $service): JsonResponse
     {
+        abort_if($this->isCallCenter(), 403);
+
         $tenantId = Auth::user()->tenant_id;
 
         if (!$service->requestCancel($tenantId)) {
@@ -393,6 +487,17 @@ class OrderController extends Controller
      */
     public function trackingStatus(TrackingRunService $service): JsonResponse
     {
+        if ($this->isCallCenter()) {
+            return response()->json([
+                'status'      => 'idle',
+                'checked'     => 0,
+                'total'       => 0,
+                'errors'      => 0,
+                'source'      => null,
+                'finished_at' => null,
+            ]);
+        }
+
         $progress = $service->getProgress(Auth::user()->tenant_id);
 
         if (!$progress) {

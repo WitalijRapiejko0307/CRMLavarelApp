@@ -12,11 +12,20 @@
                             </span>
                         </h1>
                         <OrderStatusBadge :status="order.status" />
+                        <span
+                            v-if="updatedByCallCenter"
+                            class="text-xs font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 rounded-full"
+                        >
+                            Обновлено колл-центром
+                        </span>
+                        <span v-if="isCallCenter && order.tenant?.name" class="text-sm text-muted">
+                            {{ order.tenant.name }}
+                        </span>
                     </div>
                 </template>
                 <template #actions>
                     <button
-                        v-if="isAdmin && !readOnly && orderIsDeletable"
+                        v-if="isAdmin && !readOnly && !isCallCenter && orderIsDeletable"
                         type="button"
                         class="text-red-500 hover:text-red-700 p-2 touch-target"
                         title="Удалить заказ"
@@ -419,6 +428,8 @@ const props = defineProps({
     deliveryTypes: Object,
     products:      Array,
     unknownGoods:  { type: Array, default: () => [] },
+    isCallCenter:  { type: Boolean, default: false },
+    updatedByCallCenter: { type: Boolean, default: false },
 })
 
 const isAdmin = computed(() => page.props.value.auth?.user?.role === 'admin')

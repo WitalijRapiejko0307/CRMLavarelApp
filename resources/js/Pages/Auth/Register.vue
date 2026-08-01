@@ -11,6 +11,31 @@
 
                 <form @submit.prevent="submit" class="space-y-5">
                     <div>
+                        <p class="label mb-2">Тип компании</p>
+                        <div class="flex flex-col sm:flex-row gap-3">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    v-model="form.tenant_type"
+                                    type="radio"
+                                    value="store"
+                                    class="text-indigo-600"
+                                />
+                                <span class="text-sm text-gray-700 dark:text-gray-300">Интернет-магазин</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    v-model="form.tenant_type"
+                                    type="radio"
+                                    value="call_center"
+                                    class="text-indigo-600"
+                                />
+                                <span class="text-sm text-gray-700 dark:text-gray-300">Колл-центр</span>
+                            </label>
+                        </div>
+                        <p v-if="form.errors.tenant_type" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ form.errors.tenant_type }}</p>
+                    </div>
+
+                    <div>
                         <label for="company_name" class="label mb-1">Название компании</label>
                         <input
                             id="company_name"
@@ -101,6 +126,7 @@ import { Link, useForm } from '@inertiajs/inertia-vue3'
 
 const form = useForm({
     company_name: '',
+    tenant_type:  'store',
     name:         '',
     email:        '',
     password:     '',

@@ -35,6 +35,153 @@
                 </div>
             </div>
 
+            <!-- Store: connect to call center -->
+            <div v-if="canViewSettings && isStore" class="card">
+                <h2 class="section-title mb-4 pb-3 border-b border-gray-100 dark:border-gray-700">
+                    Колл-центр
+                </h2>
+
+                <div v-if="activeConnection" class="mb-4 p-3 rounded-md bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-sm">
+                    <p class="font-medium text-green-800 dark:text-green-200">
+                        Подключено: {{ activeConnection.call_center?.name }}
+                    </p>
+                    <p class="text-green-700 dark:text-green-300 text-xs mt-1">
+                        С {{ formatConnectionDate(activeConnection.approved_at) }}
+                    </p>
+                    <form v-if="canEditSettings" class="mt-3" @submit.prevent="disconnectConnection(activeConnection.id)">
+                        <button type="submit" class="btn-secondary btn-sm" :disabled="connectionBusy">
+                            Отключить
+                        </button>
+                    </form>
+                </div>
+
+                <div v-else-if="pendingConnection" class="mb-4 p-3 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-sm">
+                    <p class="font-medium text-amber-800 dark:text-amber-200">
+                        Ожидает одобрения: {{ pendingConnection.call_center?.name }}
+                    </p>
+                    <p class="text-amber-700 dark:text-amber-300 text-xs mt-1">
+                        Заявка отправлена {{ formatConnectionDate(pendingConnection.requested_at) }}
+                    </p>
+                </div>
+
+                <div v-else-if="canEditSettings" class="space-y-3">
+                    <div>
+                        <label class="label mb-1">Код колл-центра</label>
+                        <input
+                            v-model="connectionCodeInput"
+                            type="text"
+                            class="w-full uppercase"
+                            placeholder="ABCD1234"
+                            maxlength="20"
+                            :disabled="readOnly || connectionBusy"
+                        />
+                    </div>
+                    <button
+                        type="button"
+                        class="btn-primary btn-sm"
+                        :disabled="!connectionCodeInput.trim() || readOnly || connectionBusy"
+                        @click="requestConnection"
+                    >
+                        {{ connectionBusy ? 'Отправка…' : 'Запросить подключение' }}
+                    </button>
+                </div>
+            </div>
+
+            <!-- Call center: connection code + incoming requests -->
+            <div v-if="canViewSettings && isCallCenter" class="card">
+                <h2 class="section-title mb-4 pb-3 border-b border-gray-100 dark:border-gray-700">
+                    Подключение магазинов
+                </h2>
+
+                <div class="mb-6">
+                    <p class="label mb-1">Код подключения</p>
+                    <div class="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+                        <code class="text-lg font-mono tracking-widest bg-gray-100 dark:bg-gray-800 px-3 py-2 rounded">
+                            {{ connectionCode || '—' }}
+                        </code>
+                        <div class="flex gap-2">
+                            <button
+                                type="button"
+                                class="btn-secondary btn-sm"
+                                :disabled="!connectionCode"
+                                @click="copyConnectionCode"
+                            >
+                                Копировать
+                            </button>
+                            <button
+                                v-if="canEditSettings"
+                                type="button"
+                                class="btn-secondary btn-sm"
+                                :disabled="readOnly || connectionBusy"
+                                @click="regenerateConnectionCode"
+                            >
+                                Перегенерировать
+                            </button>
+                        </div>
+                    </div>
+                    <p class="text-xs text-muted mt-2">Передайте этот код администратору магазина для подключения.</p>
+                </div>
+
+                <div v-if="pendingConnections.length" class="mb-6">
+                    <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Входящие заявки</h3>
+                    <div class="space-y-2">
+                        <div
+                            v-for="conn in pendingConnections"
+                            :key="conn.id"
+                            class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded border border-gray-200 dark:border-gray-700"
+                        >
+                            <div>
+                                <p class="font-medium text-sm">{{ conn.store?.name }}</p>
+                                <p class="text-xs text-muted">{{ formatConnectionDate(conn.requested_at) }}</p>
+                            </div>
+                            <div v-if="canEditSettings" class="flex gap-2">
+                                <button
+                                    type="button"
+                                    class="btn-primary btn-sm"
+                                    :disabled="connectionBusy"
+                                    @click="approveConnection(conn.id)"
+                                >
+                                    Одобрить
+                                </button>
+                                <button
+                                    type="button"
+                                    class="btn-secondary btn-sm"
+                                    :disabled="connectionBusy"
+                                    @click="rejectConnection(conn.id)"
+                                >
+                                    Отклонить
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-if="activeConnections.length">
+                    <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Активные магазины</h3>
+                    <div class="space-y-2">
+                        <div
+                            v-for="conn in activeConnections"
+                            :key="conn.id"
+                            class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded border border-gray-200 dark:border-gray-700"
+                        >
+                            <div>
+                                <p class="font-medium text-sm">{{ conn.store?.name }}</p>
+                                <p class="text-xs text-muted">с {{ formatConnectionDate(conn.approved_at) }}</p>
+                            </div>
+                            <button
+                                v-if="canEditSettings"
+                                type="button"
+                                class="btn-secondary btn-sm"
+                                :disabled="connectionBusy"
+                                @click="disconnectConnection(conn.id)"
+                            >
+                                Отключить
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Tenant settings (admin/manager view; admin edit) -->
             <form v-if="canViewSettings" @submit.prevent="save" class="space-y-6">
 
@@ -99,7 +246,7 @@
                                     v-model="form[key]"
                                     :placeholder="meta[2]"
                                     rows="4"
-                                    class="input mt-1 font-mono text-xs resize-y"
+                                    class="input mt-1 font-mono resize-y"
                                     :disabled="!canEditSettings || readOnly"
                                 />
 
@@ -168,7 +315,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { Inertia } from '@inertiajs/inertia'
 import { usePage } from '@inertiajs/inertia-vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
@@ -187,11 +334,86 @@ const props = defineProps({
     canViewSettings: { type: Boolean, default: false },
     canEditSettings: { type: Boolean, default: false },
     theme:             { type: String, default: 'system' },
+    connectionData:    { type: Object, default: () => ({}) },
 })
+
+const page = usePage()
+const tenantType = computed(() => page.props.value.tenant?.type ?? 'store')
+const isStore = computed(() => tenantType.value === 'store')
+const isCallCenter = computed(() => tenantType.value === 'call_center')
+
+const connectionCode = computed(() => props.connectionData?.connection_code ?? '')
+const pendingConnections = computed(() => props.connectionData?.pending_connections ?? [])
+const activeConnections = computed(() => props.connectionData?.active_connections ?? [])
+const activeConnection = computed(() => props.connectionData?.active_connection ?? null)
+const pendingConnection = computed(() => props.connectionData?.pending_connection ?? null)
+
+const connectionCodeInput = ref('')
+const connectionBusy = ref(false)
+
+function formatConnectionDate(value) {
+    if (!value) return '—'
+    return new Date(value).toLocaleString('ru-RU', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+    })
+}
+
+async function requestConnection() {
+    if (!connectionCodeInput.value.trim() || connectionBusy.value) return
+    connectionBusy.value = true
+    Inertia.post('/connections', { code: connectionCodeInput.value.trim() }, {
+        onFinish: () => { connectionBusy.value = false },
+        onSuccess: () => { connectionCodeInput.value = '' },
+    })
+}
+
+function approveConnection(id) {
+    connectionBusy.value = true
+    Inertia.post(`/connections/${id}/approve`, {}, {
+        onFinish: () => { connectionBusy.value = false },
+    })
+}
+
+function rejectConnection(id) {
+    connectionBusy.value = true
+    Inertia.post(`/connections/${id}/reject`, {}, {
+        onFinish: () => { connectionBusy.value = false },
+    })
+}
+
+function disconnectConnection(id) {
+    connectionBusy.value = true
+    Inertia.post(`/connections/${id}/disconnect`, {}, {
+        onFinish: () => { connectionBusy.value = false },
+    })
+}
+
+async function regenerateConnectionCode() {
+    if (connectionBusy.value || readOnly.value) return
+    connectionBusy.value = true
+    try {
+        const resp = await apiFetch('/settings/regenerate-connection-code', 'POST')
+        const data = await resp.json()
+        if (data.success) {
+            Inertia.reload({ only: ['connectionData'] })
+        }
+    } finally {
+        connectionBusy.value = false
+    }
+}
+
+async function copyConnectionCode() {
+    if (!connectionCode.value) return
+    try {
+        await navigator.clipboard.writeText(connectionCode.value)
+    } catch {
+        // fallback silent
+    }
+}
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
 const { preference, setTheme } = useTheme()
-const page = usePage()
 const savingTheme = ref(false)
 
 const themeOptions = [
