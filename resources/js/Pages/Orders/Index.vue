@@ -266,6 +266,7 @@ const props = defineProps({
     deliveryTypes:   Object,
     isCallCenter:    { type: Boolean, default: false },
     connectedStores: { type: Array, default: () => [] },
+    orderHandlers:   { type: Object, default: () => ({}) },
 })
 
 const { readOnly } = useSubscription()
@@ -552,6 +553,24 @@ const columns = computed(() => {
             cell: info => h('span', { class: 'text-gray-600 dark:text-gray-400 text-xs' },
                 info.row.original.tenant?.name ?? '—'
             ),
+        }))
+        cols.push(columnHelper.display({
+            id: 'handlers',
+            header: 'Обработали',
+            cell: info => {
+                const handlers = props.orderHandlers[info.row.original.id] ?? []
+                if (!handlers.length) {
+                    return h('span', { class: 'text-gray-400 dark:text-gray-500 text-xs' }, '—')
+                }
+                const label = handlers.map(hnd => hnd.name).join(', ')
+                const title = handlers
+                    .map(hnd => `${hnd.name}: ${hnd.last_status} (${formatDate(hnd.last_at)})`)
+                    .join('\n')
+                return h('span', {
+                    class: 'text-gray-600 dark:text-gray-400 text-xs truncate max-w-[10rem] block',
+                    title,
+                }, label)
+            },
         }))
     }
 

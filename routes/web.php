@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AddressController;
 use App\Http\Controllers\Admin\TenantController as AdminTenantController;
+use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\BelpostController;
@@ -59,13 +60,16 @@ Route::prefix('europochta')->name('europochta.')->middleware('tenant.type:store'
     Route::post('/register-all', [EvropostController::class, 'registerAll'])->name('registerAll');
 });
 
-// Products (Phase 4)
-Route::prefix('products')->name('products.')->group(function () {
+// Products (store only)
+Route::prefix('products')->name('products.')->middleware('tenant.type:store')->group(function () {
     Route::get('/', [ProductController::class, 'index'])->name('index');
     Route::post('/', [ProductController::class, 'store'])->name('store');
     Route::put('/{product}', [ProductController::class, 'update'])->name('update');
     Route::delete('/{product}', [ProductController::class, 'destroy'])->name('destroy');
 });
+
+// Call-center analytics
+Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics.index');
 
 // Finance (Phase 5)
 Route::prefix('finances')->name('finances.')->middleware('tenant.type:store')->group(function () {

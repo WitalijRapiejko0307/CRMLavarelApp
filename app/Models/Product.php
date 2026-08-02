@@ -10,6 +10,7 @@ class Product extends Model
     protected $fillable = [
         'tenant_id',
         'name',
+        'page_url',
         'stock',
         'weight',
         'sr_item_id',

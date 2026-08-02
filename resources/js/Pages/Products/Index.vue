@@ -45,6 +45,7 @@
                         <thead>
                             <tr class="border-b border-gray-200 dark:border-gray-700 text-left">
                                 <th class="pb-3 font-medium text-muted">Название</th>
+                                <th class="pb-3 font-medium text-muted">Ссылка</th>
                                 <th class="pb-3 font-medium text-muted text-right w-24">Вес (г)</th>
                                 <th v-if="srEnabled" class="pb-3 font-medium text-muted text-right w-28">ID SR</th>
                                 <th class="pb-3 font-medium text-muted text-right w-28">На складе</th>
@@ -63,6 +64,26 @@
                                         class="input max-w-xs py-1"
                                         @keyup.enter="saveEdit(product)"
                                         @keyup.esc="cancelEdit"
+                                    />
+                                </td>
+
+                                <td class="py-3 text-sm">
+                                    <template v-if="editing !== product.id">
+                                        <a
+                                            v-if="product.page_url"
+                                            :href="product.page_url"
+                                            target="_blank"
+                                            rel="noopener"
+                                            class="text-indigo-600 hover:underline truncate max-w-[12rem] inline-block"
+                                        >↗</a>
+                                        <span v-else class="text-gray-400 dark:text-gray-500">—</span>
+                                    </template>
+                                    <input
+                                        v-else
+                                        v-model="editForm.page_url"
+                                        type="url"
+                                        placeholder="https://..."
+                                        class="input max-w-xs py-1"
                                     />
                                 </td>
 
@@ -186,6 +207,10 @@
                                 <label class="label">Название</label>
                                 <input v-model="editForm.name" class="input mt-1" />
                             </div>
+                            <div>
+                                <label class="label">Ссылка на страницу</label>
+                                <input v-model="editForm.page_url" type="url" placeholder="https://..." class="input mt-1" />
+                            </div>
                             <div class="grid grid-cols-2 gap-2">
                                 <div>
                                     <label class="label">Вес (г)</label>
@@ -214,6 +239,10 @@
                     <div>
                         <label class="label">Название</label>
                         <input v-model="createForm.name" class="input" placeholder="Наименование товара" />
+                    </div>
+                    <div>
+                        <label class="label">Ссылка на страницу товара</label>
+                        <input v-model="createForm.page_url" type="url" class="input" placeholder="https://..." />
                     </div>
                     <div class="grid grid-cols-2 gap-3">
                         <div>
@@ -294,12 +323,12 @@ const props = defineProps({
 // ── State ─────────────────────────────────────────────────────────────────────
 const productList = ref([...props.products])
 const editing     = ref(null)
-const editForm    = ref({ name: '', weight: 0, sr_item_id: null })
+const editForm    = ref({ name: '', page_url: '', weight: 0, sr_item_id: null })
 const saving      = ref(false)
 
 // Create modal
 const createModal = ref(false)
-const createForm  = ref({ name: '', weight: 0, stock: 0, sr_item_id: null })
+const createForm  = ref({ name: '', page_url: '', weight: 0, stock: 0, sr_item_id: null })
 const createError = ref('')
 
 // Intake modal
@@ -316,7 +345,12 @@ const totalSoldAmount = computed(() => productList.value.reduce((s, p) => s + (p
 // ── Edit inline ───────────────────────────────────────────────────────────────
 function startEdit(product) {
     editing.value  = product.id
-    editForm.value = { name: product.name, weight: product.weight ?? 0, sr_item_id: product.sr_item_id ?? null }
+    editForm.value = {
+        name: product.name,
+        page_url: product.page_url ?? '',
+        weight: product.weight ?? 0,
+        sr_item_id: product.sr_item_id ?? null,
+    }
 }
 
 function cancelEdit() {
@@ -328,6 +362,7 @@ async function saveEdit(product) {
     try {
         const resp = await apiFetch(`/products/${product.id}`, 'PUT', {
             name:       editForm.value.name,
+            page_url:   editForm.value.page_url || null,
             weight:     editForm.value.weight,
             sr_item_id: editForm.value.sr_item_id || null,
         })
@@ -343,7 +378,7 @@ async function saveEdit(product) {
 
 // ── Create ────────────────────────────────────────────────────────────────────
 function openCreateModal(presetName = '') {
-    createForm.value  = { name: presetName, weight: 0, stock: 0, sr_item_id: null }
+    createForm.value  = { name: presetName, page_url: '', weight: 0, stock: 0, sr_item_id: null }
     createError.value = ''
     createModal.value = true
 }

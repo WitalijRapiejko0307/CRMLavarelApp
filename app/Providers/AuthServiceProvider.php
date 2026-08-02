@@ -42,5 +42,17 @@ class AuthServiceProvider extends ServiceProvider
             && $user->role === 'admin'
             && $user->tenant?->isCallCenter()
         );
+
+        Gate::define('view-analytics', fn ($user) =>
+            $user->isTenantUser()
+            && $user->tenant?->isCallCenter()
+            && in_array($user->role, ['admin', 'manager', 'operator'], true)
+        );
+
+        Gate::define('view-team-analytics', fn ($user) =>
+            $user->isTenantUser()
+            && $user->tenant?->isCallCenter()
+            && in_array($user->role, ['admin', 'manager'], true)
+        );
     }
 }

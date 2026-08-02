@@ -9,11 +9,13 @@ use App\Models\TenantConnection;
 use App\Models\TenantSetting;
 use App\Rules\FullNameThreeParts;
 use App\Services\OrderAssignmentService;
+use App\Services\OrderHandlerService;
 use App\Services\TrackingRunService;
 use App\Support\CallCenterOrderQuery;
 use App\Support\CsvOrderLineParser;
 use App\Support\CsvOrderReader;
 use App\Support\PhoneNormalizer;
+use App\Support\ProductLinkResolver;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -25,7 +27,8 @@ use Inertia\Response;
 class OrderController extends Controller
 {
     public function __construct(
-        protected OrderAssignmentService $orderAssignment
+        protected OrderAssignmentService $orderAssignment,
+        protected OrderHandlerService $orderHandlers,
     ) {
         $this->middleware(['auth', 'tenant', 'tenant.writable']);
     }
@@ -296,6 +299,10 @@ class OrderController extends Controller
             ->paginate(50)
             ->withQueryString();
 
+        $orderHandlers = $tenant->isCallCenter()
+            ? $this->orderHandlers->handlersForOrders(collect($orders->items())->pluck('id'))
+            : [];
+
         $connectedStores = $tenant->isCallCenter()
             ? TenantConnection::where('call_center_tenant_id', $tenant->id)
                 ->where('status', TenantConnection::STATUS_ACTIVE)
@@ -311,6 +318,7 @@ class OrderController extends Controller
             'deliveryTypes'   => Order::DELIVERY_TYPES,
             'isCallCenter'    => $tenant->isCallCenter(),
             'connectedStores' => $connectedStores,
+            'orderHandlers'   => $orderHandlers,
         ]);
     }
 
@@ -318,7 +326,7 @@ class OrderController extends Controller
     {
         $this->authorize('view', $order);
 
-        $order->load(['statusHistory', 'tenant:id,name', 'lastUpdatedBy:id,name,tenant_id']);
+        $order->load(['statusHistory.user:id,name', 'tenant:id,name', 'lastUpdatedBy:id,name,tenant_id']);
 
         $catalogQuery = Product::query();
         if ($this->isCallCenter()) {
@@ -338,6 +346,8 @@ class OrderController extends Controller
             'updatedByCallCenter'   => !$this->isCallCenter()
                 && $order->lastUpdatedBy
                 && $order->lastUpdatedBy->tenant_id !== $order->tenant_id,
+            'orderHandlers'         => $this->orderHandlers->handlersForOrder($order->id),
+            'productLinks'          => ProductLinkResolver::forOrder($order),
         ]);
     }
 

@@ -38,6 +38,35 @@ class CallCenterOrderRestrictionsTest extends TestCase
         $this->assertSame('Позвонить', $order->fresh()->status);
     }
 
+    public function test_call_center_can_set_confirmed_and_spam(): void
+    {
+        [$ccUser, $order] = $this->createAssignedOrder();
+
+        $this->actingAs($ccUser)->from("/orders/{$order->id}")->patch("/orders/{$order->id}/status", [
+            'status' => 'Подтвержден',
+        ])->assertRedirect();
+
+        $this->assertSame('Подтвержден', $order->fresh()->status);
+
+        $this->actingAs($ccUser)->from("/orders/{$order->id}")->patch("/orders/{$order->id}/status", [
+            'status' => 'Спам',
+        ])->assertRedirect();
+
+        $this->assertSame('Спам', $order->fresh()->status);
+    }
+
+    public function test_call_center_cannot_set_send_status(): void
+    {
+        [$ccUser, $order] = $this->createAssignedOrder();
+
+        $response = $this->actingAs($ccUser)->from("/orders/{$order->id}")->patch("/orders/{$order->id}/status", [
+            'status' => 'Отправить',
+        ]);
+
+        $response->assertSessionHasErrors('status');
+        $this->assertSame('Позвонить', $order->fresh()->status);
+    }
+
     private function createAssignedOrder(): array
     {
         $store = Tenant::create([

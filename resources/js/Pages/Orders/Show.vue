@@ -214,6 +214,14 @@
                                     <td class="py-2 text-gray-800 dark:text-gray-200">
                                         <span class="inline-flex items-center gap-2 flex-wrap">
                                             {{ good }}
+                                            <a
+                                                v-if="productLinks[good]"
+                                                :href="productLinks[good]"
+                                                target="_blank"
+                                                rel="noopener"
+                                                class="text-indigo-600 hover:text-indigo-800 dark:text-indigo-400"
+                                                title="Открыть страницу товара"
+                                            >↗</a>
                                             <span
                                                 v-if="isUnknownGood(good)"
                                                 class="inline-flex items-center text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded-full"
@@ -276,7 +284,7 @@
                                 </button>
                             </div>
                             <div
-                                v-if="form.goods[i] && !isInCatalog(form.goods[i])"
+                                v-if="form.goods[i] && !isInCatalog(form.goods[i]) && !isCallCenter"
                                 class="flex items-center gap-3 flex-wrap text-xs"
                             >
                                 <span class="inline-flex items-center font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded-full">
@@ -357,6 +365,24 @@
                     </div>
                 </div>
 
+                <!-- Handlers (call center) -->
+                <div v-if="orderHandlers.length" class="card">
+                    <h2 class="section-title mb-4">Участвовали</h2>
+                    <ul class="space-y-2 text-sm">
+                        <li
+                            v-for="handler in orderHandlers"
+                            :key="handler.user_id"
+                            class="flex items-center justify-between gap-3"
+                        >
+                            <span class="font-medium text-gray-800 dark:text-gray-200">{{ handler.name }}</span>
+                            <span class="text-xs text-muted text-right">
+                                <OrderStatusBadge :status="handler.last_status" />
+                                <span class="block mt-0.5">{{ formatDate(handler.last_at) }}</span>
+                            </span>
+                        </li>
+                    </ul>
+                </div>
+
                 <!-- Status history -->
                 <div class="card">
                     <h2 class="section-title mb-4">История статусов</h2>
@@ -373,6 +399,7 @@
                             <div class="flex items-center gap-2 flex-wrap">
                                 <span class="text-xs font-medium text-gray-700 dark:text-gray-300">{{ entry.to_status }}</span>
                                 <span v-if="entry.from_status" class="text-xs text-gray-400 dark:text-gray-500">← {{ entry.from_status }}</span>
+                                <span v-if="entry.user?.name" class="text-xs text-indigo-600 dark:text-indigo-400">· {{ entry.user.name }}</span>
                             </div>
                             <time class="text-xs text-gray-400 dark:text-gray-500">{{ formatDate(entry.created_at) }}</time>
                         </li>
@@ -430,6 +457,8 @@ const props = defineProps({
     unknownGoods:  { type: Array, default: () => [] },
     isCallCenter:  { type: Boolean, default: false },
     updatedByCallCenter: { type: Boolean, default: false },
+    orderHandlers: { type: Array, default: () => [] },
+    productLinks:  { type: Object, default: () => ({}) },
 })
 
 const isAdmin = computed(() => page.props.value.auth?.user?.role === 'admin')

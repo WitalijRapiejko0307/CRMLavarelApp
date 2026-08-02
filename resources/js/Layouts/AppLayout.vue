@@ -65,10 +65,18 @@
                             Европочта
                         </Link>
                         <Link
+                            v-if="isStore"
                             href="/products"
                             :class="navLinkClass('/products')"
                         >
                             Склад
+                        </Link>
+                        <Link
+                            v-if="canViewAnalytics"
+                            href="/analytics"
+                            :class="navLinkClass('/analytics')"
+                        >
+                            Аналитика
                         </Link>
                         <Link
                             v-if="canViewFinances"
@@ -193,6 +201,7 @@ const isStore           = computed(() => !isCallCenter.value)
 const currentRole       = computed(() => page.props.value.auth?.user?.role ?? '')
 const isAdmin           = computed(() => currentRole.value === 'admin')
 const canViewFinances   = computed(() => isStore.value && ['admin', 'manager'].includes(currentRole.value))
+const canViewAnalytics  = computed(() => isCallCenter.value && ['admin', 'manager', 'operator'].includes(currentRole.value))
 
 const mobileLinks = computed(() => {
     const links = [
@@ -202,9 +211,12 @@ const mobileLinks = computed(() => {
         links.push(
             { href: '/belpost', label: 'Белпочта', active: isActive('/belpost') },
             { href: '/europochta', label: 'Европочта', active: isActive('/europochta') },
+            { href: '/products', label: 'Склад', active: isActive('/products') },
         )
     }
-    links.push({ href: '/products', label: 'Склад', active: isActive('/products') })
+    if (canViewAnalytics.value) {
+        links.push({ href: '/analytics', label: 'Аналитика', active: isActive('/analytics') })
+    }
     if (canViewFinances.value) {
         links.push({ href: '/finances', label: 'Финансы', active: isActive('/finances') })
     }
