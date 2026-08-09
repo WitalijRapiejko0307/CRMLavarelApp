@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\TenantSetting;
+use App\Support\UrlNormalizer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -51,6 +52,10 @@ class ProductController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        $request->merge([
+            'page_url' => UrlNormalizer::normalize($request->input('page_url')),
+        ]);
+
         $data = $request->validate([
             'name'       => ['required', 'string', 'max:255'],
             'page_url'   => ['nullable', 'url', 'max:500'],
@@ -81,6 +86,12 @@ class ProductController extends Controller
      */
     public function update(Request $request, Product $product): JsonResponse
     {
+        if ($request->has('page_url')) {
+            $request->merge([
+                'page_url' => UrlNormalizer::normalize($request->input('page_url')),
+            ]);
+        }
+
         $data = $request->validate([
             'name'        => ['sometimes', 'string', 'max:255'],
             'page_url'    => ['nullable', 'url', 'max:500'],

@@ -74,15 +74,21 @@
                                             :href="product.page_url"
                                             target="_blank"
                                             rel="noopener"
-                                            class="text-indigo-600 hover:underline truncate max-w-[12rem] inline-block"
-                                        >↗</a>
+                                            :title="product.page_url"
+                                            class="text-xs text-indigo-600 hover:underline inline-flex items-center gap-1 dark:text-indigo-400"
+                                        >
+                                            <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5M21 3l-9 9m0 0h5.25M12 12V3"/>
+                                            </svg>
+                                            {{ truncateLinkDisplay(product.page_url) }}
+                                        </a>
                                         <span v-else class="text-gray-400 dark:text-gray-500">—</span>
                                     </template>
                                     <input
                                         v-else
                                         v-model="editForm.page_url"
-                                        type="url"
-                                        placeholder="https://..."
+                                        type="text"
+                                        placeholder="example.com/page"
                                         class="input max-w-xs py-1"
                                     />
                                 </td>
@@ -209,7 +215,7 @@
                             </div>
                             <div>
                                 <label class="label">Ссылка на страницу</label>
-                                <input v-model="editForm.page_url" type="url" placeholder="https://..." class="input mt-1" />
+                                <input v-model="editForm.page_url" type="text" placeholder="example.com/page" class="input mt-1" />
                             </div>
                             <div class="grid grid-cols-2 gap-2">
                                 <div>
@@ -242,7 +248,7 @@
                     </div>
                     <div>
                         <label class="label">Ссылка на страницу товара</label>
-                        <input v-model="createForm.page_url" type="url" class="input" placeholder="https://..." />
+                        <input v-model="createForm.page_url" type="text" class="input" placeholder="example.com/page" />
                     </div>
                     <div class="grid grid-cols-2 gap-3">
                         <div>
@@ -310,6 +316,7 @@ import ResponsiveList from '@/Components/ResponsiveList.vue'
 import ListCard from '@/Components/ListCard.vue'
 import { useSubscription } from '@/composables/useSubscription'
 import { apiFetch } from '@/utils/api'
+import { truncateLinkDisplay } from '@/utils/truncateLink'
 
 const { readOnly } = useSubscription()
 

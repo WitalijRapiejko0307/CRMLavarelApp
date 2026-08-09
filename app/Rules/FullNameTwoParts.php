@@ -5,9 +5,9 @@ namespace App\Rules;
 use Illuminate\Contracts\Validation\Rule;
 
 /**
- * Validates full name as three parts (surname, name, patronymic) for Belpost.
+ * Validates full name as at least two parts (surname, name) for Belpost.
  */
-class FullNameThreeParts implements Rule
+class FullNameTwoParts implements Rule
 {
     public function passes($attribute, $value): bool
     {
@@ -18,7 +18,7 @@ class FullNameThreeParts implements Rule
         $normalized = preg_replace('/\s+/u', ' ', trim($value));
         $parts      = array_values(array_filter(explode(' ', $normalized), fn ($p) => $p !== ''));
 
-        if (count($parts) < 3) {
+        if (count($parts) < 2) {
             return false;
         }
 
@@ -33,6 +33,6 @@ class FullNameThreeParts implements Rule
 
     public function message(): string
     {
-        return 'Укажите Фамилию, Имя и Отчество через пробел (как требует Белпочта)';
+        return 'Обязательно введите фамилию и имя через пробел (отчество необязательно)';
     }
 }

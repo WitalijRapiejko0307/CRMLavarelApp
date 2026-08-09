@@ -17,6 +17,8 @@
             </PageHeader>
         </template>
 
+        <FormAlert v-if="formAlert" :message="formAlert" class="mb-4" />
+
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <!-- Left: Main info -->
             <div class="lg:col-span-2 space-y-6">
@@ -37,24 +39,30 @@
                                 v-model="form.full_name"
                                 type="text"
                                 class="w-full mt-1"
-                                :class="{ 'border-red-400 focus:ring-red-300': form.errors.full_name }"
-                                placeholder="Иванов Иван Иванович"
+                                :class="{ 'border-red-400 focus:ring-red-300': form.errors.full_name || fieldErrors.full_name }"
+                                placeholder="Иванов Иван"
                             />
                             <p v-if="form.errors.full_name" class="mt-1 text-xs text-red-500">
                                 {{ form.errors.full_name }}
                             </p>
                             <p v-else class="mt-1 text-xs text-gray-400 dark:text-gray-500">
-                                Фамилия, имя и отчество через пробел (требование Белпочты)
+                                Обязательно введите Фамилию и Имя, отчество необязательно.
                             </p>
                         </div>
                         <div>
-                            <label class="label">Телефон</label>
+                            <label class="label">
+                                Телефон <span class="text-red-500">*</span>
+                            </label>
                             <input
                                 v-model="form.phone"
                                 type="tel"
                                 class="w-full mt-1"
+                                :class="{ 'border-red-400 focus:ring-red-300': form.errors.phone || fieldErrors.phone }"
                                 placeholder="375291234567"
                             />
+                            <p v-if="form.errors.phone" class="mt-1 text-xs text-red-500">
+                                {{ form.errors.phone }}
+                            </p>
                         </div>
                         <div>
                             <label class="label">
@@ -76,13 +84,43 @@
                                 placeholder="manual"
                             />
                         </div>
-                        <div class="sm:col-span-2">
+                    </div>
+                </div>
+
+                <!-- Notes -->
+                <div class="card">
+                    <h2 class="section-title mb-4 flex items-center gap-2">
+                        <svg class="w-4 h-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                        </svg>
+                        Заметки
+                    </h2>
+                    <div class="space-y-4">
+                        <div>
                             <label class="label">Комментарий</label>
                             <textarea
-                                v-model="form.sms_log"
+                                v-model="form.comment"
                                 rows="2"
                                 class="w-full mt-1 resize-none"
                                 placeholder="Заметки, пожелания клиента…"
+                            />
+                        </div>
+                        <div>
+                            <label class="label">Апсейл</label>
+                            <input
+                                v-model="form.upsell"
+                                type="text"
+                                class="w-full mt-1"
+                                placeholder="Предложение доп. товара"
+                            />
+                        </div>
+                        <div>
+                            <label class="label">Кроссейл</label>
+                            <input
+                                v-model="form.cross_sell"
+                                type="text"
+                                class="w-full mt-1"
+                                placeholder="Сопутствующий товар"
                             />
                         </div>
                     </div>
@@ -154,8 +192,12 @@
                             :key="i"
                             class="space-y-1"
                         >
-                            <div class="flex flex-wrap items-center gap-3">
-                                <select v-model="form.goods[i]" class="w-full sm:flex-1 sm:w-auto">
+                            <div class="flex items-center gap-2 min-w-0">
+                                <select
+                                    v-model="form.goods[i]"
+                                    class="flex-1 min-w-0 truncate"
+                                    :class="{ 'border-red-400': fieldErrors.goods }"
+                                >
                                     <option value="">— выберите товар —</option>
                                     <option
                                         v-if="form.goods[i] && !isInCatalog(form.goods[i])"
@@ -169,7 +211,7 @@
                                     v-model.number="form.quantities[i]"
                                     type="number"
                                     min="1"
-                                    class="w-20 text-center"
+                                    class="w-20 shrink-0 text-center"
                                     placeholder="шт."
                                 />
                                 <input
@@ -177,7 +219,7 @@
                                     type="number"
                                     min="0"
                                     step="0.01"
-                                    class="w-24 sm:w-28 text-right"
+                                    class="w-24 shrink-0 text-right"
                                     placeholder="цена"
                                 />
                                 <button
@@ -281,10 +323,20 @@ import PageHeader from '@/Components/PageHeader.vue'
 import AppScrollSelect from '@/Components/AppScrollSelect.vue'
 import { statusColorClass } from '@/utils/orderStatusColors'
 import AddressInlinePicker from '@/Components/AddressInlinePicker.vue'
+import FormAlert from '@/Components/FormAlert.vue'
 import { useSubscription } from '@/composables/useSubscription'
 import { isInCatalog as checkInCatalog } from '@/utils/phone'
+import {
+    validateOrderForm,
+    normalizeOrderFormFields,
+    fieldErrorsFromValidation,
+    validationAlertMessage,
+} from '@/utils/orderFormValidation'
 
 const { readOnly } = useSubscription()
+
+const fieldErrors = ref({ full_name: false, phone: false, goods: false })
+const formAlert   = ref('')
 
 const props = defineProps({
     statuses:      Array,
@@ -305,7 +357,9 @@ const form = useForm({
     phone:         '',
     status:        'Позвонить',
     source:        '',
-    sms_log:       '',
+    comment:       '',
+    upsell:        '',
+    cross_sell:    '',
     delivery_type: '',
     city:              '',
     street:            '',
@@ -338,13 +392,27 @@ function removeGood(index) {
 
 function submit() {
     if (readOnly.value) return
+
+    const errors = validateOrderForm(form)
+    fieldErrors.value = fieldErrorsFromValidation(errors)
+    if (Object.keys(errors).length) {
+        formAlert.value = validationAlertMessage(errors)
+        return
+    }
+    formAlert.value = ''
+
     if (form.delivery_type === 'belpost' && pickerRef.value) {
         if (!pickerRef.value.validate()) return
     }
-    form.transform(data => ({
+    form.transform(data => normalizeOrderFormFields({
         ...data,
         delivery_type: data.delivery_type || null,
-    })).post('/orders')
+    })).post('/orders', {
+        onSuccess: () => {
+            fieldErrors.value = { full_name: false, phone: false, goods: false }
+            formAlert.value = ''
+        },
+    })
 }
 
 function cancel() {

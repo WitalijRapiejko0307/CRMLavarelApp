@@ -42,7 +42,7 @@ class ConnectionService
         return null;
     }
 
-    public function requestConnection(Tenant $store, string $code): TenantConnection
+    public function requestConnection(Tenant $store, string $code, bool $includeExistingActive = false): TenantConnection
     {
         if (!$store->isStore()) {
             throw ValidationException::withMessages([
@@ -82,21 +82,23 @@ class ConnectionService
             }
 
             $existing->update([
-                'status'          => TenantConnection::STATUS_PENDING,
-                'requested_at'    => now(),
-                'approved_at'     => null,
-                'rejected_at'     => null,
-                'disconnected_at' => null,
+                'status'                   => TenantConnection::STATUS_PENDING,
+                'include_existing_active'  => $includeExistingActive,
+                'requested_at'             => now(),
+                'approved_at'              => null,
+                'rejected_at'              => null,
+                'disconnected_at'          => null,
             ]);
 
             return $existing->fresh(['store', 'callCenter']);
         }
 
         return TenantConnection::create([
-            'store_tenant_id'       => $store->id,
-            'call_center_tenant_id' => $callCenter->id,
-            'status'                => TenantConnection::STATUS_PENDING,
-            'requested_at'          => now(),
+            'store_tenant_id'          => $store->id,
+            'call_center_tenant_id'    => $callCenter->id,
+            'status'                   => TenantConnection::STATUS_PENDING,
+            'include_existing_active'  => $includeExistingActive,
+            'requested_at'             => now(),
         ])->load(['store', 'callCenter']);
     }
 
@@ -120,6 +122,10 @@ class ConnectionService
             'status'      => TenantConnection::STATUS_ACTIVE,
             'approved_at' => now(),
         ]);
+
+        if ($connection->include_existing_active) {
+            app(OrderAssignmentService::class)->backfillActiveOrders($connection);
+        }
 
         return $connection->fresh(['store', 'callCenter']);
     }

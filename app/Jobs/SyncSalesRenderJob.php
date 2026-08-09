@@ -213,13 +213,11 @@ class SyncSalesRenderJob implements ShouldQueue
         $stringFields  = $srOrder['data']['stringFields']  ?? [];
         $booleanFields = $srOrder['data']['booleanFields'] ?? [];
 
-        $comment = !empty($stringFields)  ? (string) ($stringFields[0]['value']  ?? '') : '';
-        $upsale  = !empty($booleanFields) ? (string) ($booleanFields[0]['field']['label'] ?? '') : '';
-        $note    = trim($comment . ' ' . $upsale);
+        $comment = !empty($stringFields)  ? trim((string) ($stringFields[0]['value']  ?? '')) : '';
+        $upsale  = !empty($booleanFields) ? trim((string) ($booleanFields[0]['field']['label'] ?? '')) : '';
 
-        if ($note) {
-            $data['sms_log'] = $note;
-        }
+        $data['comment'] = $comment ?: null;
+        $data['upsell']  = $upsale ?: null;
 
         $data['status'] = 'Заказать';
 

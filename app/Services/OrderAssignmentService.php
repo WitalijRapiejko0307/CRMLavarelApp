@@ -33,4 +33,13 @@ class OrderAssignmentService
             ->where('status', TenantConnection::STATUS_ACTIVE)
             ->exists();
     }
+
+    public function backfillActiveOrders(TenantConnection $connection): int
+    {
+        return Order::withoutGlobalScopes()
+            ->where('tenant_id', $connection->store_tenant_id)
+            ->whereNull('call_center_tenant_id')
+            ->whereIn('status', Order::ACTIVE_STATUSES)
+            ->update(['call_center_tenant_id' => $connection->call_center_tenant_id]);
+    }
 }

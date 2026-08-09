@@ -76,6 +76,17 @@
                             :disabled="readOnly || connectionBusy"
                         />
                     </div>
+                    <label class="flex items-start gap-2 text-sm cursor-pointer">
+                        <input
+                            v-model="includeExistingActive"
+                            type="checkbox"
+                            class="mt-0.5 rounded border-gray-300 dark:border-gray-600"
+                            :disabled="readOnly || connectionBusy"
+                        />
+                        <span class="text-gray-700 dark:text-gray-300">
+                            Передать колл-центру все активные заказы
+                        </span>
+                    </label>
                     <button
                         type="button"
                         class="btn-primary btn-sm"
@@ -133,6 +144,9 @@
                             <div>
                                 <p class="font-medium text-sm">{{ conn.store?.name }}</p>
                                 <p class="text-xs text-muted">{{ formatConnectionDate(conn.requested_at) }}</p>
+                                <p v-if="conn.include_existing_active" class="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                                    Все активные заказы
+                                </p>
                             </div>
                             <div v-if="canEditSettings" class="flex gap-2">
                                 <button
@@ -349,6 +363,7 @@ const activeConnection = computed(() => props.connectionData?.active_connection 
 const pendingConnection = computed(() => props.connectionData?.pending_connection ?? null)
 
 const connectionCodeInput = ref('')
+const includeExistingActive = ref(false)
 const connectionBusy = ref(false)
 
 function formatConnectionDate(value) {
@@ -362,9 +377,15 @@ function formatConnectionDate(value) {
 async function requestConnection() {
     if (!connectionCodeInput.value.trim() || connectionBusy.value) return
     connectionBusy.value = true
-    Inertia.post('/connections', { code: connectionCodeInput.value.trim() }, {
+    Inertia.post('/connections', {
+        code: connectionCodeInput.value.trim(),
+        include_existing_active: includeExistingActive.value,
+    }, {
         onFinish: () => { connectionBusy.value = false },
-        onSuccess: () => { connectionCodeInput.value = '' },
+        onSuccess: () => {
+            connectionCodeInput.value = ''
+            includeExistingActive.value = false
+        },
     })
 }
 

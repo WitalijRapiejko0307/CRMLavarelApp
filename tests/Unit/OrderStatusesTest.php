@@ -52,6 +52,16 @@ class OrderStatusesTest extends TestCase
         $this->assertNotContains('Отправить', Order::CALL_CENTER_STATUSES);
     }
 
+    public function test_active_statuses_are_subset_of_all_statuses(): void
+    {
+        foreach (Order::ACTIVE_STATUSES as $status) {
+            $this->assertContains($status, Order::STATUSES, "Missing active status: {$status}");
+        }
+
+        $this->assertNotContains('Отказ', Order::ACTIVE_STATUSES);
+        $this->assertContains('Отправить', Order::ACTIVE_STATUSES);
+    }
+
     public function test_confirmed_is_non_deletable(): void
     {
         $this->assertContains('Подтвержден', Order::NON_DELETABLE_STATUSES);

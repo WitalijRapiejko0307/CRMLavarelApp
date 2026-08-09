@@ -187,10 +187,24 @@
 
                     <p class="mt-1 font-medium text-gray-900 dark:text-gray-100">{{ order.full_name }}</p>
 
-                    <p class="mt-0.5 text-sm text-gray-600 dark:text-gray-400">
+                    <p class="mt-0.5 text-sm text-gray-600 dark:text-gray-400 flex flex-wrap items-center gap-x-1">
                         <a v-if="order.phone" :href="`tel:${order.phone}`" class="text-indigo-600 dark:text-indigo-400" @click.stop>
                             {{ order.phone }}
                         </a>
+                        <Link
+                            v-if="order.is_phone_duplicate && order.duplicate_of_order_id"
+                            :href="`/orders/${order.duplicate_of_order_id}`"
+                            class="inline-flex items-center text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 px-1.5 py-0.5 rounded-full"
+                            @click.stop
+                        >
+                            Дубль
+                        </Link>
+                        <span
+                            v-else-if="order.is_phone_duplicate"
+                            class="inline-flex items-center text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 px-1.5 py-0.5 rounded-full"
+                        >
+                            Дубль
+                        </span>
                         <span v-if="order.city"> · {{ order.city }}</span>
                     </p>
 
@@ -607,7 +621,32 @@ const columns = computed(() => {
         }),
         columnHelper.accessor('phone', {
             header: 'Телефон',
-            cell:   info => h('span', { class: 'text-gray-600 dark:text-gray-400 whitespace-nowrap' }, info.getValue() ?? '—'),
+            cell:   info => {
+                const row = info.row.original
+                const phone = info.getValue()
+                const children = []
+
+                if (phone) {
+                    children.push(h('span', { class: 'text-gray-600 dark:text-gray-400 whitespace-nowrap' }, phone))
+                } else {
+                    children.push(h('span', { class: 'text-gray-400 dark:text-gray-500' }, '—'))
+                }
+
+                if (row.is_phone_duplicate) {
+                    const badgeClass = 'inline-flex items-center text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 px-1.5 py-0.5 rounded-full ml-1'
+                    if (row.duplicate_of_order_id) {
+                        children.push(h(Link, {
+                            href: `/orders/${row.duplicate_of_order_id}`,
+                            class: badgeClass + ' hover:underline',
+                            onClick: (e) => e.stopPropagation(),
+                        }, () => 'Дубль'))
+                    } else {
+                        children.push(h('span', { class: badgeClass }, 'Дубль'))
+                    }
+                }
+
+                return h('div', { class: 'flex items-center flex-wrap gap-1' }, children)
+            },
         }),
         columnHelper.accessor('city', {
             header: 'Город',

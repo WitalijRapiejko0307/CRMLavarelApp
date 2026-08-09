@@ -7,8 +7,11 @@ use App\Models\Product;
 use App\Models\Tenant;
 use App\Models\TenantConnection;
 use App\Models\TenantSetting;
-use App\Rules\FullNameThreeParts;
+use App\Rules\BelarusPhone;
+use App\Rules\FullNameTwoParts;
+use App\Rules\HasAtLeastOneGood;
 use App\Services\OrderAssignmentService;
+use App\Services\OrderDuplicateService;
 use App\Services\OrderHandlerService;
 use App\Services\TrackingRunService;
 use App\Support\CallCenterOrderQuery;
@@ -29,6 +32,7 @@ class OrderController extends Controller
     public function __construct(
         protected OrderAssignmentService $orderAssignment,
         protected OrderHandlerService $orderHandlers,
+        protected OrderDuplicateService $orderDuplicates,
     ) {
         $this->middleware(['auth', 'tenant', 'tenant.writable']);
     }
@@ -67,10 +71,10 @@ class OrderController extends Controller
         abort_if($this->isCallCenter(), 403);
 
         $data = $request->validate([
-            'full_name'  => ['required', 'string', 'max:255', new FullNameThreeParts],
-            'phone'      => ['nullable', 'string', 'max:20'],
+            'full_name'  => ['required', 'string', 'max:255', new FullNameTwoParts],
+            'phone'      => ['required', 'string', 'max:20', new BelarusPhone],
             'status'     => ['required', 'in:' . implode(',', Order::STATUSES)],
-            'goods'      => ['nullable', 'array'],
+            'goods'      => ['required', 'array', new HasAtLeastOneGood],
             'quantities' => ['nullable', 'array'],
             'prices'     => ['nullable', 'array'],
             'city'       => ['nullable', 'string', 'max:100'],
@@ -79,17 +83,16 @@ class OrderController extends Controller
             'housing'    => ['nullable', 'string', 'max:20'],
             'apartment'  => ['nullable', 'string', 'max:20'],
             'source'             => ['nullable', 'string', 'max:50'],
-            'sms_log'            => ['nullable', 'string', 'max:1000'],
+            'comment'            => ['nullable', 'string', 'max:2000'],
+            'upsell'             => ['nullable', 'string', 'max:1000'],
+            'cross_sell'         => ['nullable', 'string', 'max:1000'],
             'delivery_type'      => ['nullable', Order::deliveryTypeRule()],
             'belpost_address_id' => ['nullable', 'string', 'max:50'],
         ]);
 
         $data['tenant_id'] = Auth::user()->tenant_id;
         $data['source']  ??= 'manual';
-
-        if (!empty($data['phone'])) {
-            $data['phone'] = PhoneNormalizer::normalize($data['phone']);
-        }
+        $data['phone'] = PhoneNormalizer::normalize($data['phone']);
 
         $order = Order::create($data);
         $this->orderAssignment->assignCallCenter($order);
@@ -303,6 +306,8 @@ class OrderController extends Controller
             ? $this->orderHandlers->handlersForOrders(collect($orders->items())->pluck('id'))
             : [];
 
+        $this->orderDuplicates->attachDuplicateFlags(collect($orders->items()));
+
         $connectedStores = $tenant->isCallCenter()
             ? TenantConnection::where('call_center_tenant_id', $tenant->id)
                 ->where('status', TenantConnection::STATUS_ACTIVE)
@@ -336,6 +341,10 @@ class OrderController extends Controller
 
         $catalogNames = $catalogQuery->pluck('name')->all();
 
+        $duplicateFlags = $this->orderDuplicates->flagsForOrder($order);
+        $order->setAttribute('is_phone_duplicate', $duplicateFlags['is_phone_duplicate']);
+        $order->setAttribute('duplicate_of_order_id', $duplicateFlags['duplicate_of_order_id']);
+
         return Inertia::render('Orders/Show', [
             'order'               => $order,
             'statuses'            => $this->isCallCenter() ? Order::CALL_CENTER_STATUSES : Order::STATUSES,
@@ -356,27 +365,30 @@ class OrderController extends Controller
         $this->authorize('update', $order);
 
         $rules = [
-            'full_name'     => ['sometimes', 'required', 'string', 'max:255', new FullNameThreeParts],
-            'phone'         => ['sometimes', 'nullable', 'string', 'max:20'],
+            'full_name'     => ['sometimes', 'required', 'string', 'max:255', new FullNameTwoParts],
+            'phone'         => ['sometimes', 'required', 'string', 'max:20', new BelarusPhone],
             'city'          => ['sometimes', 'nullable', 'string', 'max:100'],
             'street'        => ['sometimes', 'nullable', 'string', 'max:100'],
             'building'      => ['sometimes', 'nullable', 'string', 'max:20'],
             'housing'       => ['sometimes', 'nullable', 'string', 'max:20'],
             'apartment'     => ['sometimes', 'nullable', 'string', 'max:20'],
-            'goods'         => ['sometimes', 'nullable', 'array'],
+            'goods'         => ['sometimes', 'required', 'array', new HasAtLeastOneGood],
             'quantities'    => ['sometimes', 'nullable', 'array'],
             'prices'        => ['sometimes', 'nullable', 'array'],
             'track_number'       => ['sometimes', 'nullable', 'string', 'max:50'],
             'source'             => ['sometimes', 'nullable', 'string', 'max:50'],
             'belpost_address_id' => ['sometimes', 'nullable', 'string', 'max:50'],
             'delivery_type'      => ['sometimes', 'nullable', Order::deliveryTypeRule()],
-            'sms_log'            => ['sometimes', 'nullable', 'string', 'max:1000'],
+            'comment'            => ['sometimes', 'nullable', 'string', 'max:2000'],
+            'upsell'             => ['sometimes', 'nullable', 'string', 'max:1000'],
+            'cross_sell'         => ['sometimes', 'nullable', 'string', 'max:1000'],
         ];
 
         if ($this->isCallCenter()) {
             $rules = array_intersect_key($rules, array_flip([
                 'full_name', 'phone', 'city', 'street', 'building', 'housing', 'apartment',
-                'goods', 'quantities', 'prices', 'source', 'delivery_type', 'sms_log',
+                'goods', 'quantities', 'prices', 'source', 'delivery_type',
+                'comment', 'upsell', 'cross_sell',
             ]));
         }
 
@@ -386,7 +398,7 @@ class OrderController extends Controller
             $data = array_intersect_key($data, array_flip(Order::CALL_CENTER_EDITABLE_FIELDS));
         }
 
-        if (array_key_exists('phone', $data) && !empty($data['phone'])) {
+        if (array_key_exists('phone', $data)) {
             $data['phone'] = PhoneNormalizer::normalize($data['phone']);
         }
 

@@ -16,6 +16,7 @@ class TenantConnection extends Model
         'store_tenant_id',
         'call_center_tenant_id',
         'status',
+        'include_existing_active',
         'requested_at',
         'approved_at',
         'rejected_at',
@@ -23,6 +24,7 @@ class TenantConnection extends Model
     ];
 
     protected $casts = [
+        'include_existing_active' => 'boolean',
         'requested_at'    => 'datetime',
         'approved_at'     => 'datetime',
         'rejected_at'     => 'datetime',

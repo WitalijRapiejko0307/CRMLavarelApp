@@ -92,4 +92,41 @@ class ConnectionApprovalTest extends TestCase
             'status' => TenantConnection::STATUS_REJECTED,
         ]);
     }
+
+    public function test_approve_with_include_existing_active_backfills_orders(): void
+    {
+        [$store, $cc, , $ccUser] = $this->createUsers();
+
+        $activeOrder = \App\Models\Order::create([
+            'tenant_id' => $store->id,
+            'full_name' => 'Иванов Иван',
+            'phone'     => '375291234567',
+            'status'    => 'Позвонить',
+            'goods'     => ['A'],
+        ]);
+
+        $closedOrder = \App\Models\Order::create([
+            'tenant_id' => $store->id,
+            'full_name' => 'Петров Петр',
+            'phone'     => '375291234568',
+            'status'    => 'Отказ',
+            'goods'     => ['B'],
+        ]);
+
+        $connection = TenantConnection::create([
+            'store_tenant_id'         => $store->id,
+            'call_center_tenant_id'   => $cc->id,
+            'status'                  => TenantConnection::STATUS_PENDING,
+            'include_existing_active' => true,
+            'requested_at'            => now(),
+        ]);
+
+        $this->actingAs($ccUser)->post("/connections/{$connection->id}/approve");
+
+        $activeOrder->refresh();
+        $closedOrder->refresh();
+
+        $this->assertSame($cc->id, $activeOrder->call_center_tenant_id);
+        $this->assertNull($closedOrder->call_center_tenant_id);
+    }
 }

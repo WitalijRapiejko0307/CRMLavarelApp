@@ -48,6 +48,38 @@ class ProductPageUrlTest extends TestCase
         ]);
     }
 
+    public function test_store_adds_https_when_scheme_missing(): void
+    {
+        $store = Tenant::create([
+            'name'                => 'Store',
+            'type'                => Tenant::TYPE_STORE,
+            'created_at'          => now(),
+            'subscription_status' => Tenant::STATUS_ACTIVE,
+            'subscribed_at'       => now(),
+        ]);
+
+        $user = User::create([
+            'tenant_id' => $store->id,
+            'name'      => 'Admin',
+            'email'     => 'store2@example.com',
+            'password'  => Hash::make('password'),
+            'role'      => 'admin',
+        ]);
+
+        $response = $this->actingAs($user)->postJson('/products', [
+            'name'     => 'Крем',
+            'page_url' => 'shop.example/krem',
+            'stock'    => 10,
+            'weight'   => 100,
+        ]);
+
+        $response->assertOk();
+        $this->assertDatabaseHas('products', [
+            'tenant_id' => $store->id,
+            'page_url'  => 'https://shop.example/krem',
+        ]);
+    }
+
     public function test_call_center_show_resolves_product_link_from_catalog(): void
     {
         [$ccUser, $order] = $this->createAssignedOrderWithProduct(

@@ -32,13 +32,18 @@ class ConnectionController extends Controller
         Gate::authorize('manage-connections');
 
         $data = $request->validate([
-            'code' => ['required', 'string', 'min:4', 'max:20'],
+            'code'                      => ['required', 'string', 'min:4', 'max:20'],
+            'include_existing_active'   => ['sometimes', 'boolean'],
         ]);
 
         $tenant = Auth::user()->tenant;
         abort_unless($tenant->isStore(), 403);
 
-        $this->connectionService->requestConnection($tenant, $data['code']);
+        $this->connectionService->requestConnection(
+            $tenant,
+            $data['code'],
+            (bool) ($data['include_existing_active'] ?? false),
+        );
 
         return back()->with('message', 'Заявка на подключение отправлена.');
     }

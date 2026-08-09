@@ -6,7 +6,8 @@ use App\Jobs\DownloadBelpostPdfJob;
 use App\Models\MailBatch;
 use App\Models\Order;
 use App\Models\TenantSetting;
-use App\Rules\FullNameThreeParts;
+use App\Rules\BelarusPhone;
+use App\Rules\FullNameTwoParts;
 use App\Services\BelpostService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -132,11 +133,19 @@ class BelpostController extends Controller
             return response()->json(['success' => false, 'message' => 'Заказ не найден'], 404);
         }
 
-        $fioRule = new FullNameThreeParts();
+        $fioRule = new FullNameTwoParts();
         if (!$fioRule->passes('full_name', $order->full_name)) {
             return response()->json([
                 'success' => false,
                 'message' => $fioRule->message(),
+            ], 422);
+        }
+
+        $phoneRule = new BelarusPhone();
+        if (!$phoneRule->passes('phone', $order->phone ?? '')) {
+            return response()->json([
+                'success' => false,
+                'message' => $phoneRule->message(),
             ], 422);
         }
 

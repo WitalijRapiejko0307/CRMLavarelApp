@@ -54,6 +54,20 @@ class Order extends Model
         'Недозвон2',
     ];
 
+    /** Orders still in call / pre-mail workflow (used for CC backfill and phone duplicate detection). */
+    public const ACTIVE_STATUSES = [
+        'Позвонить',
+        'Перезвонить',
+        'Недозвон',
+        'Недозвон1',
+        'Недозвон2',
+        'Сомнения',
+        'Отдал заявку',
+        'Заказать',
+        'Подтвержден',
+        'Отправить',
+    ];
+
     /** Statuses a call-center operator may set (call phase + closing). */
     public const CALL_CENTER_STATUSES = [
         'Позвонить',
@@ -86,7 +100,9 @@ class Order extends Model
         'prices',
         'delivery_type',
         'source',
-        'sms_log',
+        'comment',
+        'upsell',
+        'cross_sell',
     ];
 
     /** Statuses that must not be deleted (revenue final, active tracking, active call-center). */
@@ -146,6 +162,9 @@ class Order extends Model
         'delivery_type',
         'sms_log',
         'source',
+        'comment',
+        'upsell',
+        'cross_sell',
         'ops_id',
         'belpost_address_id',
         'mail_batch_id',

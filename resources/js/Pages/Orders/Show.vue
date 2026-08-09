@@ -46,6 +46,8 @@
             </PageHeader>
         </template>
 
+        <FormAlert v-if="editing && formAlert" :message="formAlert" class="mb-4" />
+
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <!-- Left: Main info -->
             <div class="lg:col-span-2 space-y-6">
@@ -74,25 +76,41 @@
                                     v-model="form.full_name"
                                     type="text"
                                     class="w-full mt-1"
-                                    placeholder="Иванов Иван Иванович"
+                                    :class="{ 'border-red-400 focus:ring-red-300': fieldErrors.full_name }"
+                                    placeholder="Иванов Иван"
                                 />
                                 <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">
-                                    Фамилия, имя и отчество через пробел (требование Белпочты)
+                                    Обязательно введите Фамилию и Имя, отчество необязательно.
                                 </p>
                             </template>
                         </div>
                         <div>
                             <label class="label">Телефон</label>
-                            <div v-if="!editing" class="mt-1 text-sm text-gray-900 dark:text-gray-100">
-                                <a :href="`tel:${order.phone}`" class="text-indigo-600 hover:underline">
+                            <div v-if="!editing" class="mt-1 flex items-center gap-2 flex-wrap">
+                                <a :href="`tel:${order.phone}`" class="text-sm text-indigo-600 hover:underline dark:text-indigo-400">
                                     {{ formatPhone(order.phone) || order.phone || '—' }}
                                 </a>
+                                <a
+                                    v-if="order.is_phone_duplicate && order.duplicate_of_order_id"
+                                    :href="`/orders/${order.duplicate_of_order_id}`"
+                                    class="inline-flex items-center text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded-full hover:underline"
+                                    title="Есть другая активная заявка с этим номером"
+                                >
+                                    Дубль
+                                </a>
+                                <span
+                                    v-else-if="order.is_phone_duplicate"
+                                    class="inline-flex items-center text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded-full"
+                                >
+                                    Дубль
+                                </span>
                             </div>
                             <input
                                 v-else
                                 v-model="form.phone"
                                 type="tel"
                                 class="w-full mt-1"
+                                :class="{ 'border-red-400 focus:ring-red-300': fieldErrors.phone }"
                                 placeholder="375291234567"
                             />
                         </div>
@@ -103,6 +121,69 @@
                         <div>
                             <label class="label">Дата создания</label>
                             <div class="mt-1 text-sm text-muted">{{ formatDate(order.created_at) }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Notes -->
+                <div class="card">
+                    <h2 class="section-title mb-4 flex items-center gap-2">
+                        <svg class="w-4 h-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                        </svg>
+                        Заметки
+                    </h2>
+
+                    <div v-if="!editing" class="space-y-4">
+                        <div>
+                            <label class="label">Комментарий</label>
+                            <p class="mt-1 text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">{{ order.comment || '—' }}</p>
+                        </div>
+                        <div>
+                            <label class="label">Апсейл</label>
+                            <p class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ order.upsell || '—' }}</p>
+                        </div>
+                        <div>
+                            <label class="label">Кроссейл</label>
+                            <p class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ order.cross_sell || '—' }}</p>
+                        </div>
+                        <div v-if="order.sms_log" class="pt-3 border-t border-gray-200 dark:border-gray-700">
+                            <label class="label text-gray-400 dark:text-gray-500">SMS-события</label>
+                            <p class="mt-1 text-xs text-gray-400 dark:text-gray-500 whitespace-pre-wrap">{{ order.sms_log }}</p>
+                        </div>
+                    </div>
+
+                    <div v-else class="space-y-4">
+                        <div>
+                            <label class="label">Комментарий</label>
+                            <textarea
+                                v-model="form.comment"
+                                rows="2"
+                                class="w-full mt-1 resize-none"
+                                placeholder="Заметки, пожелания клиента…"
+                            />
+                        </div>
+                        <div>
+                            <label class="label">Апсейл</label>
+                            <input
+                                v-model="form.upsell"
+                                type="text"
+                                class="w-full mt-1"
+                                placeholder="Предложение доп. товара"
+                            />
+                        </div>
+                        <div>
+                            <label class="label">Кроссейл</label>
+                            <input
+                                v-model="form.cross_sell"
+                                type="text"
+                                class="w-full mt-1"
+                                placeholder="Сопутствующий товар"
+                            />
+                        </div>
+                        <div v-if="order.sms_log" class="pt-3 border-t border-gray-200 dark:border-gray-700">
+                            <label class="label text-gray-400 dark:text-gray-500">SMS-события</label>
+                            <p class="mt-1 text-xs text-gray-400 dark:text-gray-500 whitespace-pre-wrap">{{ order.sms_log }}</p>
                         </div>
                     </div>
                 </div>
@@ -219,9 +300,14 @@
                                                 :href="productLinks[good]"
                                                 target="_blank"
                                                 rel="noopener"
-                                                class="text-indigo-600 hover:text-indigo-800 dark:text-indigo-400"
-                                                title="Открыть страницу товара"
-                                            >↗</a>
+                                                :title="productLinks[good]"
+                                                class="text-xs text-indigo-600 hover:underline inline-flex items-center gap-1 dark:text-indigo-400"
+                                            >
+                                                <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5M21 3l-9 9m0 0h5.25M12 12V3"/>
+                                                </svg>
+                                                {{ truncateLinkDisplay(productLinks[good]) }}
+                                            </a>
                                             <span
                                                 v-if="isUnknownGood(good)"
                                                 class="inline-flex items-center text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded-full"
@@ -251,8 +337,12 @@
                             :key="i"
                             class="space-y-1"
                         >
-                            <div class="flex flex-wrap items-center gap-3">
-                                <select v-model="form.goods[i]" class="w-full sm:flex-1 sm:w-auto">
+                            <div class="flex items-center gap-2 min-w-0">
+                                <select
+                                    v-model="form.goods[i]"
+                                    class="flex-1 min-w-0 truncate"
+                                    :class="{ 'border-red-400': fieldErrors.goods }"
+                                >
                                     <option value="">— выберите товар —</option>
                                     <option
                                         v-if="form.goods[i] && !isInCatalog(form.goods[i])"
@@ -266,7 +356,7 @@
                                     v-model.number="form.quantities[i]"
                                     type="number"
                                     min="1"
-                                    class="w-20 text-center"
+                                    class="w-20 shrink-0 text-center"
                                     placeholder="шт."
                                 />
                                 <input
@@ -274,7 +364,7 @@
                                     type="number"
                                     min="0"
                                     step="0.01"
-                                    class="w-24 sm:w-28 text-right"
+                                    class="w-24 shrink-0 text-right"
                                     placeholder="цена"
                                 />
                                 <button class="touch-target text-red-400 hover:text-red-600 p-1 shrink-0" @click="removeGood(i)">
@@ -443,8 +533,16 @@ import OrderStatusBadge from '@/Components/OrderStatusBadge.vue'
 import { statusColorClass } from '@/utils/orderStatusColors'
 import AddressInlinePicker from '@/Components/AddressInlinePicker.vue'
 import DeleteOrderModal from '@/Components/DeleteOrderModal.vue'
+import FormAlert from '@/Components/FormAlert.vue'
 import { useSubscription } from '@/composables/useSubscription'
 import { formatPhone, isFullNameComplete, isInCatalog as checkInCatalog } from '@/utils/phone'
+import {
+    validateOrderForm,
+    normalizeOrderFormFields,
+    fieldErrorsFromValidation,
+    validationAlertMessage,
+} from '@/utils/orderFormValidation'
+import { truncateLinkDisplay } from '@/utils/truncateLink'
 
 const { readOnly } = useSubscription()
 const page = usePage()
@@ -483,6 +581,13 @@ const editWarningOpen = ref(false)
 const deleteModalOpen = ref(false)
 const deletingOrder   = ref(false)
 const pickerRef       = ref(null)
+const fieldErrors     = ref({ full_name: false, phone: false, goods: false })
+const formAlert       = ref('')
+
+function clearValidationState() {
+    fieldErrors.value = { full_name: false, phone: false, goods: false }
+    formAlert.value = ''
+}
 
 const form = useForm({
     full_name:          props.order.full_name          ?? '',
@@ -497,6 +602,9 @@ const form = useForm({
     prices:             [...(props.order.prices        ?? [])],
     track_number:       props.order.track_number       ?? '',
     belpost_address_id: props.order.belpost_address_id ?? '',
+    comment:            props.order.comment            ?? '',
+    upsell:             props.order.upsell             ?? '',
+    cross_sell:         props.order.cross_sell         ?? '',
 })
 
 // Initial query for the picker pre-fills with current city + street
@@ -507,6 +615,7 @@ const pickerInitialQuery = computed(() =>
 function cancelEdit() {
     form.reset()
     editing.value = false
+    clearValidationState()
 }
 
 function startEdit() {
@@ -531,13 +640,24 @@ function confirmDeleteOrder() {
 }
 
 function saveEdit() {
-    // Validate house selection for belpost orders
+    const errors = validateOrderForm(form)
+    fieldErrors.value = fieldErrorsFromValidation(errors)
+    if (Object.keys(errors).length) {
+        formAlert.value = validationAlertMessage(errors)
+        return
+    }
+    formAlert.value = ''
+
     if (props.order.delivery_type === 'belpost' && pickerRef.value) {
         if (!pickerRef.value.validate()) return
     }
-    form.put(`/orders/${props.order.id}`, {
-        onSuccess: () => { editing.value = false },
-    })
+    form.transform(data => normalizeOrderFormFields(data))
+        .put(`/orders/${props.order.id}`, {
+            onSuccess: () => {
+                editing.value = false
+                clearValidationState()
+            },
+        })
 }
 
 function addGood() {
