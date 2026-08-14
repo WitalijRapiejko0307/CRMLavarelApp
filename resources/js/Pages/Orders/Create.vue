@@ -360,7 +360,7 @@ const form = useForm({
     comment:       '',
     upsell:        '',
     cross_sell:    '',
-    delivery_type: '',
+    delivery_type: 'belpost',
     city:              '',
     street:            '',
     building:          '',

@@ -35,6 +35,7 @@ Route::prefix('orders')->name('orders.')->group(function () {
     Route::post('/', [OrderController::class, 'store'])->name('store');
     Route::post('/refresh-tracking', [OrderController::class, 'refreshTracking'])->name('refreshTracking');
     Route::post('/cancel-tracking', [OrderController::class, 'cancelTracking'])->name('cancelTracking');
+    Route::patch('/bulk-status', [OrderController::class, 'bulkUpdateStatus'])->name('bulkUpdateStatus');
     Route::get('/{order}', [OrderController::class, 'show'])->name('show');
     Route::put('/{order}', [OrderController::class, 'update'])->name('update');
     Route::patch('/{order}/status', [OrderController::class, 'updateStatus'])->name('updateStatus');

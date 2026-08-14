@@ -123,6 +123,13 @@ class Order extends Model
         'Отдал заявку',
     ];
 
+    /** Statuses that require confirmation before bulk update (side effects in OrderObserver). */
+    public const BULK_CONFIRM_STATUSES = [
+        'Отправлено',
+        'Возврат',
+        'Завершен',
+    ];
+
     public const DELIVERY_TYPES = [
         'belpost'    => 'Белпочта',
         'europochta' => 'Европочта',
@@ -168,6 +175,7 @@ class Order extends Model
         'ops_id',
         'belpost_address_id',
         'mail_batch_id',
+        'created_at',
     ];
 
     protected $casts = [

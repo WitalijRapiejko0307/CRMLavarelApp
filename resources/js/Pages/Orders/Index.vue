@@ -80,6 +80,49 @@
             </div>
         </div>
 
+        <!-- Bulk result message -->
+        <div
+            v-if="bulkResultMessage"
+            class="mb-4 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-200 rounded-md px-4 py-3 text-sm"
+        >
+            {{ bulkResultMessage }}
+        </div>
+
+        <!-- Bulk status panel -->
+        <div
+            v-if="selectedCount > 0"
+            class="card mb-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4"
+        >
+            <span class="text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">
+                Выбрано: {{ selectedCount }}
+            </span>
+            <AppScrollSelect
+                v-model="bulkStatus"
+                :options="statuses"
+                placeholder="Новый статус"
+                class="sm:max-w-xs w-full"
+                :disabled="readOnly || bulkApplying"
+            />
+            <div class="flex flex-wrap items-center gap-2 sm:ml-auto">
+                <button
+                    type="button"
+                    class="btn-primary btn-sm"
+                    :disabled="!bulkStatus || readOnly || bulkApplying"
+                    @click="onBulkApplyClick"
+                >
+                    {{ bulkApplying ? 'Применяю…' : 'Применить' }}
+                </button>
+                <button
+                    type="button"
+                    class="btn-secondary btn-sm"
+                    :disabled="bulkApplying"
+                    @click="clearSelection"
+                >
+                    Снять выбор
+                </button>
+            </div>
+        </div>
+
         <ResponsiveList>
             <!-- Desktop table -->
             <template #table>
@@ -163,7 +206,17 @@
                     @click="goToOrder(order.id)"
                 >
                     <div class="flex items-start justify-between gap-2">
-                        <span class="text-gray-400 dark:text-gray-500 font-mono text-xs pt-1">#{{ order.id }}</span>
+                        <div class="flex items-start gap-2 min-w-0">
+                            <input
+                                type="checkbox"
+                                class="mt-1 shrink-0"
+                                :checked="isSelected(order.id)"
+                                :disabled="readOnly"
+                                @click.stop
+                                @change="toggleSelect(order.id)"
+                            />
+                            <span class="text-gray-400 dark:text-gray-500 font-mono text-xs pt-1">#{{ order.id }}</span>
+                        </div>
                         <div class="flex items-center gap-1">
                             <OrderStatusSelect
                                 :order-id="order.id"
@@ -247,11 +300,21 @@
             @cancel="closeDeleteModal"
             @confirm="confirmDeleteOrder"
         />
+
+        <BulkStatusConfirmModal
+            :open="confirmModalOpen"
+            :count="selectedCount"
+            :status="bulkStatus"
+            :warning="bulkStatusWarningText"
+            :applying="bulkApplying"
+            @cancel="confirmModalOpen = false"
+            @confirm="applyBulkStatus"
+        />
     </AppLayout>
 </template>
 
 <script setup>
-import { ref, computed, h, onMounted, onUnmounted } from 'vue'
+import { ref, computed, h, onMounted, onUnmounted, watch } from 'vue'
 import { Inertia } from '@inertiajs/inertia'
 import { Link, usePage } from '@inertiajs/inertia-vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
@@ -262,9 +325,11 @@ import AppScrollSelect from '@/Components/AppScrollSelect.vue'
 import DateInput from '@/Components/DateInput.vue'
 import OrderStatusSelect from '@/Components/OrderStatusSelect.vue'
 import DeleteOrderModal from '@/Components/DeleteOrderModal.vue'
+import BulkStatusConfirmModal from '@/Components/BulkStatusConfirmModal.vue'
 import { useSubscription } from '@/composables/useSubscription'
 import { useOrderFeed } from '@/composables/useOrderFeed'
 import { apiFetch } from '@/utils/api'
+import { bulkStatusWarning } from '@/utils/bulkStatusWarnings'
 import { formatDateDMY, isValidDateDMY, parseDateDMY } from '@/utils/date'
 import {
     useVueTable,
@@ -274,13 +339,14 @@ import {
 } from '@tanstack/vue-table'
 
 const props = defineProps({
-    orders:          Object,
-    filters:         Object,
-    statuses:        Array,
-    deliveryTypes:   Object,
-    isCallCenter:    { type: Boolean, default: false },
-    connectedStores: { type: Array, default: () => [] },
-    orderHandlers:   { type: Object, default: () => ({}) },
+    orders:              Object,
+    filters:             Object,
+    statuses:            Array,
+    bulkConfirmStatuses: { type: Array, default: () => [] },
+    deliveryTypes:       Object,
+    isCallCenter:        { type: Boolean, default: false },
+    connectedStores:     { type: Array, default: () => [] },
+    orderHandlers:       { type: Object, default: () => ({}) },
 })
 
 const { readOnly } = useSubscription()
@@ -325,7 +391,114 @@ async function confirmDeleteOrder() {
     }
 }
 
-// --- Tracking refresh ---
+// --- Bulk status ---
+const selectedIds       = ref(new Set())
+const bulkStatus        = ref('')
+const bulkApplying      = ref(false)
+const confirmModalOpen  = ref(false)
+const bulkResultMessage = ref('')
+
+const selectedCount = computed(() => selectedIds.value.size)
+
+const pageOrderIds = computed(() => props.orders.data.map(o => o.id))
+
+const allPageSelected = computed(() =>
+    pageOrderIds.value.length > 0
+    && pageOrderIds.value.every(id => selectedIds.value.has(id))
+)
+
+const somePageSelected = computed(() =>
+    pageOrderIds.value.some(id => selectedIds.value.has(id))
+)
+
+const bulkStatusWarningText = computed(() =>
+    bulkStatusWarning(bulkStatus.value, props.bulkConfirmStatuses)
+)
+
+function isSelected(id) {
+    return selectedIds.value.has(id)
+}
+
+function toggleSelect(id) {
+    const next = new Set(selectedIds.value)
+    if (next.has(id)) {
+        next.delete(id)
+    } else {
+        next.add(id)
+    }
+    selectedIds.value = next
+    bulkResultMessage.value = ''
+}
+
+function toggleSelectAllOnPage() {
+    const next = new Set(selectedIds.value)
+    if (allPageSelected.value) {
+        pageOrderIds.value.forEach(id => next.delete(id))
+    } else {
+        pageOrderIds.value.forEach(id => next.add(id))
+    }
+    selectedIds.value = next
+    bulkResultMessage.value = ''
+}
+
+function clearSelection() {
+    selectedIds.value = new Set()
+    bulkStatus.value = ''
+    bulkResultMessage.value = ''
+}
+
+function onBulkApplyClick() {
+    if (!bulkStatus.value || selectedCount.value === 0 || readOnly.value) return
+
+    if (props.bulkConfirmStatuses.includes(bulkStatus.value)) {
+        confirmModalOpen.value = true
+        return
+    }
+
+    applyBulkStatus()
+}
+
+async function applyBulkStatus() {
+    if (!bulkStatus.value || selectedCount.value === 0 || bulkApplying.value) return
+
+    bulkApplying.value = true
+    bulkResultMessage.value = ''
+
+    try {
+        const resp = await apiFetch('/orders/bulk-status', 'PATCH', {
+            order_ids: [...selectedIds.value],
+            status:    bulkStatus.value,
+        })
+        const data = await resp.json()
+
+        if (!resp.ok) {
+            bulkResultMessage.value = 'Не удалось обновить статус.'
+            return
+        }
+
+        const total = selectedCount.value
+        const updated = data.updated ?? 0
+        const failed = data.failed?.length ?? 0
+
+        confirmModalOpen.value = false
+        selectedIds.value = new Set()
+        bulkStatus.value = ''
+
+        bulkResultMessage.value = failed > 0
+            ? `Обновлено ${updated} из ${total}.`
+            : `Обновлено ${updated} заказов.`
+
+        Inertia.reload({ only: ['orders'], preserveScroll: true })
+    } finally {
+        bulkApplying.value = false
+    }
+}
+
+watch(() => props.orders.current_page, () => {
+    clearSelection()
+})
+
+// --- Order delete ---
 const cancellingTracking = ref(false)
 const trackingStatus = ref({
     status:      'idle',
@@ -530,6 +703,7 @@ function goToOrder(id) {
 }
 
 function goToPage(url) {
+    clearSelection()
     Inertia.get(url, {}, { preserveState: true })
 }
 
@@ -553,7 +727,31 @@ function formatGoods(goods, quantities) {
 const columnHelper = createColumnHelper()
 
 const columns = computed(() => {
+    void selectedIds.value.size
+
     const cols = [
+        columnHelper.display({
+            id: 'select',
+            header: () => h('input', {
+                type: 'checkbox',
+                checked: allPageSelected.value,
+                disabled: readOnly.value,
+                ref: (el) => {
+                    if (el) {
+                        el.indeterminate = somePageSelected.value && !allPageSelected.value
+                    }
+                },
+                onClick: (e) => e.stopPropagation(),
+                onChange: toggleSelectAllOnPage,
+            }),
+            cell: info => h('input', {
+                type: 'checkbox',
+                checked: selectedIds.value.has(info.row.original.id),
+                disabled: readOnly.value,
+                onClick: (e) => e.stopPropagation(),
+                onChange: () => toggleSelect(info.row.original.id),
+            }),
+        }),
         columnHelper.accessor('id', {
             header: '#',
             cell:   info => h('span', { class: 'text-gray-400 dark:text-gray-500 font-mono text-xs' }, '#' + info.getValue()),

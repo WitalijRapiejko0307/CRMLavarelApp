@@ -67,6 +67,27 @@ class OrderValidationTest extends TestCase
         ]);
     }
 
+    public function test_store_defaults_delivery_type_to_belpost(): void
+    {
+        $user = $this->createUser();
+
+        $response = $this->actingAs($user)->post('/orders', [
+            'full_name'  => 'Иванов Иван',
+            'phone'      => '291234567',
+            'status'     => 'Позвонить',
+            'goods'      => ['Товар А'],
+            'quantities' => [1],
+            'prices'     => [10],
+        ]);
+
+        $response->assertRedirect();
+
+        $this->assertDatabaseHas('orders', [
+            'tenant_id'     => $user->tenant_id,
+            'delivery_type' => 'belpost',
+        ]);
+    }
+
     public function test_store_rejects_single_word_name(): void
     {
         $user = $this->createUser();

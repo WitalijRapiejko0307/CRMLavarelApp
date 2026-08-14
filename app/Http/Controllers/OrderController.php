@@ -20,6 +20,7 @@ use App\Support\CsvOrderReader;
 use App\Support\PhoneNormalizer;
 use App\Support\ProductLinkResolver;
 use Carbon\Carbon;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -92,6 +93,7 @@ class OrderController extends Controller
 
         $data['tenant_id'] = Auth::user()->tenant_id;
         $data['source']  ??= 'manual';
+        $data['delivery_type'] ??= 'belpost';
         $data['phone'] = PhoneNormalizer::normalize($data['phone']);
 
         $order = Order::create($data);
@@ -170,6 +172,11 @@ class OrderController extends Controller
                         $parsed = $this->parseImportCreatedAt($value);
                         if ($parsed !== null) {
                             $data['created_at'] = $parsed;
+                        } else {
+                            $warnings[] = [
+                                'row'     => $rowNum,
+                                'message' => "Не удалось распознать дату «{$value}», использована текущая дата",
+                            ];
                         }
                         continue;
                     }
@@ -319,8 +326,9 @@ class OrderController extends Controller
         return Inertia::render('Orders/Index', [
             'orders'          => $orders,
             'filters'         => $request->only('search', 'status', 'date_from', 'date_to', 'store_id'),
-            'statuses'        => $tenant->isCallCenter() ? Order::CALL_CENTER_STATUSES : Order::STATUSES,
-            'deliveryTypes'   => Order::DELIVERY_TYPES,
+            'statuses'             => $tenant->isCallCenter() ? Order::CALL_CENTER_STATUSES : Order::STATUSES,
+            'bulkConfirmStatuses'  => Order::BULK_CONFIRM_STATUSES,
+            'deliveryTypes'        => Order::DELIVERY_TYPES,
             'isCallCenter'    => $tenant->isCallCenter(),
             'connectedStores' => $connectedStores,
             'orderHandlers'   => $orderHandlers,
@@ -425,6 +433,47 @@ class OrderController extends Controller
         ]);
 
         return back()->with('message', 'Статус обновлён.');
+    }
+
+    public function bulkUpdateStatus(Request $request): JsonResponse
+    {
+        $allowed = $this->isCallCenter() ? Order::CALL_CENTER_STATUSES : Order::STATUSES;
+
+        $data = $request->validate([
+            'order_ids'   => ['required', 'array', 'min:1', 'max:100'],
+            'order_ids.*' => ['integer', 'distinct'],
+            'status'      => ['required', 'in:' . implode(',', $allowed)],
+        ]);
+
+        $updated = 0;
+        $failed  = [];
+
+        foreach ($data['order_ids'] as $id) {
+            $order = Order::find($id);
+
+            if (!$order) {
+                $failed[] = ['id' => $id, 'reason' => 'not_found'];
+                continue;
+            }
+
+            try {
+                $this->authorize('updateStatus', $order);
+            } catch (AuthorizationException) {
+                $failed[] = ['id' => $id, 'reason' => 'forbidden'];
+                continue;
+            }
+
+            $order->update([
+                'status'                  => $data['status'],
+                'last_updated_by_user_id' => Auth::id(),
+            ]);
+            $updated++;
+        }
+
+        return response()->json([
+            'updated' => $updated,
+            'failed'  => $failed,
+        ]);
     }
 
     public function updateDeliveryType(Request $request, Order $order)
