@@ -190,6 +190,12 @@ class Order extends Model
     protected static function booted(): void
     {
         static::addGlobalScope(new TenantScope());
+
+        static::creating(function (Order $order) {
+            if ($order->delivery_type === null || $order->delivery_type === '') {
+                $order->delivery_type = 'belpost';
+            }
+        });
     }
 
     public function tenant(): BelongsTo

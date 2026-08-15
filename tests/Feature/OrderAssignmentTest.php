@@ -55,5 +55,6 @@ class OrderAssignmentTest extends TestCase
 
         $order = Order::withoutGlobalScopes()->latest('id')->first();
         $this->assertSame($cc->id, $order->call_center_tenant_id);
+        $this->assertSame('belpost', $order->delivery_type);
     }
 }

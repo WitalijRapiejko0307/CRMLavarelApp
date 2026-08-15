@@ -65,6 +65,49 @@ class OrderCsvImportTest extends TestCase
         $this->assertSame([3, 3], $order->quantities);
         $this->assertSame([135, 123], $order->prices);
         $this->assertSame('belpost', $order->delivery_type);
+        $this->assertSame('2026-07-15', $order->created_at->format('Y-m-d'));
+    }
+
+    public function test_import_preserves_created_at_with_time(): void
+    {
+        $user = $this->createActiveTenantUser();
+
+        $csv = implode("\n", [
+            '№ п/п;Дата создания;ФИО;Товар;Штук;Цена за ед.',
+            '42;15.07.2026 14:30;Иванов Иван Иванович;Товар;1;100',
+        ]);
+        $file = UploadedFile::fake()->createWithContent('orders.csv', $csv);
+
+        $response = $this->actingAs($user)->post('/orders/import-csv', ['file' => $file]);
+
+        $response->assertOk();
+        $response->assertJson(['success' => true, 'created' => 1, 'errors' => 0]);
+
+        $order = Order::withoutGlobalScopes()->first();
+        $this->assertSame('2026-07-15 14:30:00', $order->created_at->format('Y-m-d H:i:s'));
+    }
+
+    public function test_unparseable_created_at_adds_warning(): void
+    {
+        $user = $this->createActiveTenantUser();
+
+        $csv = implode("\n", [
+            '№ п/п;Дата создания;ФИО;Товар;Штук;Цена за ед.',
+            '43;not-a-date;Петров Петр Петрович;Товар;1;50',
+        ]);
+        $file = UploadedFile::fake()->createWithContent('orders.csv', $csv);
+
+        $response = $this->actingAs($user)->post('/orders/import-csv', ['file' => $file]);
+
+        $response->assertOk();
+        $response->assertJson(['success' => true, 'created' => 1, 'errors' => 0]);
+
+        $payload = $response->json();
+        $this->assertCount(1, $payload['warnings']);
+        $this->assertStringContainsString('not-a-date', $payload['warnings'][0]['message']);
+
+        $order = Order::withoutGlobalScopes()->first();
+        $this->assertNotNull($order);
     }
 
     public function test_duplicate_external_id_is_skipped(): void
@@ -157,5 +200,25 @@ class OrderCsvImportTest extends TestCase
 
         $order = Order::withoutGlobalScopes()->first();
         $this->assertSame('Недозвон1', $order->status);
+        $this->assertSame('belpost', $order->delivery_type);
+    }
+
+    public function test_import_preserves_explicit_europochta(): void
+    {
+        $user = $this->createActiveTenantUser();
+
+        $csv = implode("\n", [
+            '№ п/п;ФИО;Товар;Штук;Цена за ед.;Вид доставки',
+            '56;Иванов Иван Иванович;Товар;1;100;Европочта',
+        ]);
+        $file = UploadedFile::fake()->createWithContent('orders.csv', $csv);
+
+        $response = $this->actingAs($user)->post('/orders/import-csv', ['file' => $file]);
+
+        $response->assertOk();
+        $response->assertJson(['success' => true, 'created' => 1, 'errors' => 0]);
+
+        $order = Order::withoutGlobalScopes()->first();
+        $this->assertSame('europochta', $order->delivery_type);
     }
 }

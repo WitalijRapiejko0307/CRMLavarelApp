@@ -157,14 +157,14 @@ apiFetch('/orders/bulk-status', 'PATCH', {
 
 ## Задача 2: «Белпочта» по умолчанию
 
-1. [`Create.vue`](../resources/js/Pages/Orders/Create.vue) — `delivery_type: 'belpost'` вместо `''` (select сразу показывает «Белпочта», picker адреса доступен).
-2. [`OrderController::store()`](../app/Http/Controllers/OrderController.php) — после validate:
+1. [`Create.vue`](../resources/js/Pages/Orders/Create.vue) — `delivery_type: 'belpost'` (select сразу показывает «Белпочта»).
+2. [`Order.php`](../app/Models/Order.php) — hook `creating`: если `delivery_type` пустой → `belpost`.
 
-```php
-$data['delivery_type'] ??= 'belpost';
-```
+Default применяется ко **всем** источникам `Order::create()`: ручное создание, webhook, CSV-импорт. Явно указанная доставка (Европочта и т.д.) не перезаписывается.
 
----
+Существующие заказы с `delivery_type = null` в БД **не** мигрируются.
+
+См. также: [`default-delivery-belpost-all-sources.md`](../fix/default-delivery-belpost-all-sources.md).
 
 ## Тесты
 

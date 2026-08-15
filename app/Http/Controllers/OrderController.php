@@ -93,7 +93,6 @@ class OrderController extends Controller
 
         $data['tenant_id'] = Auth::user()->tenant_id;
         $data['source']  ??= 'manual';
-        $data['delivery_type'] ??= 'belpost';
         $data['phone'] = PhoneNormalizer::normalize($data['phone']);
 
         $order = Order::create($data);
