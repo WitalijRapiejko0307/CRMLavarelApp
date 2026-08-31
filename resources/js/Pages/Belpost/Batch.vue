@@ -9,6 +9,12 @@
                     <span class="text-sm text-muted whitespace-nowrap">
                         Заявок «Отправить»: <strong>{{ eligibleOrders.length }}</strong>
                     </span>
+                    <template v-if="eligibleOrders.length === 0">
+                        <Link href="/orders/create" class="btn-secondary btn-sm">+ Новый заказ</Link>
+                        <Link href="/orders" class="text-sm text-indigo-600 dark:text-indigo-400 hover:underline">
+                            К заказам
+                        </Link>
+                    </template>
                 </template>
             </PageHeader>
         </template>
@@ -55,7 +61,7 @@
                         </div>
                         <button
                             class="btn-primary w-full justify-center"
-                            :disabled="creating || !newBatchType || readOnly"
+                            :disabled="creating || !newBatchType || readOnly || !belpostReady"
                             @click="createBatch"
                         >
                             {{ creating ? 'Создаю…' : 'Создать партию на Белпочте' }}
@@ -152,10 +158,13 @@
                             </button>
                         </div>
 
-                        <div v-if="eligibleOrders.length === 0" class="text-sm text-gray-400 dark:text-gray-500 py-4 text-center">
+                        <div v-if="eligibleOrders.length === 0" class="text-sm text-gray-400 dark:text-gray-500 py-4 text-center space-y-2">
                             <p class="italic">Нет заявок со статусом «Отправить» и доставкой «Белпочта»</p>
-                            <p v-if="showBelpostHints" class="mt-1 not-italic">
-                                Переведите заказ в статус «Отправить» и укажите доставку Белпочта.
+                            <p class="not-italic">
+                                <Link href="/orders/create" class="text-indigo-600 dark:text-indigo-400 font-medium hover:underline">Создайте заказ</Link>
+                                или откройте
+                                <Link href="/orders" class="text-indigo-600 dark:text-indigo-400 font-medium hover:underline">список заказов</Link>
+                                и переведите в статус «Отправить».
                             </p>
                         </div>
 
@@ -518,7 +527,7 @@ function selectBatch(b) {
 
 // Create batch
 async function createBatch() {
-    if (readOnly.value) return
+    if (readOnly.value || !belpostReady.value) return
     creating.value    = true
     createError.value = ''
 

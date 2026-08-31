@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Services\OnboardingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
@@ -25,11 +26,15 @@ class LoginController extends Controller
         if (Auth::attempt($credentials, $request->boolean('remember'))) {
             $request->session()->regenerate();
 
-            $user = Auth::user();
+            $user = Auth::user()->loadMissing('tenant');
 
-            return $user->isSuperAdmin()
-                ? redirect()->intended('/admin/tenants')
-                : redirect()->intended('/orders');
+            if ($user->isSuperAdmin()) {
+                return redirect()->intended('/admin/tenants');
+            }
+
+            $fallback = app(OnboardingService::class)->loginFallbackHref($user);
+
+            return redirect()->intended($fallback);
         }
 
         return back()->withErrors([

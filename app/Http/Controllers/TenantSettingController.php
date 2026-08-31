@@ -83,9 +83,9 @@ class TenantSettingController extends Controller
                 ],
             ],
             'system' => [
-                'label' => 'Системные',
+                'label' => 'Заявки с сайта',
                 'keys'  => [
-                    'webhook_secret' => ['Webhook-секрет', 'password', '(авто)', 'Вставьте в заголовок X-Webhook-Token на лендинге при POST на /api/webhook/lead'],
+                    'webhook_secret' => ['Webhook-секрет', 'password', '(авто)', 'Передайте секрет в заголовке X-Webhook-Token на лендинге'],
                 ],
             ],
         ];
@@ -174,7 +174,13 @@ class TenantSettingController extends Controller
             'canEditSettings'  => $canEdit,
             'theme'            => Auth::user()->theme ?? 'system',
             'connectionData'   => $connectionData,
+            'webhook_url'      => $canView ? static::webhookUrl() : null,
         ]);
+    }
+
+    public static function webhookUrl(): string
+    {
+        return rtrim((string) config('app.url'), '/') . '/api/webhook/lead';
     }
 
     /**
@@ -284,6 +290,28 @@ class TenantSettingController extends Controller
         $secret   = bin2hex(random_bytes(24));
 
         TenantSetting::put($tenantId, 'webhook_secret', $secret);
+
+        return response()->json(['success' => true, 'secret' => $secret]);
+    }
+
+    /**
+     * POST /settings/reveal-webhook-secret
+     * Returns the current decrypted webhook secret. Admin only; allowed on expired trial.
+     */
+    public function revealWebhookSecret(): \Illuminate\Http\JsonResponse
+    {
+        Gate::authorize('manage-settings');
+
+        $row = TenantSetting::withoutGlobalScopes()
+            ->where('tenant_id', Auth::user()->tenant_id)
+            ->where('key', 'webhook_secret')
+            ->first();
+
+        $secret = $row ? (string) $row->value : '';
+
+        if ($secret === '') {
+            return response()->json(['success' => false, 'message' => 'Секрет ещё не создан'], 404);
+        }
 
         return response()->json(['success' => true, 'secret' => $secret]);
     }

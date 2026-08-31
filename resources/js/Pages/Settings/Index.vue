@@ -48,7 +48,7 @@
             <!-- Store: connect to call center -->
             <div v-if="canViewSettings && isStore" class="card">
                 <button
-                    v-if="settingsFocus"
+                    v-if="collapseOptionalGroups"
                     type="button"
                     class="w-full flex items-center justify-between text-left"
                     @click="toggleExtra('call_center')"
@@ -62,11 +62,11 @@
                 >
                     Колл-центр
                 </h2>
-                <p v-if="settingsFocus && !extraOpen.call_center" class="text-xs text-muted mt-2">
-                    подключите позже
+                <p v-if="collapseOptionalGroups && !extraOpen.call_center" class="text-xs text-muted mt-2">
+                    по желанию
                 </p>
 
-                <div v-show="!settingsFocus || extraOpen.call_center" class="mt-4">
+                <div v-show="!collapseOptionalGroups || extraOpen.call_center" class="mt-4">
 
                 <div v-if="activeConnection" class="mb-4 p-3 rounded-md bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-sm">
                     <p class="font-medium text-green-800 dark:text-green-200">
@@ -236,7 +236,12 @@
                 </div>
 
                 <!-- Setting group cards -->
-                <div v-for="(group, groupKey) in schema" :key="groupKey" class="card">
+                <div
+                    v-for="(group, groupKey) in schema"
+                    :id="'settings-' + groupKey"
+                    :key="groupKey"
+                    class="card scroll-mt-28"
+                >
                     <button
                         v-if="isGroupCollapsible(groupKey)"
                         type="button"
@@ -253,13 +258,106 @@
                         {{ group.label }}
                     </h2>
                     <p v-if="!isGroupOpen(groupKey)" class="text-xs text-muted">
-                        подключите позже
+                        по желанию
                     </p>
 
                     <div v-show="isGroupOpen(groupKey)" class="space-y-4">
                         <template v-for="(meta, key) in group.keys" :key="key">
+                            <div v-if="isVisible(meta) && key === 'webhook_secret'" class="setting-row space-y-4">
+                                <div>
+                                    <p class="label mb-1">URL для заявок</p>
+                                    <div class="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+                                        <code class="text-sm font-mono break-all bg-gray-100 dark:bg-gray-800 px-3 py-2 rounded min-w-0">
+                                            {{ webhookUrl || '—' }}
+                                        </code>
+                                        <button
+                                            type="button"
+                                            class="btn-secondary btn-sm"
+                                            :disabled="!webhookUrl"
+                                            @click="copyWebhookUrl"
+                                        >
+                                            {{ copiedField === 'url' ? 'Скопировано' : 'Копировать' }}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="label">{{ meta[0] }}</label>
+                                    <div class="flex flex-col sm:flex-row gap-2 mt-1 items-stretch sm:items-center">
+                                        <div class="relative flex-1 min-w-0">
+                                            <input
+                                                :type="webhookSecretVisible ? 'text' : 'password'"
+                                                class="input pr-10"
+                                                :value="webhookSecretDisplay"
+                                                readonly
+                                                autocomplete="off"
+                                            />
+                                            <button
+                                                v-if="canEditSettings"
+                                                type="button"
+                                                class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                                :disabled="revealingSecret || !hasWebhookSecret"
+                                                tabindex="-1"
+                                                @click="toggleRevealWebhookSecret"
+                                            >
+                                                <span v-if="webhookSecretVisible">🙈</span>
+                                                <span v-else>👁</span>
+                                            </button>
+                                        </div>
+                                        <div v-if="canEditSettings" class="flex flex-wrap gap-2">
+                                            <button
+                                                type="button"
+                                                class="btn-secondary btn-sm"
+                                                :disabled="revealingSecret || !hasWebhookSecret"
+                                                @click="copyWebhookSecret"
+                                            >
+                                                {{ copiedField === 'secret' ? 'Скопировано' : 'Копировать' }}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                class="btn-secondary btn-sm"
+                                                :disabled="generating || readOnly"
+                                                @click="generateSecret"
+                                            >
+                                                {{ generating ? '…' : 'Сгенерировать' }}
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <p v-if="webhookJustGenerated" class="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                                        Скопируйте сейчас, больше не отобразится.
+                                    </p>
+                                    <p v-else-if="meta[3]" class="text-xs text-gray-400 dark:text-gray-500 mt-1">{{ meta[3] }}</p>
+                                    <p v-if="hasWebhookSecret && !webhookSecretVisible && !webhookJustGenerated"
+                                       class="text-xs text-green-600 dark:text-green-400 mt-1">
+                                        ✓ Сохранено
+                                    </p>
+                                </div>
+
+                                <details class="mt-1">
+                                    <summary class="text-xs text-indigo-600 dark:text-indigo-400 cursor-pointer select-none hover:text-indigo-700 dark:hover:text-indigo-300">
+                                        Пример PHP для сайта
+                                    </summary>
+                                    <div class="mt-2 text-xs text-gray-600 dark:text-gray-400 space-y-2">
+                                        <div class="flex items-start justify-between gap-2">
+                                            <p>
+                                                Вставьте в обработчик формы вместо Google Apps Script.
+                                                Секрет — в заголовке <code class="font-mono">X-Webhook-Token</code>.
+                                            </p>
+                                            <button
+                                                type="button"
+                                                class="btn-secondary btn-sm flex-shrink-0"
+                                                @click="copyWebhookExample"
+                                            >
+                                                {{ copiedField === 'example' ? 'Скопировано' : 'Копировать' }}
+                                            </button>
+                                        </div>
+                                        <pre class="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md p-3 overflow-x-auto font-mono text-xs text-gray-700 dark:text-gray-300 whitespace-pre">{{ webhookExample }}</pre>
+                                    </div>
+                                </details>
+                            </div>
+
                             <!-- depends_on: hide if condition not met -->
-                            <div v-if="isVisible(meta)" class="setting-row">
+                            <div v-else-if="isVisible(meta)" class="setting-row">
                                 <label class="label">{{ meta[0] }}</label>
 
                                 <!-- toggle -->
@@ -328,17 +426,6 @@
                                             <span v-else>👁</span>
                                         </button>
                                     </div>
-
-                                    <!-- Generate button for webhook_secret -->
-                                    <button
-                                        v-if="key === 'webhook_secret' && canEditSettings"
-                                        type="button"
-                                        class="btn-secondary text-sm whitespace-nowrap justify-center sm:w-auto"
-                                        :disabled="generating || readOnly"
-                                        @click="generateSecret"
-                                    >
-                                        {{ generating ? '…' : 'Сгенерировать' }}
-                                    </button>
                                 </div>
 
                                 <!-- Hint -->
@@ -395,9 +482,6 @@
                 </div>
 
                 <div v-if="canEditSettings" class="flex justify-end gap-3">
-                    <p v-if="saved" class="text-sm text-green-600 dark:text-green-400 flex items-center gap-1 mr-auto">
-                        ✓ Настройки сохранены
-                    </p>
                     <button type="submit" class="btn-primary" :disabled="saving || readOnly">
                         {{ saving ? 'Сохраняю…' : 'Сохранить настройки' }}
                     </button>
@@ -419,7 +503,7 @@ import { useOnboarding } from '@/composables/useOnboarding'
 import { apiFetch } from '@/utils/api'
 
 const { readOnly } = useSubscription()
-const { dismissed, settingsFocus, canSkipOptional } = useOnboarding()
+const { dismissed, canSkipOptional, visible, currentStep } = useOnboarding()
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 const props = defineProps({
@@ -430,6 +514,7 @@ const props = defineProps({
     canEditSettings: { type: Boolean, default: false },
     theme:             { type: String, default: 'system' },
     connectionData:    { type: Object, default: () => ({}) },
+    webhook_url:       { type: String, default: '' },
 })
 
 const page = usePage()
@@ -448,14 +533,23 @@ const includeExistingActive = ref(false)
 const connectionBusy = ref(false)
 const extraOpen = reactive({ call_center: false })
 const expandedGroups = reactive({})
+const ALWAYS_OPEN_GROUPS = ['shop', 'belpost']
+
+const collapseOptionalGroups = computed(() =>
+    visible.value && currentStep.value !== 'other'
+)
+
+function isGroupAlwaysOpen(groupKey) {
+    return ALWAYS_OPEN_GROUPS.includes(groupKey)
+}
 
 function isGroupCollapsible(groupKey) {
-    return settingsFocus.value && groupKey !== 'belpost'
+    return collapseOptionalGroups.value && !isGroupAlwaysOpen(groupKey)
 }
 
 function isGroupOpen(groupKey) {
-    if (groupKey === 'belpost') return true
-    if (!settingsFocus.value) return true
+    if (isGroupAlwaysOpen(groupKey)) return true
+    if (!collapseOptionalGroups.value) return true
     return !!expandedGroups[groupKey]
 }
 
@@ -591,8 +685,47 @@ const form = reactive((() => {
 
 const visibleKeys = reactive({})
 const saving      = ref(false)
-const saved       = ref(false)
 const generating  = ref(false)
+const revealingSecret = ref(false)
+const revealedWebhookSecret = ref('')
+const webhookSecretVisible = ref(false)
+const webhookJustGenerated = ref(false)
+const copiedField = ref('')
+let copiedTimer = null
+
+const webhookUrl = computed(() => props.webhook_url || '')
+const hasWebhookSecret = computed(() =>
+    !!secretPreviewsLocal.value.webhook_secret || !!revealedWebhookSecret.value
+)
+const webhookSecretDisplay = computed(() => {
+    if (webhookSecretVisible.value && revealedWebhookSecret.value) {
+        return revealedWebhookSecret.value
+    }
+    return secretPreviewsLocal.value.webhook_secret || ''
+})
+const webhookExample = computed(() => {
+    const url = webhookUrl.value || 'https://example.com/api/webhook/lead'
+    return [
+        '// --- ОТПРАВКА ЗАЯВКИ В CRM ---',
+        '$formData = [',
+        "    'name'    => $name ?? '',",
+        "    'offer'   => $offer ?? '',",
+        "    'phone'   => $phone ?? '',",
+        "    'options' => $options ?? 0,",
+        "    'source'  => 'site',",
+        '];',
+        '',
+        `$crmUrl = '${url}';`,
+        "$token  = 'СЮДА_СЕКРЕТ'; // скопируйте секрет кнопкой выше",
+        '',
+        '$dataString = json_encode($formData, JSON_UNESCAPED_UNICODE);',
+        'exec("curl -s -X POST'
+            + " -H 'Content-Type: application/json'"
+            + " -H 'X-Webhook-Token: $token'"
+            + " -d '$dataString' '$crmUrl'"
+            + ' > /dev/null 2>&1 &");',
+    ].join('\n')
+})
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -649,6 +782,9 @@ function save() {
 
     for (const group of Object.values(props.schema)) {
         for (const [key, meta] of Object.entries(group.keys)) {
+            if (key === 'webhook_secret') {
+                continue
+            }
             const type = meta[1]
             const raw  = form[key]
 
@@ -690,26 +826,95 @@ function save() {
                     }
                 }
             }
-            saved.value = true
-            setTimeout(() => { saved.value = false }, 3000)
         },
         onFinish: () => { saving.value = false },
     })
 }
 
-// ── Generate webhook secret ───────────────────────────────────────────────────
+// ── Webhook secret ────────────────────────────────────────────────────────────
+function markCopied(field) {
+    copiedField.value = field
+    clearTimeout(copiedTimer)
+    copiedTimer = setTimeout(() => { copiedField.value = '' }, 2000)
+}
+
+async function copyText(value, field) {
+    if (!value) return
+    try {
+        await navigator.clipboard.writeText(value)
+        markCopied(field)
+    } catch {
+        // fallback silent
+    }
+}
+
+function copyWebhookUrl() {
+    copyText(webhookUrl.value, 'url')
+}
+
+function copyWebhookExample() {
+    copyText(webhookExample.value, 'example')
+}
+
+async function fetchWebhookSecret() {
+    if (revealedWebhookSecret.value) {
+        return revealedWebhookSecret.value
+    }
+    revealingSecret.value = true
+    try {
+        const resp = await apiFetch('/settings/reveal-webhook-secret', 'POST')
+        const data = await resp.json()
+        if (data.success && data.secret) {
+            revealedWebhookSecret.value = data.secret
+            return data.secret
+        }
+    } finally {
+        revealingSecret.value = false
+    }
+    return ''
+}
+
+async function toggleRevealWebhookSecret() {
+    if (webhookSecretVisible.value) {
+        webhookSecretVisible.value = false
+        webhookJustGenerated.value = false
+        return
+    }
+    const secret = await fetchWebhookSecret()
+    if (secret) {
+        webhookSecretVisible.value = true
+    }
+}
+
+async function copyWebhookSecret() {
+    const secret = webhookSecretVisible.value && revealedWebhookSecret.value
+        ? revealedWebhookSecret.value
+        : await fetchWebhookSecret()
+    if (secret) {
+        await copyText(secret, 'secret')
+    }
+}
+
 async function generateSecret() {
     if (!props.canEditSettings || readOnly.value) return
+    if (hasWebhookSecret.value) {
+        if (!window.confirm('Старый секрет перестанет работать. Сгенерировать новый?')) {
+            return
+        }
+    }
     generating.value = true
     try {
         const resp = await apiFetch('/settings/generate-webhook-secret', 'POST')
         const data = await resp.json()
         if (data.success) {
-            // Show full secret once in the form; store only a mask for the "saved" indicator
-            form['webhook_secret'] = data.secret
-            secretPreviewsLocal.value['webhook_secret'] = maskClientSecret(data.secret)
-            delete currentValues.value['webhook_secret']
-            visibleKeys['webhook_secret'] = true
+            revealedWebhookSecret.value = data.secret
+            secretPreviewsLocal.value.webhook_secret = maskClientSecret(data.secret)
+            delete currentValues.value.webhook_secret
+            if (form.webhook_secret !== undefined) {
+                form.webhook_secret = ''
+            }
+            webhookSecretVisible.value = true
+            webhookJustGenerated.value = true
         }
     } finally {
         generating.value = false

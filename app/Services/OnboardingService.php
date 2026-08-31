@@ -62,7 +62,7 @@ class OnboardingService
                 'title' => 'Настройки Белпочты',
                 'href'  => '/settings',
                 'done'  => $settingsDone,
-                'hint'  => 'Укажите токен, ЭЛС, срок хранения и email отправителя.',
+                'hint'  => 'Укажите токен, ЭЛС и email отправителя.',
             ];
         }
 
@@ -110,6 +110,7 @@ class OnboardingService
         $visible = !$dismissed && !$allDone;
         $settingsFocus = $isAdmin && !$settingsDone && !$dismissed;
         $canSkipOptional = $isAdmin && $coreComplete && !$otherDone && !$dismissed;
+        $showWelcome = $visible && $user->onboarding_welcome_seen_at === null;
 
         return $this->payload(
             $visible,
@@ -121,8 +122,26 @@ class OnboardingService
             $settingsFocus,
             $belpostReady,
             $completedCount,
-            count($steps)
+            count($steps),
+            $showWelcome
         );
+    }
+
+    public function loginFallbackHref(User $user): string
+    {
+        $payload = $this->forUser($user);
+
+        if (!$payload || !$payload['visible'] || !$payload['current_step']) {
+            return '/orders';
+        }
+
+        foreach ($payload['steps'] as $step) {
+            if ($step['id'] === $payload['current_step'] && !empty($step['href'])) {
+                return $step['href'];
+            }
+        }
+
+        return '/orders';
     }
 
     /**
@@ -139,7 +158,8 @@ class OnboardingService
         bool $settingsFocus,
         bool $belpostReady,
         int $completedCount = 0,
-        int $total = 0
+        int $total = 0,
+        bool $showWelcome = false
     ): array {
         return [
             'visible'            => $visible,
@@ -152,6 +172,7 @@ class OnboardingService
             'optional_skipped'   => $optionalSkipped,
             'settings_focus'     => $settingsFocus,
             'belpost_ready'      => $belpostReady,
+            'show_welcome'       => $showWelcome,
         ];
     }
 

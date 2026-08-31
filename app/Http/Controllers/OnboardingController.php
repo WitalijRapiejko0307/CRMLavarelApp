@@ -43,4 +43,16 @@ class OnboardingController extends Controller
 
         return back();
     }
+
+    public function welcomeSeen(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+
+        if ($user->onboarding_welcome_seen_at === null) {
+            $user->onboarding_welcome_seen_at = now();
+            $user->save();
+        }
+
+        return back();
+    }
 }

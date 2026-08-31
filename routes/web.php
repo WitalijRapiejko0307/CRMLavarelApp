@@ -87,6 +87,7 @@ Route::prefix('onboarding')->name('onboarding.')->middleware(['auth', 'tenant'])
     Route::post('/dismiss', [OnboardingController::class, 'dismiss'])->name('dismiss');
     Route::post('/restore', [OnboardingController::class, 'restore'])->name('restore');
     Route::post('/skip-optional', [OnboardingController::class, 'skipOptional'])->name('skipOptional');
+    Route::post('/welcome-seen', [OnboardingController::class, 'welcomeSeen'])->name('welcomeSeen');
 });
 
 // Settings (Phase 5)
@@ -95,6 +96,7 @@ Route::prefix('settings')->name('settings.')->group(function () {
     Route::patch('/theme', [TenantSettingController::class, 'updateTheme'])->name('theme');
     Route::post('/', [TenantSettingController::class, 'update'])->name('update');
     Route::post('/generate-webhook-secret', [TenantSettingController::class, 'generateWebhookSecret'])->name('generateWebhookSecret');
+    Route::post('/reveal-webhook-secret', [TenantSettingController::class, 'revealWebhookSecret'])->name('revealWebhookSecret');
     Route::post('/regenerate-connection-code', [ConnectionController::class, 'regenerateConnectionCode'])->name('regenerateConnectionCode');
 });
 

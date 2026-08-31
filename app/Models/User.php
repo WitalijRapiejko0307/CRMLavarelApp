@@ -23,6 +23,7 @@ class User extends Authenticatable
         'tracking_auto_seen_at',
         'onboarding_dismissed_at',
         'onboarding_skip_optional_at',
+        'onboarding_welcome_seen_at',
     ];
 
     protected $hidden = [
@@ -33,8 +34,9 @@ class User extends Authenticatable
     protected $casts = [
         'email_verified_at'           => 'datetime',
         'tracking_auto_seen_at'       => 'datetime',
-        'onboarding_dismissed_at'     => 'datetime',
-        'onboarding_skip_optional_at' => 'datetime',
+        'onboarding_dismissed_at'      => 'datetime',
+        'onboarding_skip_optional_at'  => 'datetime',
+        'onboarding_welcome_seen_at'   => 'datetime',
     ];
 
     public function tenant()

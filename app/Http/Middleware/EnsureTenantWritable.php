@@ -41,8 +41,16 @@ class EnsureTenantWritable
             return true;
         }
 
-        if ($request->is('onboarding/dismiss', 'onboarding/restore', 'onboarding/skip-optional')
-            && $request->isMethod('POST')) {
+        if ($request->is(
+            'onboarding/dismiss',
+            'onboarding/restore',
+            'onboarding/skip-optional',
+            'onboarding/welcome-seen'
+        ) && $request->isMethod('POST')) {
+            return true;
+        }
+
+        if ($request->is('settings/reveal-webhook-secret') && $request->isMethod('POST')) {
             return true;
         }
 

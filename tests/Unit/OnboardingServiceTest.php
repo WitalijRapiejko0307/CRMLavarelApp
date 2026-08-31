@@ -80,12 +80,14 @@ class OnboardingServiceTest extends TestCase
         $payload = $this->service->forUser($user->fresh('tenant'));
 
         $this->assertTrue($payload['visible']);
+        $this->assertTrue($payload['show_welcome']);
         $this->assertSame('settings', $payload['current_step']);
         $this->assertSame(0, $payload['completed_count']);
         $this->assertSame(3, $payload['total']);
         $this->assertTrue($payload['settings_focus']);
         $this->assertFalse($payload['belpost_ready']);
         $this->assertSame(['settings', 'products', 'belpost'], array_column($payload['steps'], 'id'));
+        $this->assertStringNotContainsString('срок хранения', $payload['steps'][0]['hint']);
         $this->assertStringNotContainsString('secret-token', json_encode($payload));
         $this->assertStringNotContainsString('auto-secret', json_encode($payload));
     }
@@ -213,5 +215,55 @@ class OnboardingServiceTest extends TestCase
         $this->assertFalse($payload['visible']);
         $this->assertTrue($payload['dismissed']);
         $this->assertSame('settings', $payload['current_step']);
+        $this->assertFalse($payload['show_welcome']);
+    }
+
+    public function test_welcome_seen_hides_modal_but_keeps_checklist(): void
+    {
+        $user = $this->createStoreUser();
+        $user->onboarding_welcome_seen_at = now();
+        $user->save();
+
+        $payload = $this->service->forUser($user->fresh('tenant'));
+
+        $this->assertTrue($payload['visible']);
+        $this->assertFalse($payload['show_welcome']);
+        $this->assertSame('settings', $payload['current_step']);
+    }
+
+    public function test_login_fallback_follows_current_step(): void
+    {
+        $user = $this->createStoreUser();
+        TenantSetting::put($user->tenant_id, 'shelf_life', '10');
+
+        $this->assertSame(
+            '/settings',
+            $this->service->loginFallbackHref($user->fresh('tenant'))
+        );
+
+        $this->fillBelpostSettings($user);
+        $this->assertSame(
+            '/products',
+            $this->service->loginFallbackHref($user->fresh('tenant'))
+        );
+
+        $this->addProduct($user);
+        $this->assertSame(
+            '/belpost',
+            $this->service->loginFallbackHref($user->fresh('tenant'))
+        );
+
+        $this->addBatch($user);
+        $this->assertSame(
+            '/settings',
+            $this->service->loginFallbackHref($user->fresh('tenant'))
+        );
+
+        $user->onboarding_skip_optional_at = now();
+        $user->save();
+        $this->assertSame(
+            '/orders',
+            $this->service->loginFallbackHref($user->fresh('tenant'))
+        );
     }
 }

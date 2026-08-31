@@ -11,6 +11,7 @@ export function useOnboarding() {
     const settingsFocus = computed(() => onboarding.value?.settings_focus === true)
     const belpostReady = computed(() => onboarding.value?.belpost_ready === true)
     const canSkipOptional = computed(() => onboarding.value?.can_skip_optional === true)
+    const showWelcome = computed(() => onboarding.value?.show_welcome === true)
 
     return {
         onboarding,
@@ -20,5 +21,6 @@ export function useOnboarding() {
         settingsFocus,
         belpostReady,
         canSkipOptional,
+        showWelcome,
     }
 }

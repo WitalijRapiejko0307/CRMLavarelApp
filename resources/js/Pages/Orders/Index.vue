@@ -148,7 +148,30 @@
                             <tbody class="table-divide">
                                 <tr v-if="orders.data.length === 0">
                                     <td :colspan="columns.length" class="px-4 py-12 text-center text-gray-400 dark:text-gray-500 text-sm">
-                                        Заказы не найдены
+                                        <div class="space-y-2">
+                                            <template v-if="isEmptyUnfiltered && isCallCenter">
+                                                <p>Подключите магазин — передайте код из Настроек</p>
+                                                <Link href="/settings" class="btn-secondary btn-sm">
+                                                    Открыть настройки
+                                                </Link>
+                                            </template>
+                                            <template v-else-if="isEmptyUnfiltered">
+                                                <p>Пока нет заказов</p>
+                                                <Link
+                                                    v-if="!readOnly"
+                                                    href="/orders/create"
+                                                    class="btn-primary btn-sm"
+                                                >
+                                                    + Новый заказ
+                                                </Link>
+                                                <p v-if="onboardingVisible" class="text-xs text-muted">
+                                                    Дальше — по чеклисту «Первые шаги» в шапке.
+                                                </p>
+                                            </template>
+                                            <template v-else>
+                                                Заказы не найдены
+                                            </template>
+                                        </div>
                                     </td>
                                 </tr>
                                 <tr
@@ -195,8 +218,29 @@
 
             <!-- Mobile cards -->
             <template #cards>
-                <div v-if="orders.data.length === 0" class="card text-center py-12 text-gray-400 dark:text-gray-500 text-sm">
-                    Заказы не найдены
+                <div v-if="orders.data.length === 0" class="card text-center py-12 text-gray-400 dark:text-gray-500 text-sm space-y-2">
+                    <template v-if="isEmptyUnfiltered && isCallCenter">
+                        <p>Подключите магазин — передайте код из Настроек</p>
+                        <Link href="/settings" class="btn-secondary btn-sm">
+                            Открыть настройки
+                        </Link>
+                    </template>
+                    <template v-else-if="isEmptyUnfiltered">
+                        <p>Пока нет заказов</p>
+                        <Link
+                            v-if="!readOnly"
+                            href="/orders/create"
+                            class="btn-primary btn-sm"
+                        >
+                            + Новый заказ
+                        </Link>
+                        <p v-if="onboardingVisible" class="text-xs text-muted">
+                            Дальше — по чеклисту «Первые шаги» в шапке.
+                        </p>
+                    </template>
+                    <template v-else>
+                        Заказы не найдены
+                    </template>
                 </div>
 
                 <ListCard
@@ -327,6 +371,7 @@ import OrderStatusSelect from '@/Components/OrderStatusSelect.vue'
 import DeleteOrderModal from '@/Components/DeleteOrderModal.vue'
 import BulkStatusConfirmModal from '@/Components/BulkStatusConfirmModal.vue'
 import { useSubscription } from '@/composables/useSubscription'
+import { useOnboarding } from '@/composables/useOnboarding'
 import { useOrderFeed } from '@/composables/useOrderFeed'
 import { apiFetch } from '@/utils/api'
 import { bulkStatusWarning } from '@/utils/bulkStatusWarnings'
@@ -350,6 +395,7 @@ const props = defineProps({
 })
 
 const { readOnly } = useSubscription()
+const { visible: onboardingVisible } = useOnboarding()
 const page = usePage()
 
 const { feedUpdated } = useOrderFeed()
@@ -666,6 +712,10 @@ const storeFilterOptions = computed(() =>
 
 const hasActiveFilters = computed(() =>
     Object.values(filters.value).some(v => v !== '')
+)
+
+const isEmptyUnfiltered = computed(() =>
+    props.orders.data.length === 0 && !hasActiveFilters.value
 )
 
 let filterTimer = null
