@@ -605,4 +605,19 @@ class OrderController extends Controller
 
         return response()->json(null, 204);
     }
+
+    /**
+     * POST /api/sr-sync/failures/dismiss
+     */
+    public function dismissSrSyncFailures(): JsonResponse
+    {
+        $user   = Auth::user();
+        $lastAt = TenantSetting::get('sr_last_sync_at');
+
+        if ($lastAt) {
+            TenantSetting::put($user->tenant_id, 'sr_sync_failures_seen_at', $lastAt);
+        }
+
+        return response()->json(null, 204);
+    }
 }

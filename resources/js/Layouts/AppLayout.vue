@@ -149,6 +149,44 @@
             </div>
         </div>
 
+        <!-- SalesRender sync failures -->
+        <div
+            v-if="showSrSyncFailures"
+            class="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 mt-4"
+        >
+            <div class="bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-100 rounded-md px-4 py-3 text-sm flex items-start justify-between gap-3">
+                <div class="flex items-start gap-2 min-w-0">
+                    <svg class="w-4 h-4 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                    </svg>
+                    <div class="min-w-0">
+                        <p class="font-medium">
+                            Не удалось обновить {{ srSyncFailures.failures.length }} {{ srFailureNoun }} из SalesRender
+                        </p>
+                        <ul class="mt-1 space-y-1 text-amber-800 dark:text-amber-200">
+                            <li
+                                v-for="(failure, idx) in srSyncFailures.failures"
+                                :key="idx"
+                            >
+                                Заявка {{ failure.order_id }}
+                                <span v-if="failure.external_id">| ID {{ failure.external_id }}</span>
+                                <span v-if="failure.sr_status">| SR: {{ failure.sr_status }}</span>
+                                <span class="block text-xs">{{ srFailureReason(failure) }}</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                <button
+                    type="button"
+                    class="text-amber-500 hover:text-amber-700 dark:text-amber-300 dark:hover:text-amber-100 flex-shrink-0"
+                    title="Закрыть"
+                    @click="dismissSrSyncFailures"
+                >
+                    ✕
+                </button>
+            </div>
+        </div>
+
         <!-- Flash messages -->
         <div v-if="flash.message || flash.error" class="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 mt-4">
             <div v-if="flash.message" class="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-200 rounded-md px-4 py-3 text-sm flex items-center gap-2">
@@ -242,6 +280,39 @@ async function dismissTrackingNotice() {
     trackingNoticeDismissed.value = true
     try {
         await apiFetch('/api/tracking/auto-notice/dismiss', 'POST')
+    } catch {
+        // Non-fatal — banner already hidden locally
+    }
+}
+
+const srSyncFailuresDismissed = ref(false)
+const srSyncFailures = computed(() => page.props.value.sr_sync_failures)
+const showSrSyncFailures = computed(() =>
+    srSyncFailures.value?.failures?.length > 0 && !srSyncFailuresDismissed.value
+)
+const srFailureNoun = computed(() => {
+    const n = srSyncFailures.value?.failures?.length ?? 0
+    const mod10 = n % 10
+    const mod100 = n % 100
+    if (mod10 === 1 && mod100 !== 11) return 'заявку'
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'заявки'
+    return 'заявок'
+})
+
+function srFailureReason(failure) {
+    if (failure.reason === 'VALIDATION') {
+        return '→ Не совпадает ID или телефон'
+    }
+    if (failure.reason === 'UPDATE_ERROR') {
+        return '→ Ошибка записи: ' + (failure.message || 'неизвестная ошибка')
+    }
+    return failure.message || ''
+}
+
+async function dismissSrSyncFailures() {
+    srSyncFailuresDismissed.value = true
+    try {
+        await apiFetch('/api/sr-sync/failures/dismiss', 'POST')
     } catch {
         // Non-fatal — banner already hidden locally
     }

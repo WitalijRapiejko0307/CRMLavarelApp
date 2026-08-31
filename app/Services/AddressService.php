@@ -109,23 +109,84 @@ class AddressService
     }
 
     /**
-     * Find best matching address item for city + street from the order.
-     * Returns null if no match or house not found.
+     * Extract a 6-digit postcode from the city cell (first word-boundary group).
+     * Mirrors GAS extractPostcodeFromCity().
+     */
+    public function extractPostcodeFromCity(string $city): ?string
+    {
+        if (preg_match('/\b(\d{6})\b/', $city, $match)) {
+            return $match[1];
+        }
+
+        return null;
+    }
+
+    /**
+     * Match a dictionary-list item against the order by lookup strategy.
+     * Mirrors GAS addressItemMatchesOrder().
      *
-     * @param  string $city
-     * @param  string $street
-     * @param  string $building
+     * @param  'postcode'|'legacy' $strategy
+     */
+    public function addressItemMatchesOrder(
+        array $item,
+        string $sheetCity,
+        string $sheetStreet,
+        string $strategy,
+        ?string $postcode
+    ): bool {
+        if ($strategy === 'postcode') {
+            if ($this->normalizeAddressPart((string) ($item['postcode'] ?? ''))
+                !== $this->normalizeAddressPart((string) $postcode)
+            ) {
+                return false;
+            }
+            if (!$this->addressPartsMatch($sheetCity, $item['city'] ?? '')) {
+                return false;
+            }
+
+            return $this->addressPartsMatch($sheetStreet, $item['street'] ?? '');
+        }
+
+        return $this->addressPartsMatch($sheetCity, $item['city'] ?? '')
+            && $this->addressPartsMatch($sheetStreet, $item['street'] ?? '');
+    }
+
+    /**
+     * Find best matching address item for city + street from the order.
+     * Postcode-first (GS pass=0), then city+street fallback (pass=1).
+     * If the street matched but the house is not in params — return null without legacy fallback.
+     *
      * @return array|null  Matched item with ops_id (= item id)
      */
     public function autoResolve(string $city, string $street, string $building): ?array
     {
-        $items = $this->search($this->normalizeAddressPart($city) . ' ' . $this->normalizeAddressPart($street));
+        $postcode         = $this->extractPostcodeFromCity($city);
+        $streetMatched    = false;
+
+        if ($postcode) {
+            $items = $this->search($postcode);
+            if ($items !== []) {
+                foreach ($items as $item) {
+                    if ($this->addressItemMatchesOrder($item, $city, $street, 'postcode', $postcode)) {
+                        $streetMatched = true;
+                        if ($this->isHouseAllowed($item, $building)) {
+                            return $item;
+                        }
+                    }
+                }
+
+                if ($streetMatched) {
+                    return null;
+                }
+            }
+        }
+
+        $items = $this->search(
+            $this->normalizeAddressPart($city) . ' ' . $this->normalizeAddressPart($street)
+        );
 
         foreach ($items as $item) {
-            if (
-                $this->addressPartsMatch($city, $item['city'] ?? '')
-                && $this->addressPartsMatch($street, $item['street'] ?? '')
-            ) {
+            if ($this->addressItemMatchesOrder($item, $city, $street, 'legacy', null)) {
                 if ($this->isHouseAllowed($item, $building)) {
                     return $item;
                 }

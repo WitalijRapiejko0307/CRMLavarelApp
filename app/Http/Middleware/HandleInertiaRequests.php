@@ -46,6 +46,7 @@ class HandleInertiaRequests extends Middleware
             'order_delete' => fn () => auth()->check() && auth()->user()->isTenantUser()
                 ? ['blocked_statuses' => Order::NON_DELETABLE_STATUSES]
                 : null,
+            'sr_sync_failures' => fn () => $this->shareSrSyncFailures($user),
         ]);
     }
 
@@ -85,6 +86,32 @@ class HandleInertiaRequests extends Middleware
             'id'   => $tenant->id,
             'type' => $tenant->type ?? \App\Models\Tenant::TYPE_STORE,
             'name' => $tenant->name,
+        ];
+    }
+
+    protected function shareSrSyncFailures($user): ?array
+    {
+        if (!$user || !$user->isTenantUser()) {
+            return null;
+        }
+
+        $raw = TenantSetting::get('sr_last_sync_failures', '');
+        $failures = is_string($raw) && $raw !== '' ? json_decode($raw, true) : null;
+
+        if (!is_array($failures) || $failures === []) {
+            return null;
+        }
+
+        $lastAt = TenantSetting::get('sr_last_sync_at');
+        $seenAt = TenantSetting::get('sr_sync_failures_seen_at');
+
+        if ($seenAt && $lastAt && $seenAt >= $lastAt) {
+            return null;
+        }
+
+        return [
+            'failures'  => $failures,
+            'synced_at' => $lastAt,
         ];
     }
 }

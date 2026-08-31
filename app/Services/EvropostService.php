@@ -183,7 +183,6 @@ class EvropostService
             'weight'                     => $fullWeight,
             'is_auto_delivery'           => false,
             'payment_amount'             => (string)$cashOnDelivery,
-            'declared_amount'            => (string)$cashOnDelivery,
             'store_id_start'             => (int)$warehouseStart,
             'store_id_finish'            => $storeIdFinish,
             'receiver_phone_number'      => $phone,

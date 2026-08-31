@@ -182,7 +182,10 @@
                                                     {{ errorLabel(results[order.id].error) }}
                                                     <span
                                                         v-if="results[order.id].error_message"
-                                                        class="block text-gray-400 dark:text-gray-500 truncate max-w-[160px]"
+                                                        class="block"
+                                                        :class="results[order.id].error === 'api_error'
+                                                            ? 'text-red-600 dark:text-red-400 whitespace-normal break-words max-w-xs'
+                                                            : 'text-gray-400 dark:text-gray-500 truncate max-w-[160px]'"
                                                         :title="results[order.id].error_message"
                                                     >
                                                         {{ results[order.id].error_message }}

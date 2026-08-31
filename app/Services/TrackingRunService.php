@@ -25,7 +25,7 @@ class TrackingRunService
             ->where('tenant_id', $tenantId)
             ->whereIn('delivery_type', ['belpost', 'europochta'])
             ->whereNotNull('track_number')
-            ->whereIn('status', ['Оформлен', 'Передан на почту', 'Отправлено', 'В отделении']);
+            ->whereIn('status', Order::TRACKING_STATUSES);
     }
 
     public function countActiveOrders(int $tenantId): int

@@ -213,7 +213,7 @@ class BelpostService
                 'success'       => false,
                 'track_number'  => null,
                 'error'         => 'api_error',
-                'error_message' => "HTTP {$response->status()}" . ($detail ? ": {$detail}" : ''),
+                'error_message' => $this->formatApiErrorMessage($response->status(), $detail),
             ];
         }
 
@@ -222,16 +222,16 @@ class BelpostService
         $s10code = $obj['s10code'] ?? null;
         $widget  = $obj['recipient_contact_widget_data'] ?? null;
         $addr    = $widget['address'] ?? null;
-        $respCity   = isset($addr['city'])   ? mb_strtolower(trim($addr['city']))   : '';
-        $respStreet = isset($addr['street']) ? mb_strtolower(trim($addr['street'])) : '';
+        $respCity   = (string) ($addr['city'] ?? '');
+        $respStreet = (string) ($addr['street'] ?? '');
 
-        $sheetCity   = mb_strtolower(trim((string)($order->city ?? '')));
-        $sheetStreet = mb_strtolower(trim((string)($order->street ?? '')));
+        /** @var AddressService $addressService */
+        $addressService = app(AddressService::class);
 
         if ($s10code && $addr && $respCity && $respStreet) {
             if (
-                (str_contains($sheetCity, $respCity) || str_contains($respCity, $sheetCity))
-                && (str_contains($sheetStreet, $respStreet) || str_contains($respStreet, $sheetStreet))
+                $addressService->addressPartsMatch((string) ($order->city ?? ''), $respCity)
+                && $addressService->addressPartsMatch((string) ($order->street ?? ''), $respStreet)
             ) {
                 // ── 9. Update order ──
                 $order->update([
@@ -483,6 +483,17 @@ class BelpostService
         }
     }
 
+    private function formatApiErrorMessage(int $status, string $detail): string
+    {
+        $message = "HTTP {$status}" . ($detail !== '' ? ": {$detail}" : '');
+
+        if ($status === 401) {
+            $message .= '. Проверьте токен Белпочты в Настройках';
+        }
+
+        return $message;
+    }
+
     /**
      * @param  \Illuminate\Http\Client\Response $response
      * @throws \RuntimeException
@@ -491,7 +502,7 @@ class BelpostService
     {
         $detail = $this->extractErrorDetail($response->body());
         throw new \RuntimeException(
-            "BelpostService::{$method} HTTP {$response->status()}" . ($detail ? ": {$detail}" : '')
+            "BelpostService::{$method} " . $this->formatApiErrorMessage($response->status(), $detail)
         );
     }
 }

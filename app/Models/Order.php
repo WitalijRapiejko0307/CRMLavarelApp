@@ -13,7 +13,7 @@ class Order extends Model
      * Full order lifecycle statuses.
      *
      * New lead    → Позвонить → Перезвонить → Недозвон* / Сомнения / Отдал заявку → Заказать → Отправить
-     * Belpost/EP  → Оформлен → (Передан на почту) → Отправлено → В отделении → Забрать деньги
+     * Belpost/EP  → Оформлен → (Передан на почту) → Отправлено → В отделении → Возврат в пути → Забрать деньги
      * Revenue     → Завершен (operator confirms money received) → Посчитан (sumOrder processed)
      * Closed      → Возврат | Отказ | Отказ(Ошибка) | Дубль
      */
@@ -32,6 +32,7 @@ class Order extends Model
         'Передан на почту',
         'Отправлено',
         'В отделении',
+        'Возврат в пути',
         'Забрать деньги',
         'Завершен',
         'Посчитан',
@@ -52,6 +53,15 @@ class Order extends Model
         'Недозвон',
         'Недозвон1',
         'Недозвон2',
+    ];
+
+    /** Statuses still in postal tracking (Belpost / Europochta). */
+    public const TRACKING_STATUSES = [
+        'Оформлен',
+        'Передан на почту',
+        'Отправлено',
+        'В отделении',
+        'Возврат в пути',
     ];
 
     /** Orders still in call / pre-mail workflow (used for CC backfill and phone duplicate detection). */
@@ -113,6 +123,7 @@ class Order extends Model
         'Передан на почту',
         'Отправлено',
         'В отделении',
+        'Возврат в пути',
         'Забрать деньги',
         'Позвонить',
         'Перезвонить',

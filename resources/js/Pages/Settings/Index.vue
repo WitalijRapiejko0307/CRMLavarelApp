@@ -301,6 +301,31 @@
                                 <!-- Hint -->
                                 <p v-if="meta[3]" class="text-xs text-gray-400 dark:text-gray-500 mt-1">{{ meta[3] }}</p>
 
+                                <details
+                                    v-if="key === 'auth_token_bp' && canEditSettings"
+                                    class="mt-2"
+                                >
+                                    <summary class="text-xs text-indigo-600 dark:text-indigo-400 cursor-pointer select-none hover:text-indigo-700 dark:hover:text-indigo-300">
+                                        Как получить токен?
+                                    </summary>
+                                    <div class="mt-2 text-xs text-gray-600 dark:text-gray-400 space-y-2">
+                                        <p>
+                                            Где взять токен белпочты (браузер Chrome; если другой браузер — те же шаги. Не сработает — писать в Telegram @vitali_rapeika)
+                                        </p>
+                                        <ol class="list-decimal pl-4 space-y-1">
+                                            <li>Откройте кабинет белпочты в браузере</li>
+                                            <li>Нажмите Mac — Option + ⌘ + I или Windows — F12</li>
+                                            <li>В открывшемся окне откройте, если не открыта, вкладку Network</li>
+                                            <li>Под полем Filter найдите Fetch/XHR и кликните, если не выбран</li>
+                                            <li>Перезагрузите страницу кабинета белпочты</li>
+                                            <li>В списке запросов найдите auth и кликните по нему</li>
+                                            <li>Правее появится окно — в нём найдите Authorization</li>
+                                            <li>Правее будут данные (начинаются с Bearer); тройным кликом выделить всё, скопировать</li>
+                                            <li>Вставить скопированное в поле для токена и сохранить</li>
+                                        </ol>
+                                    </div>
+                                </details>
+
                                 <!-- Current value indicator (password only — text fields are prefilled) -->
                                 <p v-if="meta[1] === 'password' && secretPreviewsLocal[key] && !form[key]"
                                    class="text-xs text-green-600 dark:text-green-400 mt-1">

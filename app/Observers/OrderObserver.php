@@ -12,7 +12,7 @@ class OrderObserver
 {
     /**
      * Track status changes: write history and update status_changed_at.
-     * Also manage product stock for Отправлено / Возврат.
+     * Also manage product stock for Отправлено / Возврат (including from Возврат в пути / В отделении).
      */
     public function updating(Order $order): void
     {
@@ -43,7 +43,10 @@ class OrderObserver
             $this->adjustStock($goods, $quantities, $order->tenant_id, true);
         }
 
-        if ($toStatus === 'Возврат' && $fromStatus === 'Отправлено') {
+        if (
+            $toStatus === 'Возврат'
+            && in_array($fromStatus, ['Отправлено', 'В отделении', 'Возврат в пути'], true)
+        ) {
             $this->adjustStock($goods, $quantities, $order->tenant_id, false);
         }
 

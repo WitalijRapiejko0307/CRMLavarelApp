@@ -38,6 +38,26 @@ class OrderStatusesTest extends TestCase
         $this->assertGreaterThan($confirmedIndex, $sendIndex);
     }
 
+    public function test_return_in_transit_status_is_in_whitelist_after_at_office(): void
+    {
+        $statuses = Order::STATUSES;
+
+        $this->assertContains('Возврат в пути', $statuses);
+
+        $atOffice = array_search('В отделении', $statuses, true);
+        $inTransit = array_search('Возврат в пути', $statuses, true);
+        $pickup = array_search('Забрать деньги', $statuses, true);
+
+        $this->assertNotFalse($atOffice);
+        $this->assertNotFalse($inTransit);
+        $this->assertNotFalse($pickup);
+        $this->assertGreaterThan($atOffice, $inTransit);
+        $this->assertGreaterThan($inTransit, $pickup);
+        $this->assertContains('Возврат в пути', Order::NON_DELETABLE_STATUSES);
+        $this->assertContains('Возврат в пути', Order::TRACKING_STATUSES);
+        $this->assertContains('В отделении', Order::TRACKING_STATUSES);
+    }
+
     public function test_work_statuses_include_confirmed_and_spam(): void
     {
         $this->assertContains('Подтвержден', Order::WORK_STATUSES);

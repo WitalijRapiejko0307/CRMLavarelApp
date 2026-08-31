@@ -125,12 +125,13 @@ class UpdateTrackingJob implements ShouldQueue
             try {
                 $trackNumber = trim((string) $order->track_number);
 
-                if (array_key_exists($trackNumber, $map)) {
-                    $info = $map[$trackNumber];
-                } else {
+                $mapEntry = $map[$trackNumber] ?? null;
+
+                if ($mapEntry === null) {
                     Log::debug("UpdateTrackingJob: Belpost direct search", ['track' => $trackNumber]);
-                    $info = $trackingService->directSearch($trackNumber);
                 }
+
+                $info = $trackingService->resolveTracking($trackNumber, $mapEntry, (string) $order->status);
 
                 if ($info === null) {
                     Log::warning("UpdateTrackingJob: track not found", [
@@ -138,7 +139,7 @@ class UpdateTrackingJob implements ShouldQueue
                         'order_id' => $order->id,
                     ]);
                 } else {
-                    $this->applyBelpostStatus($order, $info['event'], $info['createdAt'], $sms);
+                    $this->applyBelpostStatus($order, $info, $sms);
                 }
             } catch (\Throwable $e) {
                 $hadError = true;
@@ -162,17 +163,38 @@ class UpdateTrackingJob implements ShouldQueue
             ->where('tenant_id', $this->tenantId)
             ->where('delivery_type', 'belpost')
             ->whereNotNull('track_number')
-            ->whereIn('status', ['Оформлен', 'Передан на почту', 'Отправлено', 'В отделении'])
+            ->whereIn('status', Order::TRACKING_STATUSES)
             ->get();
     }
 
+    /**
+     * Apply Belpost tracking result. Mirrors GAS updateBelpostStatus().
+     *
+     * @param  array{event: ?string, createdAt: ?string, targetStatus: ?string}  $trackingResult
+     */
     private function applyBelpostStatus(
         Order $order,
-        ?string $event,
-        ?string $eventAt,
+        array $trackingResult,
         ?SmsService $sms
     ): void {
+        $event        = $trackingResult['event'] ?? null;
+        $eventAt      = $trackingResult['createdAt'] ?? null;
+        $targetStatus = $trackingResult['targetStatus'] ?? null;
         $currentStatus = $order->status;
+
+        if ($targetStatus === 'Возврат в пути') {
+            if ($currentStatus !== 'Возврат в пути' && $currentStatus !== 'Возврат') {
+                $this->changeStatus($order, 'Возврат в пути', $eventAt);
+            }
+            return;
+        }
+
+        if ($targetStatus === 'Возврат') {
+            if ($currentStatus !== 'Возврат') {
+                $this->changeStatus($order, 'Возврат', $eventAt);
+            }
+            return;
+        }
 
         if ($currentStatus === 'Оформлен' && $event) {
             $this->changeStatus($order, 'Отправлено', $eventAt);
@@ -192,11 +214,6 @@ class UpdateTrackingJob implements ShouldQueue
 
         if ($event === 'Вручено' && $currentStatus !== 'Забрать деньги') {
             $this->changeStatus($order, 'Забрать деньги', $eventAt);
-            return;
-        }
-
-        if ($event === 'Вручено отправителю' && $currentStatus !== 'Возврат') {
-            $this->changeStatus($order, 'Возврат', $eventAt);
             return;
         }
 

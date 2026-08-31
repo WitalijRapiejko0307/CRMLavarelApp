@@ -140,4 +140,24 @@ class TrackingCancelTest extends TestCase
         $this->assertSame('cancelled', $progress['status']);
         $this->assertSame(1, $progress['checked']);
     }
+
+    public function test_active_orders_query_includes_return_in_transit(): void
+    {
+        $user     = $this->createActiveTenantAdmin();
+        $service  = app(TrackingRunService::class);
+        $tenantId = $user->tenant_id;
+
+        Order::create([
+            'tenant_id'     => $tenantId,
+            'full_name'     => 'Возврат в пути клиент',
+            'status'        => 'Возврат в пути',
+            'delivery_type' => 'belpost',
+            'track_number'  => 'BP-RETURN',
+        ]);
+
+        $this->assertSame(1, $service->countActiveOrders($tenantId));
+        $this->assertTrue(
+            $service->activeOrdersQuery($tenantId)->where('status', 'Возврат в пути')->exists()
+        );
+    }
 }

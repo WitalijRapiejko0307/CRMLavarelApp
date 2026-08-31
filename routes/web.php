@@ -114,6 +114,7 @@ Route::prefix('api')->name('api.')->middleware(['auth', 'tenant', 'tenant.writab
     Route::get('/orders/tracking-status', [OrderController::class, 'trackingStatus'])->name('orders.trackingStatus')->withoutMiddleware('tenant.writable');
     Route::get('/orders/feed', [OrderFeedController::class, 'index'])->name('orders.feed')->withoutMiddleware('tenant.writable');
     Route::post('/tracking/auto-notice/dismiss', [OrderController::class, 'dismissTrackingNotice'])->name('tracking.dismissNotice');
+    Route::post('/sr-sync/failures/dismiss', [OrderController::class, 'dismissSrSyncFailures'])->name('srSync.dismissFailures');
 });
 
 // Super-admin panel
