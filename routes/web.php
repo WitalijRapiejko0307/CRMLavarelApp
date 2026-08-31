@@ -10,6 +10,7 @@ use App\Http\Controllers\ConnectionController;
 use App\Http\Controllers\EvropostController;
 use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\OrderController;
+use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\OrderFeedController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\TenantSettingController;
@@ -79,6 +80,13 @@ Route::prefix('finances')->name('finances.')->middleware('tenant.type:store')->g
     Route::delete('/expenses/{expense}', [FinanceController::class, 'destroyExpense'])->name('expenses.destroy');
     Route::post('/income', [FinanceController::class, 'storeIncome'])->name('income.store');
     Route::delete('/income/{income}', [FinanceController::class, 'destroyIncome'])->name('income.destroy');
+});
+
+// Onboarding (store checklist; dismiss/restore allowed in read-only)
+Route::prefix('onboarding')->name('onboarding.')->middleware(['auth', 'tenant'])->group(function () {
+    Route::post('/dismiss', [OnboardingController::class, 'dismiss'])->name('dismiss');
+    Route::post('/restore', [OnboardingController::class, 'restore'])->name('restore');
+    Route::post('/skip-optional', [OnboardingController::class, 'skipOptional'])->name('skipOptional');
 });
 
 // Settings (Phase 5)

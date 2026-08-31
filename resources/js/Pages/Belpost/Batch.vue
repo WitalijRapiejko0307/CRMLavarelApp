@@ -13,6 +13,14 @@
             </PageHeader>
         </template>
 
+        <div
+            v-if="!belpostReady"
+            class="mb-4 rounded-md px-4 py-3 text-sm border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/30 text-amber-900 dark:text-amber-100"
+        >
+            Чтобы создать партию, укажите токен и ЭЛС в
+            <Link href="/settings" class="underline font-medium">Настройках</Link>.
+        </div>
+
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
             <!-- ── Left column: create batch + history ── -->
@@ -59,7 +67,12 @@
                 <!-- Batches history -->
                 <div class="card">
                     <h2 class="card-title">История партий</h2>
-                    <div v-if="batchList.length === 0" class="text-sm text-gray-400 dark:text-gray-500 italic">Нет партий</div>
+                    <div v-if="batchList.length === 0" class="text-sm text-gray-400 dark:text-gray-500">
+                        <p class="italic">Нет партий</p>
+                        <p v-if="showBelpostHints" class="mt-1 not-italic">
+                            Создайте партию слева — выберите тип отправления и кто платит.
+                        </p>
+                    </div>
                     <ul class="space-y-2">
                         <li
                             v-for="b in batchList"
@@ -139,8 +152,11 @@
                             </button>
                         </div>
 
-                        <div v-if="eligibleOrders.length === 0" class="text-sm text-gray-400 dark:text-gray-500 italic py-4 text-center">
-                            Нет заявок со статусом «Отправить» и доставкой «Белпочта»
+                        <div v-if="eligibleOrders.length === 0" class="text-sm text-gray-400 dark:text-gray-500 py-4 text-center">
+                            <p class="italic">Нет заявок со статусом «Отправить» и доставкой «Белпочта»</p>
+                            <p v-if="showBelpostHints" class="mt-1 not-italic">
+                                Переведите заказ в статус «Отправить» и укажите доставку Белпочта.
+                            </p>
                         </div>
 
                         <div v-else class="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
@@ -394,10 +410,14 @@ import AppLayout from '@/Layouts/AppLayout.vue'
 import PageHeader from '@/Components/PageHeader.vue'
 import AddressSearchModal from '@/Components/AddressSearchModal.vue'
 import { useSubscription } from '@/composables/useSubscription'
+import { useOnboarding } from '@/composables/useOnboarding'
 import { Inertia } from '@inertiajs/inertia'
+import { Link } from '@inertiajs/inertia-vue3'
 import { apiFetch } from '@/utils/api'
 
 const { readOnly } = useSubscription()
+const { belpostReady, currentStep } = useOnboarding()
+const showBelpostHints = computed(() => currentStep.value === 'belpost')
 
 const SELLER_ONLY_TYPES = ['ecommerce_light', 'ecommerce_optima']
 

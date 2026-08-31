@@ -121,6 +121,7 @@
         </nav>
 
         <TrialBanner />
+        <OnboardingChecklist />
 
         <!-- Auto tracking notice -->
         <div
@@ -223,6 +224,7 @@ import { Link, usePage } from '@inertiajs/inertia-vue3'
 import { Inertia } from '@inertiajs/inertia'
 import { apiFetch } from '@/utils/api'
 import TrialBanner from '@/Components/TrialBanner.vue'
+import OnboardingChecklist from '@/Components/OnboardingChecklist.vue'
 import MobileNav from '@/Components/MobileNav.vue'
 
 const page = usePage()

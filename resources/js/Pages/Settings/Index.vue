@@ -5,6 +5,16 @@
                 <template #title>
                     <h1 class="page-title">Настройки</h1>
                 </template>
+                <template #actions>
+                    <button
+                        v-if="dismissed"
+                        type="button"
+                        class="btn-secondary text-sm"
+                        @click="restoreOnboarding"
+                    >
+                        Показать подсказки
+                    </button>
+                </template>
             </PageHeader>
         </template>
 
@@ -37,9 +47,26 @@
 
             <!-- Store: connect to call center -->
             <div v-if="canViewSettings && isStore" class="card">
-                <h2 class="section-title mb-4 pb-3 border-b border-gray-100 dark:border-gray-700">
+                <button
+                    v-if="settingsFocus"
+                    type="button"
+                    class="w-full flex items-center justify-between text-left"
+                    @click="toggleExtra('call_center')"
+                >
+                    <h2 class="section-title">Колл-центр</h2>
+                    <span class="text-muted text-sm">{{ extraOpen.call_center ? '▾' : '▸' }}</span>
+                </button>
+                <h2
+                    v-else
+                    class="section-title mb-4 pb-3 border-b border-gray-100 dark:border-gray-700"
+                >
                     Колл-центр
                 </h2>
+                <p v-if="settingsFocus && !extraOpen.call_center" class="text-xs text-muted mt-2">
+                    подключите позже
+                </p>
+
+                <div v-show="!settingsFocus || extraOpen.call_center" class="mt-4">
 
                 <div v-if="activeConnection" class="mb-4 p-3 rounded-md bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-sm">
                     <p class="font-medium text-green-800 dark:text-green-200">
@@ -95,6 +122,7 @@
                     >
                         {{ connectionBusy ? 'Отправка…' : 'Запросить подключение' }}
                     </button>
+                </div>
                 </div>
             </div>
 
@@ -209,11 +237,26 @@
 
                 <!-- Setting group cards -->
                 <div v-for="(group, groupKey) in schema" :key="groupKey" class="card">
-                    <h2 class="section-title mb-4 pb-3 border-b border-gray-100 dark:border-gray-700">
+                    <button
+                        v-if="isGroupCollapsible(groupKey)"
+                        type="button"
+                        class="w-full flex items-center justify-between text-left pb-3 mb-4 border-b border-gray-100 dark:border-gray-700"
+                        @click="toggleGroup(groupKey)"
+                    >
+                        <h2 class="section-title">{{ group.label }}</h2>
+                        <span class="text-muted text-sm">{{ isGroupOpen(groupKey) ? '▾' : '▸' }}</span>
+                    </button>
+                    <h2
+                        v-else
+                        class="section-title mb-4 pb-3 border-b border-gray-100 dark:border-gray-700"
+                    >
                         {{ group.label }}
                     </h2>
+                    <p v-if="!isGroupOpen(groupKey)" class="text-xs text-muted">
+                        подключите позже
+                    </p>
 
-                    <div class="space-y-4">
+                    <div v-show="isGroupOpen(groupKey)" class="space-y-4">
                         <template v-for="(meta, key) in group.keys" :key="key">
                             <!-- depends_on: hide if condition not met -->
                             <div v-if="isVisible(meta)" class="setting-row">
@@ -340,6 +383,17 @@
                     </div>
                 </div>
 
+                <div v-if="canSkipOptional" class="flex items-center justify-between gap-3 text-sm">
+                    <p class="text-muted">Остальные сервисы можно подключить позже.</p>
+                    <button
+                        type="button"
+                        class="btn-secondary btn-sm"
+                        @click="skipOptional"
+                    >
+                        Пока не нужно
+                    </button>
+                </div>
+
                 <div v-if="canEditSettings" class="flex justify-end gap-3">
                     <p v-if="saved" class="text-sm text-green-600 dark:text-green-400 flex items-center gap-1 mr-auto">
                         ✓ Настройки сохранены
@@ -361,9 +415,11 @@ import AppLayout from '@/Layouts/AppLayout.vue'
 import PageHeader from '@/Components/PageHeader.vue'
 import { useTheme } from '@/composables/useTheme'
 import { useSubscription } from '@/composables/useSubscription'
+import { useOnboarding } from '@/composables/useOnboarding'
 import { apiFetch } from '@/utils/api'
 
 const { readOnly } = useSubscription()
+const { dismissed, settingsFocus, canSkipOptional } = useOnboarding()
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 const props = defineProps({
@@ -390,6 +446,34 @@ const pendingConnection = computed(() => props.connectionData?.pending_connectio
 const connectionCodeInput = ref('')
 const includeExistingActive = ref(false)
 const connectionBusy = ref(false)
+const extraOpen = reactive({ call_center: false })
+const expandedGroups = reactive({})
+
+function isGroupCollapsible(groupKey) {
+    return settingsFocus.value && groupKey !== 'belpost'
+}
+
+function isGroupOpen(groupKey) {
+    if (groupKey === 'belpost') return true
+    if (!settingsFocus.value) return true
+    return !!expandedGroups[groupKey]
+}
+
+function toggleGroup(groupKey) {
+    expandedGroups[groupKey] = !isGroupOpen(groupKey)
+}
+
+function toggleExtra(key) {
+    extraOpen[key] = !extraOpen[key]
+}
+
+function restoreOnboarding() {
+    Inertia.post('/onboarding/restore', {}, { preserveScroll: true })
+}
+
+function skipOptional() {
+    Inertia.post('/onboarding/skip-optional', {}, { preserveScroll: true })
+}
 
 function formatConnectionDate(value) {
     if (!value) return '—'

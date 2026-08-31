@@ -42,9 +42,9 @@ class TenantSettingController extends Controller
                 'label' => 'Белпочта',
                 'keys'  => [
                     'auth_token_bp'        => ['Токен авторизации (Bearer)',    'password', 'Bearer …',        ''],
-                    'elc'                  => ['ELC (код отправителя)',          'text',     '…',               ''],
-                    'belpost_sender_email' => ['Email отправителя (ecommerce)', 'text',     'shop@example.by', 'Уведомление о выдаче; обязателен для ecommerce-типов'],
-                    'shelf_life'           => ['Срок хранения в ПВЗ, дней',    'text',     '10',              'По умолчанию 10 дней'],
+                    'elc'                  => ['ЭЛС (электронный лицевой счёт)', 'text', '…', 'Номер электронного лицевого счёта из кабинета Белпочты'],
+                    'belpost_sender_email' => ['Email отправителя (ecommerce)', 'text', 'shop@example.by', 'Уведомление о выдаче; обязателен для ecommerce-типов'],
+                    'shelf_life'           => ['Срок хранения в ПВЗ, дней', 'text', '10', 'Количество дней хранения в отделении; по умолчанию 10'],
                     'belpost_label_size'   => ['Размер бланка по умолчанию',   'select',   '', '', ['210x150' => '210×150', '150x100' => '150×100', '120x80' => '120×80']],
                 ],
             ],

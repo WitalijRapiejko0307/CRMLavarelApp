@@ -34,8 +34,18 @@
         </div>
 
         <!-- Products -->
-        <div v-if="productList.length === 0" class="card text-center py-12 text-gray-400 dark:text-gray-500 text-sm">
-            Нет товаров. Добавьте первый товар.
+        <div v-if="productList.length === 0" class="card text-center py-12">
+            <p class="text-gray-500 dark:text-gray-400 text-sm">
+                Добавьте хотя бы один товар — его можно выбрать в заказе.
+            </p>
+            <button
+                v-if="!readOnly"
+                type="button"
+                class="btn-primary mt-4"
+                @click="openCreateModal"
+            >
+                + Добавить товар
+            </button>
         </div>
 
         <ResponsiveList v-else>

@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Models\TenantSetting;
 use App\Models\Order;
+use App\Services\OnboardingService;
 use App\Services\TrackingRunService;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -47,6 +48,7 @@ class HandleInertiaRequests extends Middleware
                 ? ['blocked_statuses' => Order::NON_DELETABLE_STATUSES]
                 : null,
             'sr_sync_failures' => fn () => $this->shareSrSyncFailures($user),
+            'onboarding' => fn () => $this->shareOnboarding($user),
         ]);
     }
 
@@ -87,6 +89,11 @@ class HandleInertiaRequests extends Middleware
             'type' => $tenant->type ?? \App\Models\Tenant::TYPE_STORE,
             'name' => $tenant->name,
         ];
+    }
+
+    protected function shareOnboarding($user): ?array
+    {
+        return app(OnboardingService::class)->forUser($user);
     }
 
     protected function shareSrSyncFailures($user): ?array

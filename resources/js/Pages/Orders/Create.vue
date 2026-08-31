@@ -187,6 +187,13 @@
                         Товары
                     </h2>
                     <div class="space-y-3">
+                        <p
+                            v-if="!products.length"
+                            class="text-sm text-amber-700 dark:text-amber-300"
+                        >
+                            Сначала добавьте товар на
+                            <Link href="/products" class="underline hover:text-amber-800 dark:hover:text-amber-200">складе</Link>.
+                        </p>
                         <div
                             v-for="(_, i) in form.goods"
                             :key="i"
@@ -317,7 +324,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { Inertia } from '@inertiajs/inertia'
-import { useForm } from '@inertiajs/inertia-vue3'
+import { useForm, Link } from '@inertiajs/inertia-vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import PageHeader from '@/Components/PageHeader.vue'
 import AppScrollSelect from '@/Components/AppScrollSelect.vue'
