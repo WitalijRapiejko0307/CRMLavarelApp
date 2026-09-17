@@ -38,6 +38,19 @@
                     <div class="space-y-3">
                         <div>
                             <label class="label block mb-1">Тип отправления</label>
+                            <div class="flex flex-wrap gap-2 mb-2">
+                                <button
+                                    v-for="quick in quickTypes"
+                                    :key="quick.type"
+                                    type="button"
+                                    class="btn-sm"
+                                    :class="newBatchType === quick.type ? 'btn-primary' : 'btn-secondary'"
+                                    :disabled="creating || readOnly || !belpostReady"
+                                    @click="setQuickType(quick.type)"
+                                >
+                                    {{ quick.label }}
+                                </button>
+                            </div>
                             <select v-model="newBatchType" class="w-full" @change="onTypeChange">
                                 <option v-for="(label, code) in deliveryTypes" :key="code" :value="code">{{ label }}</option>
                             </select>
@@ -147,8 +160,8 @@
 
                     <!-- Orders to process (until batch is committed on Belpost) -->
                     <div v-if="!activeBatch.belpost_committed" class="card">
-                        <div class="flex items-center justify-between mb-4">
-                            <h2 class="card-title">Заявки для оформления</h2>
+                        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+                            <h2 class="card-title mb-0">Заявки для оформления</h2>
                             <button
                                 class="btn-primary btn-sm"
                                 :disabled="processing || eligibleOrders.length === 0"
@@ -158,7 +171,31 @@
                             </button>
                         </div>
 
-                        <div v-if="eligibleOrders.length === 0" class="text-sm text-gray-400 dark:text-gray-500 py-4 text-center space-y-2">
+                        <div class="flex flex-wrap gap-2 mb-4">
+                            <button
+                                v-for="chip in queueFilters"
+                                :key="chip.id"
+                                type="button"
+                                class="btn-sm"
+                                :class="queueFilter === chip.id ? 'btn-primary' : 'btn-secondary'"
+                                @click="queueFilter = chip.id"
+                            >
+                                {{ chip.label }}
+                            </button>
+                        </div>
+
+                        <p
+                            v-if="queueFilter === 'error' && activeBatch.error_message"
+                            class="text-sm text-red-600 dark:text-red-400 mb-3"
+                        >
+                            {{ activeBatch.error_message }}
+                        </p>
+
+                        <div v-if="queueFilter === 'in_batch'" class="text-sm text-muted py-4 text-center">
+                            Оформленные бланки выбранной партии — в таблице ниже.
+                        </div>
+
+                        <div v-else-if="eligibleOrders.length === 0" class="text-sm text-gray-400 dark:text-gray-500 py-4 text-center space-y-2">
                             <p class="italic">Нет заявок со статусом «Отправить» и доставкой «Белпочта»</p>
                             <p class="not-italic">
                                 <Link href="/orders/create" class="text-indigo-600 dark:text-indigo-400 font-medium hover:underline">Создайте заказ</Link>
@@ -168,6 +205,10 @@
                             </p>
                         </div>
 
+                        <div v-else-if="displayedQueue.length === 0" class="text-sm text-gray-400 dark:text-gray-500 italic py-4 text-center">
+                            Нет заявок по этому фильтру
+                        </div>
+
                         <div v-else class="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
                             <table class="w-full text-sm">
                                 <thead>
@@ -175,12 +216,13 @@
                                         <th class="pb-2 font-medium text-muted w-8">#</th>
                                         <th class="pb-2 font-medium text-muted">Клиент</th>
                                         <th class="pb-2 font-medium text-muted">Адрес</th>
+                                        <th class="pb-2 font-medium text-muted">Тариф</th>
                                         <th class="pb-2 font-medium text-muted w-32">Результат</th>
                                         <th class="pb-2 w-28"></th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
-                                    <tr v-for="(order, idx) in orderQueue" :key="order.id">
+                                    <tr v-for="(order, idx) in displayedQueue" :key="order.id">
                                         <td class="py-2 text-gray-400 dark:text-gray-500 text-xs">{{ idx + 1 }}</td>
                                         <td class="py-2">
                                             <div class="font-medium text-gray-800 dark:text-gray-200">{{ order.full_name }}</div>
@@ -189,9 +231,15 @@
                                         <td class="py-2 text-xs text-gray-600 dark:text-gray-400">
                                             {{ formatAddress(order) }}
                                         </td>
+                                        <td
+                                            class="py-2 text-xs text-gray-700 dark:text-gray-300 whitespace-nowrap"
+                                            :title="order.weight ? `${order.weight} г` : ''"
+                                        >
+                                            {{ order.weight_hint?.label ?? '—' }}
+                                        </td>
                                         <td class="py-2">
                                             <!-- Processing spinner -->
-                                            <span v-if="processingIndex === idx && processing" class="text-xs text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
+                                            <span v-if="processing && processingOrderId === order.id" class="text-xs text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
                                                 <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
                                                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
                                                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
@@ -244,7 +292,14 @@
 
                     <!-- Processed forms (any batch status) -->
                     <div class="card">
-                        <h2 class="card-title mb-4">Оформленные бланки</h2>
+                        <h2 class="card-title mb-1">Оформленные бланки</h2>
+                        <p
+                            v-if="!activeBatch.belpost_committed && activeBatchOrders.length > 0"
+                            class="text-xs text-muted mb-4"
+                        >
+                            Убрать из партии CRM; отправление на Белпочте может остаться.
+                        </p>
+                        <p v-if="removeError" class="text-xs text-red-600 mb-3">{{ removeError }}</p>
 
                         <div v-if="activeBatchOrders.length === 0" class="text-sm text-gray-400 dark:text-gray-500 italic py-4 text-center">
                             В этой партии пока нет оформленных бланков
@@ -259,6 +314,7 @@
                                         <th class="pb-2 font-medium text-muted">Адрес</th>
                                         <th class="pb-2 font-medium text-muted">Трек</th>
                                         <th class="pb-2 font-medium text-muted">Дата оформления</th>
+                                        <th v-if="!activeBatch.belpost_committed" class="pb-2 w-24"></th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
@@ -281,6 +337,16 @@
                                         </td>
                                         <td class="py-2 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
                                             {{ formatDate(order.status_changed_at) }}
+                                        </td>
+                                        <td v-if="!activeBatch.belpost_committed" class="py-2 text-right">
+                                            <button
+                                                type="button"
+                                                class="btn-secondary btn-xs"
+                                                :disabled="removingId === order.id || readOnly"
+                                                @click.stop="removeFromBatch(order)"
+                                            >
+                                                {{ removingId === order.id ? 'Убираю…' : 'Убрать' }}
+                                            </button>
                                         </td>
                                     </tr>
                                 </tbody>
@@ -429,6 +495,17 @@ const { belpostReady, currentStep } = useOnboarding()
 const showBelpostHints = computed(() => currentStep.value === 'belpost')
 
 const SELLER_ONLY_TYPES = ['ecommerce_light', 'ecommerce_optima']
+const QUICK_TYPES = [
+    { type: 'ecommerce_light',    label: 'Лайт' },
+    { type: 'ecommerce_optima',   label: 'Оптима' },
+    { type: 'ecommerce_standard', label: 'Стандарт' },
+]
+const QUEUE_FILTERS = [
+    { id: 'all',      label: 'Все' },
+    { id: 'in_batch', label: 'В партии' },
+    { id: 'no_track', label: 'Без трека' },
+    { id: 'error',    label: 'Ошибка' },
+]
 
 // ── Props from controller ──────────────────────────────────────────────────
 const props = defineProps({
@@ -448,6 +525,9 @@ const newBatchType    = ref(Object.keys(props.deliveryTypes)[0] ?? '')
 const newBatchWhoPays = ref('Покупатель')
 const creating        = ref(false)
 const createError     = ref('')
+const quickTypes      = QUICK_TYPES
+const queueFilters    = QUEUE_FILTERS
+const queueFilter     = ref('all')
 
 // ── Computed ───────────────────────────────────────────────────────────────
 const isSellerOnlyType = computed(() => SELLER_ONLY_TYPES.includes(newBatchType.value))
@@ -475,10 +555,22 @@ const activeBatchOrders = computed(() => {
     return batchOrdersLocal.value[id] ?? batchOrdersLocal.value[String(id)] ?? []
 })
 
+const displayedQueue = computed(() => {
+    if (queueFilter.value === 'in_batch') return []
+    if (queueFilter.value === 'error') {
+        return orderQueue.value.filter(o => results.value[o.id]?.success === false)
+    }
+    if (queueFilter.value === 'no_track') {
+        return orderQueue.value.filter(o => !o.track_number && !results.value[o.id]?.track_number)
+    }
+    return orderQueue.value
+})
+
 // Order processing
 const orderQueue    = ref([...props.eligibleOrders])
 const processing    = ref(false)
 const processingIndex = ref(-1)
+const processingOrderId = ref(null)
 const results       = ref({})        // { [orderId]: { success, track_number, error, error_message } }
 
 // Commit
@@ -492,6 +584,10 @@ const downloadError     = ref('')
 // PDF retry
 const retrying      = ref(false)
 const retryError    = ref('')
+
+// Remove from draft batch
+const removingId    = ref(null)
+const removeError   = ref('')
 
 // Polling
 let pollTimer = null
@@ -511,6 +607,11 @@ function onTypeChange() {
     }
 }
 
+function setQuickType(code) {
+    newBatchType.value = code
+    onTypeChange()
+}
+
 function selectBatch(b) {
     activeBatch.value = b
     selectedLabelSize.value = b.label_size ?? props.defaultLabelSize
@@ -519,6 +620,7 @@ function selectBatch(b) {
     retryError.value = ''
     downloadError.value = ''
     commitError.value = ''
+    removeError.value = ''
     if (b.status === 'downloading') {
         pollingSince.value = Date.now()
         startPolling()
@@ -557,12 +659,14 @@ async function processAll() {
     if (processing.value) return
     processing.value  = true
     processingIndex.value = 0
+    processingOrderId.value = null
 
     const queue = orderQueue.value.filter(o => !results.value[o.id]?.success)
 
     for (let i = 0; i < queue.length; i++) {
         processingIndex.value = i
         const order = queue[i]
+        processingOrderId.value = order.id
 
         // Skip if already successfully processed
         if (results.value[order.id]?.success) continue
@@ -578,6 +682,7 @@ async function processAll() {
 
     processing.value      = false
     processingIndex.value = -1
+    processingOrderId.value = null
 }
 
 async function processOne(order, belpostAddressId) {
@@ -771,6 +876,10 @@ watch(() => props.batchOrders, (val) => {
     batchOrdersLocal.value = normalizeBatchOrders(val)
 }, { deep: true })
 
+watch(() => props.eligibleOrders, (val) => {
+    orderQueue.value = [...val]
+})
+
 onUnmounted(stopPolling)
 
 onMounted(() => {
@@ -809,6 +918,41 @@ function appendToBatchOrders(order, trackNumber) {
     batchOrdersLocal.value = {
         ...batchOrdersLocal.value,
         [key]: [...existing, entry],
+    }
+}
+
+function dropFromBatchOrders(orderId) {
+    if (!activeBatch.value) return
+    const batchId = activeBatch.value.id
+    const key = batchOrdersLocal.value[batchId] ? batchId : String(batchId)
+    const existing = batchOrdersLocal.value[key] ?? []
+    batchOrdersLocal.value = {
+        ...batchOrdersLocal.value,
+        [key]: existing.filter(o => o.id !== orderId),
+    }
+}
+
+async function removeFromBatch(order) {
+    if (readOnly.value || !activeBatch.value) return
+    removingId.value = order.id
+    removeError.value = ''
+
+    try {
+        const resp = await apiFetch(`/belpost/batches/${activeBatch.value.id}/items/${order.id}/remove`, 'POST')
+        const data = await resp.json()
+
+        if (data.success) {
+            dropFromBatchOrders(order.id)
+            if (!order.track_number) {
+                Inertia.reload({ only: ['eligibleOrders', 'batchOrders'], preserveScroll: true })
+            }
+        } else {
+            removeError.value = data.message ?? 'Ошибка'
+        }
+    } catch (e) {
+        removeError.value = e.message
+    } finally {
+        removingId.value = null
     }
 }
 

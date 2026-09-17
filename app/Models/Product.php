@@ -13,17 +13,26 @@ class Product extends Model
         'page_url',
         'stock',
         'weight',
+        'upsell_name',
+        'upsell_price',
+        'upsell_text',
+        'cross_name',
+        'cross_price',
+        'cross_text',
+        'manager_note',
         'sr_item_id',
         'sold_count',
         'sold_amount',
     ];
 
     protected $casts = [
-        'stock'       => 'integer',
-        'weight'      => 'float',
-        'sr_item_id'  => 'integer',
-        'sold_count'  => 'integer',
-        'sold_amount' => 'float',
+        'stock'        => 'integer',
+        'weight'       => 'float',
+        'upsell_price' => 'float',
+        'cross_price'  => 'float',
+        'sr_item_id'   => 'integer',
+        'sold_count'   => 'integer',
+        'sold_amount'  => 'float',
     ];
 
     protected static function booted(): void

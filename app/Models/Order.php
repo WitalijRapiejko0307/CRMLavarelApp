@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Scopes\TenantScope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -110,9 +111,12 @@ class Order extends Model
         'prices',
         'delivery_type',
         'source',
+        'funnel_exclude',
         'comment',
         'upsell',
         'cross_sell',
+        'poste_restante',
+        'callback_at',
     ];
 
     /** Statuses that must not be deleted (revenue final, active tracking, active call-center). */
@@ -141,6 +145,14 @@ class Order extends Model
         'Завершен',
     ];
 
+    public const FUNNEL_EXCLUDE_REASONS = [
+        'duplicate' => 'дубль',
+        'test'      => 'тест',
+        'extra'     => 'доп. к другому заказу',
+    ];
+
+    public const POSTE_RESTANTE_STREET = 'До востребования';
+
     public const DELIVERY_TYPES = [
         'belpost'    => 'Белпочта',
         'europochta' => 'Европочта',
@@ -159,14 +171,21 @@ class Order extends Model
         return !in_array($order->status, self::NON_DELETABLE_STATUSES, true);
     }
 
+    public static function funnelBaseQuery(Builder $query): Builder
+    {
+        return $query->where('funnel_exclude', false)->where('status', '!=', 'Дубль');
+    }
+
     protected $fillable = [
         'tenant_id',
         'call_center_tenant_id',
         'last_updated_by_user_id',
+        'assigned_user_id',
         'external_id',
         'full_name',
         'status',
         'status_changed_at',
+        'callback_at',
         'goods',
         'quantities',
         'city',
@@ -174,12 +193,17 @@ class Order extends Model
         'building',
         'housing',
         'apartment',
+        'poste_restante',
         'phone',
         'prices',
         'track_number',
         'delivery_type',
         'sms_log',
         'source',
+        'funnel_exclude',
+        'utm_source',
+        'utm_medium',
+        'utm_campaign',
         'comment',
         'upsell',
         'cross_sell',
@@ -193,7 +217,10 @@ class Order extends Model
         'goods'             => 'array',
         'quantities'        => 'array',
         'prices'            => 'array',
+        'funnel_exclude'    => 'boolean',
+        'poste_restante'    => 'boolean',
         'status_changed_at' => 'datetime',
+        'callback_at'       => 'datetime',
         'created_at'        => 'datetime',
         'updated_at'        => 'datetime',
     ];
@@ -222,6 +249,11 @@ class Order extends Model
     public function lastUpdatedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'last_updated_by_user_id');
+    }
+
+    public function assignedUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_user_id');
     }
 
     public function storeConnection()
@@ -256,11 +288,33 @@ class Order extends Model
     {
         $parts = array_filter([
             $this->city,
-            $this->street,
-            $this->building,
+            $this->poste_restante ? self::POSTE_RESTANTE_STREET : $this->street,
+            $this->poste_restante ? null : $this->building,
             $this->housing ? 'корп. ' . $this->housing : null,
             $this->apartment ? 'кв. ' . $this->apartment : null,
         ]);
         return implode(', ', $parts);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public static function applyPosteRestanteDefaults(array $data): array
+    {
+        if (empty($data['poste_restante'])) {
+            return $data;
+        }
+
+        $data['poste_restante'] = true;
+        $street = trim((string) ($data['street'] ?? ''));
+        if ($street === '') {
+            $data['street'] = self::POSTE_RESTANTE_STREET;
+        }
+        if (!array_key_exists('building', $data) || trim((string) $data['building']) === '') {
+            $data['building'] = null;
+        }
+
+        return $data;
     }
 }

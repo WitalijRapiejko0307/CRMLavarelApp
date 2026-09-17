@@ -53,6 +53,12 @@ class TenantProvisioner
             'api_key_blacks_by'          => '',
             'token_sms_by'               => '',
             'alphaname_id'               => '',
+            'sms_rules'                  => '',
+            'sms_reminder_day_1'         => '5',
+            'sms_reminder_day_2'         => '10',
+            'sms_tpl_shipped'            => SmsService::DEFAULT_TPL_SHIPPED,
+            'sms_tpl_arrived'            => SmsService::DEFAULT_TPL_ARRIVED,
+            'sms_tpl_reminder'           => SmsService::DEFAULT_TPL_REMINDER,
             'tracking_checkpoint'        => '1',
             'webhook_secret'             => Str::random(40),
         ];
@@ -63,6 +69,8 @@ class TenantProvisioner
         return [
             'shop_name'       => $shopName,
             'connection_code' => $this->connectionService->generateConnectionCode(),
+            'call_script'     => 'Здравствуйте, {name}! По поводу {tovar} на сумму {sum} р.',
+            'cc_round_robin'  => '',
         ];
     }
 }

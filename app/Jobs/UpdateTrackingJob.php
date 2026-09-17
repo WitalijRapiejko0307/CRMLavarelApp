@@ -46,7 +46,7 @@ class UpdateTrackingJob implements ShouldQueue
         $jobFailed = false;
 
         try {
-            $smsService = $this->buildSmsService();
+            $smsService = SmsService::forTenant($this->tenantId);
             $this->processBelpost($service, $smsService);
 
             if (!$service->isCancelRequested($this->tenantId)) {
@@ -343,19 +343,6 @@ class UpdateTrackingJob implements ShouldQueue
             'new_status' => $newStatus,
             'track'      => $order->track_number,
         ]);
-    }
-
-    private function buildSmsService(): ?SmsService
-    {
-        $token       = TenantSetting::get('token_sms_by', '');
-        $alphanameId = TenantSetting::get('alphaname_id', '');
-        $rules       = TenantSetting::get('sms_rules', '');
-
-        if (!$token || !$alphanameId || !$rules) {
-            return null;
-        }
-
-        return new SmsService($token, $alphanameId, $rules);
     }
 
     private function setTenantContext(int $tenantId): void

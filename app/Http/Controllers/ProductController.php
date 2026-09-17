@@ -56,13 +56,13 @@ class ProductController extends Controller
             'page_url' => UrlNormalizer::normalize($request->input('page_url')),
         ]);
 
-        $data = $request->validate([
+        $data = $request->validate(array_merge([
             'name'       => ['required', 'string', 'max:255'],
             'page_url'   => ['nullable', 'url', 'max:500'],
             'stock'      => ['required', 'integer', 'min:0'],
             'weight'     => ['required', 'numeric', 'min:0'],
             'sr_item_id' => ['nullable', 'integer', 'min:1'],
-        ]);
+        ], static::offerFieldRules()));
 
         $tenantId = Auth::user()->tenant_id;
 
@@ -92,13 +92,13 @@ class ProductController extends Controller
             ]);
         }
 
-        $data = $request->validate([
+        $data = $request->validate(array_merge([
             'name'        => ['sometimes', 'string', 'max:255'],
             'page_url'    => ['nullable', 'url', 'max:500'],
             'weight'      => ['sometimes', 'numeric', 'min:0'],
             'stock_delta' => ['sometimes', 'integer'],
             'sr_item_id'  => ['nullable', 'integer', 'min:1'],
-        ]);
+        ], static::offerFieldRules()));
 
         if (isset($data['name']) && $data['name'] !== $product->name) {
             $tenantId = Auth::user()->tenant_id;
@@ -123,6 +123,8 @@ class ProductController extends Controller
             $product->sr_item_id = $data['sr_item_id'] ?: null;
         }
 
+        static::applyOfferFields($product, $data);
+
         // Stock intake (приход товара): positive delta adds, negative subtracts
         if (isset($data['stock_delta'])) {
             $product->stock = max(0, $product->stock + (int)$data['stock_delta']);
@@ -143,5 +145,36 @@ class ProductController extends Controller
         $product->delete();
 
         return response()->json(['success' => true]);
+    }
+
+    /** @return array<string, array<int, string>> */
+    protected static function offerFieldRules(): array
+    {
+        return [
+            'upsell_name'  => ['nullable', 'string', 'max:255'],
+            'upsell_price' => ['nullable', 'numeric', 'min:0'],
+            'upsell_text'  => ['nullable', 'string', 'max:2000'],
+            'cross_name'   => ['nullable', 'string', 'max:255'],
+            'cross_price'  => ['nullable', 'numeric', 'min:0'],
+            'cross_text'   => ['nullable', 'string', 'max:2000'],
+            'manager_note' => ['nullable', 'string', 'max:2000'],
+        ];
+    }
+
+    protected static function applyOfferFields(Product $product, array $data): void
+    {
+        foreach (['upsell_name', 'upsell_text', 'cross_name', 'cross_text', 'manager_note'] as $key) {
+            if (array_key_exists($key, $data)) {
+                $value = $data[$key];
+                $product->{$key} = ($value === null || $value === '') ? null : $value;
+            }
+        }
+
+        foreach (['upsell_price', 'cross_price'] as $key) {
+            if (array_key_exists($key, $data)) {
+                $value = $data[$key];
+                $product->{$key} = ($value === null || $value === '') ? null : $value;
+            }
+        }
     }
 }

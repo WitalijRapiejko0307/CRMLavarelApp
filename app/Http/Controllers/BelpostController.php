@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Jobs\DownloadBelpostPdfJob;
 use App\Models\MailBatch;
 use App\Models\Order;
+use App\Models\Product;
 use App\Models\TenantSetting;
 use App\Rules\BelarusPhone;
 use App\Rules\FullNameTwoParts;
@@ -40,7 +41,9 @@ class BelpostController extends Controller
             ->where('delivery_type', 'belpost')
             ->whereNull('track_number')
             ->orderBy('created_at')
-            ->get(['id', 'full_name', 'city', 'street', 'building', 'housing', 'apartment', 'phone', 'goods', 'quantities', 'prices']);
+            ->get(['id', 'full_name', 'city', 'street', 'building', 'housing', 'apartment', 'phone', 'goods', 'quantities', 'prices', 'poste_restante']);
+
+        $eligibleOrders = $this->withWeightHints($eligibleOrders);
 
         $batchOrders = Order::whereIn('mail_batch_id', $batches->pluck('id'))
             ->orderBy('status_changed_at')
@@ -106,6 +109,44 @@ class BelpostController extends Controller
     }
 
     // ─── Item processing ──────────────────────────────────────────────────────
+
+    /**
+     * POST /belpost/batches/{batch}/items/{order}/remove
+     * Unlink a draft batch order from CRM. Does not call Belpost (no delete-item API).
+     */
+    public function removeOrder(MailBatch $batch, Order $order): JsonResponse
+    {
+        if ($batch->isBelpostCommitted()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Партия уже сформирована на Белпочте',
+            ], 422);
+        }
+
+        if ((int) $order->mail_batch_id !== (int) $batch->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Заказ не найден в этой партии',
+            ], 404);
+        }
+
+        if (filled($order->track_number)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Заказ уже оформлен на Белпочте',
+            ], 422);
+        }
+
+        $payload = ['mail_batch_id' => null];
+
+        if ($order->status === 'Оформлен') {
+            $payload['status'] = 'Отправить';
+        }
+
+        $order->update($payload);
+
+        return response()->json(['success' => true]);
+    }
 
     /**
      * POST /belpost/batches/{batch}/items
@@ -395,5 +436,49 @@ class BelpostController extends Controller
         }
 
         return Storage::download($path, "belpost-{$batch->batch_id}.zip");
+    }
+
+    /**
+     * Attach weight (grams) and tariff hint to eligible order rows.
+     *
+     * @param  \Illuminate\Support\Collection|array<int, Order>  $orders
+     * @return \Illuminate\Support\Collection
+     */
+    protected function withWeightHints($orders)
+    {
+        $names = [];
+        foreach ($orders as $order) {
+            foreach ($order->goods ?? [] as $name) {
+                $trimmed = trim((string) $name);
+                if ($trimmed !== '') {
+                    $names[$trimmed] = true;
+                }
+            }
+        }
+
+        $productWeights = $names === []
+            ? []
+            : Product::query()
+                ->whereIn('name', array_keys($names))
+                ->pluck('weight', 'name')
+                ->all();
+
+        return collect($orders)->map(function (Order $order) use ($productWeights) {
+            $goods      = $order->goods ?? [];
+            $quantities = $order->quantities ?? [];
+            $prices     = $order->prices ?? [];
+            $weight     = (count($goods) !== count($quantities) || count($goods) !== count($prices))
+                ? 0
+                : BelpostService::sumGoodsWeightGrams($goods, $quantities, $productWeights);
+
+            $row = $order->only([
+                'id', 'full_name', 'city', 'street', 'building', 'housing',
+                'apartment', 'phone', 'goods', 'quantities', 'prices', 'poste_restante',
+            ]);
+            $row['weight']      = $weight;
+            $row['weight_hint'] = MailBatch::weightHint((float) $weight);
+
+            return $row;
+        })->values();
     }
 }

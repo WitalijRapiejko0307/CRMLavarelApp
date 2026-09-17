@@ -14,7 +14,7 @@
                     v-model="query"
                     type="text"
                     class="input pl-10 pr-4 py-2 mt-1"
-                    placeholder="Минск ул. Ленина… (мин. 3 символа)"
+                    :placeholder="posteRestante ? 'Минск или индекс…' : 'Минск ул. Ленина… (мин. 3 символа)'"
                     autocomplete="off"
                     @input="onInput"
                     @keydown="onKeydown"
@@ -101,8 +101,8 @@
                 </div>
             </div>
 
-            <!-- House: select or free input -->
-            <div>
+            <!-- House: hidden for poste restante; required unless params_null -->
+            <div v-if="!posteRestante">
                 <label class="label">
                     Дом
                     <span v-if="!pickedItem.params_null" class="text-red-400 ml-0.5">*</span>
@@ -140,6 +140,8 @@
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 
 // ── Props ─────────────────────────────────────────────────────────────────
+const POSTE_RESTANTE_STREET = 'До востребования'
+
 const props = defineProps({
     city:             { type: String, default: '' },
     street:           { type: String, default: '' },
@@ -147,6 +149,8 @@ const props = defineProps({
     belpostAddressId: { type: String, default: '' },
     /** Pre-fill search field on mount */
     initialQuery:     { type: String, default: '' },
+    /** Pickup at post office — city/postcode only, house not required */
+    posteRestante:    { type: Boolean, default: false },
 })
 
 const emit = defineEmits([
@@ -160,6 +164,10 @@ const emit = defineEmits([
 const buildingError = ref('')
 
 function validate() {
+    if (props.posteRestante) {
+        buildingError.value = ''
+        return true
+    }
     if (pickedItem.value && !pickedItem.value.params_null && !localBuilding.value) {
         buildingError.value = 'Выберите номер дома из справочника'
         return false
@@ -193,17 +201,36 @@ const localBuilding  = ref(props.building)
 // If the parent already has a belpostAddressId the order was previously picked —
 // show the readonly address without triggering a new search.
 onMounted(() => {
-    if (props.belpostAddressId && props.city && props.street) {
+    if (props.belpostAddressId && props.city && (props.street || props.posteRestante)) {
         pickedItem.value = {
-            id:         props.belpostAddressId,
+            id:          props.belpostAddressId,
             params_null: true,  // allow free input; real houses list is unknown here
-            houses:     [],
+            houses:      [],
         }
-        cityValue.value   = props.city
-        streetValue.value = props.street
-        localBuilding.value = props.building
+        cityValue.value     = props.city
+        streetValue.value   = props.posteRestante ? POSTE_RESTANTE_STREET : props.street
+        localBuilding.value = props.posteRestante ? '' : props.building
     }
     document.addEventListener('click', onOutsideClick)
+})
+
+watch(() => props.posteRestante, (on) => {
+    if (on) {
+        streetValue.value   = POSTE_RESTANTE_STREET
+        localBuilding.value = ''
+        buildingError.value = ''
+        emit('update:street', POSTE_RESTANTE_STREET)
+        emit('update:building', '')
+        return
+    }
+
+    // Off: keep city. Restore street from the picked directory item if we have it.
+    const item = pickedItem.value
+    if (item && item.street) {
+        const street = `${item.street_type || ''} ${item.street}`.trim()
+        streetValue.value = street
+        emit('update:street', street)
+    }
 })
 
 onBeforeUnmount(() => {
@@ -282,20 +309,25 @@ function pickItem(item) {
 
     // Build GAS-format strings (mirrors ScSA.gs setSelectedAddress)
     const city   = `${item.postcode} ${item.city_type} ${item.city}`.trim()
-    const street = `${item.street_type} ${item.street}`.trim()
+    const street = props.posteRestante
+        ? POSTE_RESTANTE_STREET
+        : `${item.street_type} ${item.street}`.trim()
 
     cityValue.value   = city
     streetValue.value = street
     pickedItem.value  = item
 
-    // Prefill building if current value is in houses list (normalised match)
-    const normalised = (props.building ?? '').toLowerCase().trim()
-    const match = !item.params_null
-        && item.houses.find(h => h.toLowerCase().trim() === normalised)
+    if (props.posteRestante) {
+        localBuilding.value = ''
+    } else {
+        // Prefill building if current value is in houses list (normalised match)
+        const normalised = (props.building ?? '').toLowerCase().trim()
+        const match = !item.params_null
+            && item.houses.find(h => h.toLowerCase().trim() === normalised)
 
-    localBuilding.value = match || ''
+        localBuilding.value = match || ''
+    }
 
-    // Emit immediately
     emit('update:city',             city)
     emit('update:street',           street)
     emit('update:belpostAddressId', String(item.id))

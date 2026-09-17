@@ -18,8 +18,22 @@ export function useOrderFeed(options = {}) {
         return true
     }
 
+    function isPaused() {
+        if (options.paused === undefined) {
+            return false
+        }
+        if (typeof options.paused === 'function') {
+            return !!options.paused()
+        }
+        if (options.paused && typeof options.paused === 'object' && 'value' in options.paused) {
+            return !!options.paused.value
+        }
+        return !!options.paused
+    }
+
     async function pollFeed() {
         if (!isEnabled()) return
+        if (isPaused()) return
 
         try {
             const url = `/api/orders/feed?since=${encodeURIComponent(lastSince.value)}`

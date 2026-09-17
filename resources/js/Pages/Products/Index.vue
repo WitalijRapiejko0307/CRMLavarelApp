@@ -6,7 +6,7 @@
                     <h1 class="page-title">Товары и склад</h1>
                 </template>
                 <template #actions>
-                    <button v-if="!readOnly" class="btn-primary" @click="openCreateModal">
+                    <button v-if="!readOnly" class="btn-primary" @click="openCreateModal()">
                         + Добавить товар
                     </button>
                 </template>
@@ -42,7 +42,7 @@
                 v-if="!readOnly"
                 type="button"
                 class="btn-primary mt-4"
-                @click="openCreateModal"
+                @click="openCreateModal()"
             >
                 + Добавить товар
             </button>
@@ -65,7 +65,8 @@
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
-                            <tr v-for="product in productList" :key="product.id" class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                            <template v-for="product in productList" :key="product.id">
+                            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                                 <td class="py-3">
                                     <span v-if="editing !== product.id" class="font-medium text-gray-800 dark:text-gray-200">{{ product.name }}</span>
                                     <input
@@ -170,6 +171,41 @@
                                     </div>
                                 </td>
                             </tr>
+                            <tr v-if="editing === product.id">
+                                <td :colspan="srEnabled ? 8 : 7" class="pb-4 pt-0">
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-gray-50 dark:bg-gray-800/60 rounded-md p-3">
+                                        <div>
+                                            <label class="label">Апсейл</label>
+                                            <input v-model="editForm.upsell_name" class="input mt-1 py-1" placeholder="Название" />
+                                        </div>
+                                        <div>
+                                            <label class="label">Цена апсейла</label>
+                                            <input v-model="editForm.upsell_price" type="number" min="0" step="0.01" class="input mt-1 py-1" />
+                                        </div>
+                                        <div class="sm:col-span-2">
+                                            <label class="label">Текст апсейла</label>
+                                            <textarea v-model="editForm.upsell_text" rows="2" class="input mt-1 resize-none" />
+                                        </div>
+                                        <div>
+                                            <label class="label">Кроссейл</label>
+                                            <input v-model="editForm.cross_name" class="input mt-1 py-1" placeholder="Название" />
+                                        </div>
+                                        <div>
+                                            <label class="label">Цена кроссейла</label>
+                                            <input v-model="editForm.cross_price" type="number" min="0" step="0.01" class="input mt-1 py-1" />
+                                        </div>
+                                        <div class="sm:col-span-2">
+                                            <label class="label">Текст кроссейла</label>
+                                            <textarea v-model="editForm.cross_text" rows="2" class="input mt-1 resize-none" />
+                                        </div>
+                                        <div class="sm:col-span-2">
+                                            <label class="label">Заметка оператору</label>
+                                            <textarea v-model="editForm.manager_note" rows="2" class="input mt-1 resize-none" />
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                            </template>
                         </tbody>
                     </table>
                 </div>
@@ -206,6 +242,14 @@
                                     {{ formatAmount(product.sold_amount ?? 0) }} р.
                                 </dd>
                             </div>
+                            <div v-if="product.upsell_name" class="col-span-2 flex justify-between gap-2">
+                                <dt class="text-muted">Апсейл:</dt>
+                                <dd class="text-gray-700 dark:text-gray-300">{{ product.upsell_name }}</dd>
+                            </div>
+                            <div v-if="product.manager_note" class="col-span-2">
+                                <dt class="text-muted">Заметка КЦ:</dt>
+                                <dd class="text-xs text-muted mt-0.5">{{ product.manager_note }}</dd>
+                            </div>
                         </dl>
 
                         <div class="mt-3 flex flex-wrap gap-2">
@@ -236,6 +280,34 @@
                                     <label class="label">ID SR</label>
                                     <input v-model.number="editForm.sr_item_id" type="number" min="1" placeholder="—" class="input mt-1" />
                                 </div>
+                            </div>
+                            <div>
+                                <label class="label">Апсейл</label>
+                                <input v-model="editForm.upsell_name" class="input mt-1" placeholder="Название" />
+                            </div>
+                            <div>
+                                <label class="label">Цена апсейла</label>
+                                <input v-model="editForm.upsell_price" type="number" min="0" step="0.01" class="input mt-1" />
+                            </div>
+                            <div>
+                                <label class="label">Текст апсейла</label>
+                                <textarea v-model="editForm.upsell_text" rows="2" class="input mt-1 resize-none" />
+                            </div>
+                            <div>
+                                <label class="label">Кроссейл</label>
+                                <input v-model="editForm.cross_name" class="input mt-1" placeholder="Название" />
+                            </div>
+                            <div>
+                                <label class="label">Цена кроссейла</label>
+                                <input v-model="editForm.cross_price" type="number" min="0" step="0.01" class="input mt-1" />
+                            </div>
+                            <div>
+                                <label class="label">Текст кроссейла</label>
+                                <textarea v-model="editForm.cross_text" rows="2" class="input mt-1 resize-none" />
+                            </div>
+                            <div>
+                                <label class="label">Заметка оператору</label>
+                                <textarea v-model="editForm.manager_note" rows="2" class="input mt-1 resize-none" />
                             </div>
                         </div>
                         <div class="mt-3 flex gap-2">
@@ -273,6 +345,34 @@
                     <div v-if="srEnabled">
                         <label class="label">ID SalesRender</label>
                         <input v-model.number="createForm.sr_item_id" type="number" min="1" class="input" placeholder="Оставьте пустым если не нужно" />
+                    </div>
+                    <div>
+                        <label class="label">Апсейл</label>
+                        <input v-model="createForm.upsell_name" class="input" placeholder="Название" />
+                    </div>
+                    <div>
+                        <label class="label">Цена апсейла</label>
+                        <input v-model="createForm.upsell_price" type="number" min="0" step="0.01" class="input" />
+                    </div>
+                    <div>
+                        <label class="label">Текст апсейла</label>
+                        <textarea v-model="createForm.upsell_text" rows="2" class="input resize-none" />
+                    </div>
+                    <div>
+                        <label class="label">Кроссейл</label>
+                        <input v-model="createForm.cross_name" class="input" placeholder="Название" />
+                    </div>
+                    <div>
+                        <label class="label">Цена кроссейла</label>
+                        <input v-model="createForm.cross_price" type="number" min="0" step="0.01" class="input" />
+                    </div>
+                    <div>
+                        <label class="label">Текст кроссейла</label>
+                        <textarea v-model="createForm.cross_text" rows="2" class="input resize-none" />
+                    </div>
+                    <div>
+                        <label class="label">Заметка оператору</label>
+                        <textarea v-model="createForm.manager_note" rows="2" class="input resize-none" />
                     </div>
                     <p v-if="createError" class="text-xs text-red-600">{{ createError }}</p>
                 </div>
@@ -340,12 +440,12 @@ const props = defineProps({
 // ── State ─────────────────────────────────────────────────────────────────────
 const productList = ref([...props.products])
 const editing     = ref(null)
-const editForm    = ref({ name: '', page_url: '', weight: 0, sr_item_id: null })
+const editForm    = ref(emptyProductForm())
 const saving      = ref(false)
 
 // Create modal
 const createModal = ref(false)
-const createForm  = ref({ name: '', page_url: '', weight: 0, stock: 0, sr_item_id: null })
+const createForm  = ref(emptyProductForm())
 const createError = ref('')
 
 // Intake modal
@@ -360,13 +460,57 @@ const totalSoldCount  = computed(() => productList.value.reduce((s, p) => s + (p
 const totalSoldAmount = computed(() => productList.value.reduce((s, p) => s + (p.sold_amount ?? 0), 0))
 
 // ── Edit inline ───────────────────────────────────────────────────────────────
+function emptyOfferFields() {
+    return {
+        upsell_name:  '',
+        upsell_price: null,
+        upsell_text:  '',
+        cross_name:   '',
+        cross_price:  null,
+        cross_text:   '',
+        manager_note: '',
+    }
+}
+
+function emptyProductForm(presetName = '') {
+    return {
+        name:       presetName,
+        page_url:   '',
+        weight:     0,
+        stock:      0,
+        sr_item_id: null,
+        ...emptyOfferFields(),
+    }
+}
+
+function offerPayload(src) {
+    const str = (v) => (v === '' || v == null ? null : v)
+    const num = (v) => (v === '' || v == null ? null : v)
+    return {
+        upsell_name:  str(src.upsell_name),
+        upsell_price: num(src.upsell_price),
+        upsell_text:  str(src.upsell_text),
+        cross_name:   str(src.cross_name),
+        cross_price:  num(src.cross_price),
+        cross_text:   str(src.cross_text),
+        manager_note: str(src.manager_note),
+    }
+}
+
 function startEdit(product) {
     editing.value  = product.id
     editForm.value = {
-        name: product.name,
-        page_url: product.page_url ?? '',
-        weight: product.weight ?? 0,
-        sr_item_id: product.sr_item_id ?? null,
+        name:         product.name,
+        page_url:     product.page_url ?? '',
+        weight:       product.weight ?? 0,
+        sr_item_id:   product.sr_item_id ?? null,
+        upsell_name:  product.upsell_name ?? '',
+        upsell_price: product.upsell_price ?? null,
+        upsell_text:  product.upsell_text ?? '',
+        cross_name:   product.cross_name ?? '',
+        cross_price:  product.cross_price ?? null,
+        cross_text:   product.cross_text ?? '',
+        manager_note: product.manager_note ?? '',
     }
 }
 
@@ -382,6 +526,7 @@ async function saveEdit(product) {
             page_url:   editForm.value.page_url || null,
             weight:     editForm.value.weight,
             sr_item_id: editForm.value.sr_item_id || null,
+            ...offerPayload(editForm.value),
         })
         const data = await resp.json()
         if (data.success) {
@@ -395,7 +540,7 @@ async function saveEdit(product) {
 
 // ── Create ────────────────────────────────────────────────────────────────────
 function openCreateModal(presetName = '') {
-    createForm.value  = { name: presetName, page_url: '', weight: 0, stock: 0, sr_item_id: null }
+    createForm.value  = emptyProductForm(typeof presetName === 'string' ? presetName : '')
     createError.value = ''
     createModal.value = true
 }

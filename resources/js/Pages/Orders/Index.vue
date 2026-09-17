@@ -51,7 +51,7 @@
                     <input
                         v-model="filters.search"
                         type="text"
-                        placeholder="Имя, телефон, ID…"
+                        placeholder="Имя, телефон, трек, товар…"
                         class="w-full"
                         @input="applyFilters"
                     />
@@ -67,12 +67,30 @@
                     />
                 </div>
                 <div>
+                    <label class="label mb-1">Доставка</label>
+                    <AppScrollSelect
+                        v-model="filters.delivery_type"
+                        :options="deliveryTypeOptions"
+                        placeholder="Все типы"
+                        :empty-option="{ value: '', label: 'Все типы' }"
+                        @change="applyFilters"
+                    />
+                </div>
+                <div>
                     <label class="label mb-1">Дата от</label>
                     <DateInput v-model="filters.date_from" @change="applyFilters" />
                 </div>
                 <div>
                     <label class="label mb-1">Дата до</label>
                     <DateInput v-model="filters.date_to" @change="applyFilters" />
+                </div>
+                <div class="md:hidden">
+                    <label class="label mb-1">Сортировка</label>
+                    <AppScrollSelect
+                        v-model="mobileSortValue"
+                        :options="mobileSortOptions"
+                        placeholder="По дате (новые)"
+                    />
                 </div>
             </div>
             <div v-if="hasActiveFilters" class="mt-3 flex justify-end">
@@ -136,6 +154,7 @@
                                         v-for="header in headerGroup.headers"
                                         :key="header.id"
                                         class="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap"
+                                        :aria-sort="headerAriaSort(header.column.id)"
                                     >
                                         <FlexRender
                                             v-if="!header.isPlaceholder"
@@ -373,6 +392,7 @@ import BulkStatusConfirmModal from '@/Components/BulkStatusConfirmModal.vue'
 import { useSubscription } from '@/composables/useSubscription'
 import { useOnboarding } from '@/composables/useOnboarding'
 import { useOrderFeed } from '@/composables/useOrderFeed'
+import { hasOpenScrollSelect } from '@/utils/scrollSelectRegistry'
 import { apiFetch } from '@/utils/api'
 import { bulkStatusWarning } from '@/utils/bulkStatusWarnings'
 import { formatDateDMY, isValidDateDMY, parseDateDMY } from '@/utils/date'
@@ -389,16 +409,16 @@ const props = defineProps({
     statuses:            Array,
     bulkConfirmStatuses: { type: Array, default: () => [] },
     deliveryTypes:       Object,
+    segments:            { type: Object, default: () => ({}) },
     isCallCenter:        { type: Boolean, default: false },
     connectedStores:     { type: Array, default: () => [] },
     orderHandlers:       { type: Object, default: () => ({}) },
+    roundRobinEnabled:   { type: Boolean, default: false },
 })
 
 const { readOnly } = useSubscription()
 const { visible: onboardingVisible } = useOnboarding()
 const page = usePage()
-
-const { feedUpdated } = useOrderFeed()
 
 const isAdmin = computed(() => page.props.value.auth?.user?.role === 'admin')
 const blockedStatuses = computed(() => page.props.value.order_delete?.blocked_statuses ?? [])
@@ -443,6 +463,10 @@ const bulkStatus        = ref('')
 const bulkApplying      = ref(false)
 const confirmModalOpen  = ref(false)
 const bulkResultMessage = ref('')
+
+const { feedUpdated } = useOrderFeed({
+    paused: () => selectedIds.value.size > 0 || hasOpenScrollSelect(),
+})
 
 const selectedCount = computed(() => selectedIds.value.size)
 
@@ -699,20 +723,135 @@ function toDisplayDate(value) {
 }
 
 const filters = ref({
-    search:    props.filters?.search    ?? '',
-    status:    props.filters?.status    ?? '',
-    date_from: toDisplayDate(props.filters?.date_from),
-    date_to:   toDisplayDate(props.filters?.date_to),
-    store_id:  props.filters?.store_id  ?? '',
+    search:        props.filters?.search        ?? '',
+    status:        props.filters?.status        ?? '',
+    date_from:     toDisplayDate(props.filters?.date_from),
+    date_to:       toDisplayDate(props.filters?.date_to),
+    store_id:      props.filters?.store_id      ?? '',
+    segment:       props.filters?.segment       ?? '',
+    delivery_type: props.filters?.delivery_type ?? '',
+    assignee:      props.filters?.assignee      ?? '',
+    sort:          props.filters?.sort          ?? 'created_at',
+    dir:           props.filters?.dir           ?? 'desc',
 })
 
 const storeFilterOptions = computed(() =>
     props.connectedStores.map(s => ({ value: String(s.id), label: s.name }))
 )
 
-const hasActiveFilters = computed(() =>
-    Object.values(filters.value).some(v => v !== '')
+const deliveryTypeOptions = computed(() =>
+    Object.entries(props.deliveryTypes ?? {}).map(([value, label]) => ({ value, label }))
 )
+
+const FILTER_KEYS = ['search', 'status', 'date_from', 'date_to', 'store_id', 'segment', 'delivery_type', 'assignee']
+
+const hasActiveFilters = computed(() =>
+    FILTER_KEYS.some(key => filters.value[key] !== '')
+)
+
+const SORTABLE_COLUMNS = [
+    { value: 'created_at',    label: 'Дата',     firstDir: 'desc' },
+    { value: 'id',            label: '№',        firstDir: 'desc' },
+    { value: 'full_name',     label: 'ФИО',      firstDir: 'asc' },
+    { value: 'status',        label: 'Статус',   firstDir: 'asc' },
+    { value: 'phone',         label: 'Телефон',  firstDir: 'asc' },
+    { value: 'city',          label: 'Город',    firstDir: 'asc' },
+    { value: 'track_number',  label: 'Трек',     firstDir: 'asc' },
+    { value: 'delivery_type', label: 'Доставка', firstDir: 'asc' },
+]
+
+const mobileSortOptions = computed(() => {
+    const hidden = props.isCallCenter ? ['track_number', 'delivery_type'] : []
+
+    return SORTABLE_COLUMNS
+        .filter(col => !hidden.includes(col.value))
+        .flatMap(col => {
+            if (col.value === 'created_at') {
+                return [
+                    { value: 'created_at:desc', label: 'Дата (новые)' },
+                    { value: 'created_at:asc',  label: 'Дата (старые)' },
+                ]
+            }
+            if (col.value === 'id') {
+                return [
+                    { value: 'id:desc', label: '№ (убыв.)' },
+                    { value: 'id:asc',  label: '№ (возр.)' },
+                ]
+            }
+            return [
+                { value: `${col.value}:asc`,  label: `${col.label} А → Я` },
+                { value: `${col.value}:desc`, label: `${col.label} Я → А` },
+            ]
+        })
+})
+
+const mobileSortValue = computed({
+    get: () => `${filters.value.sort || 'created_at'}:${filters.value.dir || 'desc'}`,
+    set: (value) => onMobileSortChange(value),
+})
+
+function firstDirFor(column) {
+    return SORTABLE_COLUMNS.find(col => col.value === column)?.firstDir ?? 'asc'
+}
+
+function isDefaultSort(sort, dir) {
+    return (sort === 'created_at' || !sort) && (dir === 'desc' || !dir)
+}
+
+function headerAriaSort(columnId) {
+    if ((filters.value.sort || 'created_at') !== columnId) return 'none'
+    return filters.value.dir === 'asc' ? 'ascending' : 'descending'
+}
+
+function sortIndicator(column) {
+    const active = (filters.value.sort || 'created_at') === column
+    if (!active) return '↕'
+    return filters.value.dir === 'asc' ? '↑' : '↓'
+}
+
+function sortableHeader(label, column) {
+    return () => h('button', {
+        type: 'button',
+        class: 'inline-flex items-center gap-1 -ml-1 px-1 py-0.5 rounded hover:text-gray-900 dark:hover:text-gray-100',
+        title: 'Сортировать',
+        onClick: () => toggleSort(column),
+    }, [
+        label,
+        h('span', {
+            class: (filters.value.sort || 'created_at') === column
+                ? 'text-indigo-600 dark:text-indigo-400'
+                : 'text-gray-300 dark:text-gray-600',
+            'aria-hidden': 'true',
+        }, sortIndicator(column)),
+    ])
+}
+
+function toggleSort(column) {
+    const current = filters.value.sort || 'created_at'
+    const dir = filters.value.dir || 'desc'
+
+    if (current !== column) {
+        filters.value.sort = column
+        filters.value.dir = firstDirFor(column)
+    } else {
+        const first = firstDirFor(column)
+        if (dir === first) {
+            filters.value.dir = first === 'asc' ? 'desc' : 'asc'
+        } else {
+            filters.value.sort = 'created_at'
+            filters.value.dir = 'desc'
+        }
+    }
+
+    applySort()
+}
+
+function onMobileSortChange(value) {
+    const [sort, dir] = String(value || '').split(':')
+    filters.value.sort = sort || 'created_at'
+    filters.value.dir = dir === 'asc' ? 'asc' : 'desc'
+    applySort()
+}
 
 const isEmptyUnfiltered = computed(() =>
     props.orders.data.length === 0 && !hasActiveFilters.value
@@ -721,29 +860,54 @@ const isEmptyUnfiltered = computed(() =>
 let filterTimer = null
 function buildFilterQuery() {
     const query = {
-        search: filters.value.search,
-        status: filters.value.status,
-        date_from: isValidDateDMY(filters.value.date_from) ? parseDateDMY(filters.value.date_from) : '',
-        date_to:   isValidDateDMY(filters.value.date_to)   ? parseDateDMY(filters.value.date_to)   : '',
+        search:        filters.value.search,
+        status:        filters.value.status,
+        date_from:     isValidDateDMY(filters.value.date_from) ? parseDateDMY(filters.value.date_from) : '',
+        date_to:       isValidDateDMY(filters.value.date_to)   ? parseDateDMY(filters.value.date_to)   : '',
+        segment:       filters.value.segment,
+        delivery_type: filters.value.delivery_type,
+        assignee:      filters.value.assignee,
     }
     if (props.isCallCenter && filters.value.store_id) {
         query.store_id = filters.value.store_id
     }
+    if (!isDefaultSort(filters.value.sort, filters.value.dir)) {
+        query.sort = filters.value.sort
+        query.dir  = filters.value.dir
+    }
     return query
 }
 
-function applyFilters() {
-    clearTimeout(filterTimer)
-    filterTimer = setTimeout(() => {
+function visitOrders(delay = 0) {
+    const go = () => {
         Inertia.get('/orders', buildFilterQuery(), {
             preserveState: true,
             replace: true,
         })
-    }, 350)
+    }
+    clearTimeout(filterTimer)
+    if (delay > 0) {
+        filterTimer = setTimeout(go, delay)
+        return
+    }
+    go()
+}
+
+function applyFilters() {
+    visitOrders(350)
+}
+
+function applySort() {
+    visitOrders(0)
 }
 
 function resetFilters() {
-    filters.value = { search: '', status: '', date_from: '', date_to: '', store_id: '' }
+    filters.value = {
+        search: '', status: '', date_from: '', date_to: '', store_id: '',
+        segment: '', delivery_type: '', assignee: '',
+        sort: filters.value.sort,
+        dir:  filters.value.dir,
+    }
     applyFilters()
 }
 
@@ -778,6 +942,8 @@ const columnHelper = createColumnHelper()
 
 const columns = computed(() => {
     void selectedIds.value.size
+    void filters.value.sort
+    void filters.value.dir
 
     const cols = [
         columnHelper.display({
@@ -803,7 +969,7 @@ const columns = computed(() => {
             }),
         }),
         columnHelper.accessor('id', {
-            header: '#',
+            header: sortableHeader('#', 'id'),
             cell:   info => h('span', { class: 'text-gray-400 dark:text-gray-500 font-mono text-xs' }, '#' + info.getValue()),
         }),
     ]
@@ -838,15 +1004,15 @@ const columns = computed(() => {
 
     cols.push(
         columnHelper.accessor('created_at', {
-            header: 'Дата',
+            header: sortableHeader('Дата', 'created_at'),
             cell:   info => h('span', { class: 'whitespace-nowrap text-gray-600 dark:text-gray-400' }, formatDate(info.getValue())),
         }),
         columnHelper.accessor('full_name', {
-            header: 'ФИО',
+            header: sortableHeader('ФИО', 'full_name'),
             cell:   info => h('span', { class: 'font-medium text-gray-900 dark:text-gray-100' }, info.getValue()),
         }),
         columnHelper.accessor('status', {
-            header: 'Статус',
+            header: sortableHeader('Статус', 'status'),
             cell:   info => {
                 const row = info.row.original
                 return h(OrderStatusSelect, {
@@ -868,7 +1034,7 @@ const columns = computed(() => {
             },
         }),
         columnHelper.accessor('phone', {
-            header: 'Телефон',
+            header: sortableHeader('Телефон', 'phone'),
             cell:   info => {
                 const row = info.row.original
                 const phone = info.getValue()
@@ -897,7 +1063,7 @@ const columns = computed(() => {
             },
         }),
         columnHelper.accessor('city', {
-            header: 'Город',
+            header: sortableHeader('Город', 'city'),
             cell:   info => h('span', { class: 'text-gray-600 dark:text-gray-400' }, info.getValue() ?? '—'),
         }),
     )
@@ -905,13 +1071,13 @@ const columns = computed(() => {
     if (!props.isCallCenter) {
         cols.push(
             columnHelper.accessor('track_number', {
-                header: 'Трек',
+                header: sortableHeader('Трек', 'track_number'),
                 cell:   info => h('span', {
                     class: info.getValue() ? 'text-indigo-600 dark:text-indigo-400 font-mono text-xs' : 'text-gray-400 dark:text-gray-500',
                 }, info.getValue() ?? '—'),
             }),
             columnHelper.accessor('delivery_type', {
-                header: 'Доставка',
+                header: sortableHeader('Доставка', 'delivery_type'),
                 cell:   info => h('span', { class: 'text-gray-600 dark:text-gray-400 text-xs' },
                     props.deliveryTypes[info.getValue()] ?? '—'
                 ),

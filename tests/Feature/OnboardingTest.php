@@ -42,10 +42,16 @@ class OnboardingTest extends TestCase
 
     private function inertiaGet(User $user, string $url)
     {
-        return $this->actingAs($user)->get($url, [
+        $headers = [
             'X-Inertia'        => 'true',
             'X-Requested-With' => 'XMLHttpRequest',
-        ]);
+        ];
+        $manifest = public_path('mix-manifest.json');
+        if (is_file($manifest)) {
+            $headers['X-Inertia-Version'] = md5_file($manifest);
+        }
+
+        return $this->actingAs($user)->get($url, $headers);
     }
 
     public function test_settings_page_shares_onboarding_and_elc_label(): void

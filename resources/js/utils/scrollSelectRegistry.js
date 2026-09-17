@@ -12,3 +12,7 @@ export function unregisterScrollSelectClose(closeFn) {
         activeClose = null
     }
 }
+
+export function hasOpenScrollSelect() {
+    return activeClose !== null
+}

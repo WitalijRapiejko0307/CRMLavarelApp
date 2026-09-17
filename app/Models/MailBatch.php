@@ -46,6 +46,42 @@ class MailBatch extends Model
         'ecommerce_optima'      => 'E-commerce Оптима',
     ];
 
+    /**
+     * Packer tariff orientir from parcel weight (grams). Not stored in tenant_settings.
+     * First matching max_kg (inclusive) wins; null max_kg is the fallback.
+     */
+    public const WEIGHT_HINTS = [
+        ['max_kg' => 0.3, 'type' => 'ecommerce_light', 'label' => 'Лайт'],
+        ['max_kg' => 0.6, 'type' => 'ecommerce_optima', 'label' => 'Оптима'],
+        ['max_kg' => null, 'type' => 'ecommerce_standard', 'label' => 'Стандарт'],
+    ];
+
+    /**
+     * @return array{type: string, label: string, max_kg: float|null}
+     */
+    public static function weightHint(float $weightGrams): array
+    {
+        $kg = $weightGrams / 1000;
+
+        foreach (self::WEIGHT_HINTS as $hint) {
+            if ($hint['max_kg'] === null || $kg <= (float) $hint['max_kg']) {
+                return [
+                    'type'   => $hint['type'],
+                    'label'  => $hint['label'],
+                    'max_kg' => $hint['max_kg'],
+                ];
+            }
+        }
+
+        $fallback = self::WEIGHT_HINTS[array_key_last(self::WEIGHT_HINTS)];
+
+        return [
+            'type'   => $fallback['type'],
+            'label'  => $fallback['label'],
+            'max_kg' => $fallback['max_kg'],
+        ];
+    }
+
     protected $fillable = [
         'tenant_id',
         'batch_id',

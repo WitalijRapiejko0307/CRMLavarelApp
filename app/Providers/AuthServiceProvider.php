@@ -33,6 +33,12 @@ class AuthServiceProvider extends ServiceProvider
         // Finance: admin + manager can access finance module
         Gate::define('view-finances', fn ($user) => $user->isTenantUser() && in_array($user->role, ['admin', 'manager']));
 
+        Gate::define('view-reports', fn ($user) =>
+            $user->isTenantUser()
+            && $user->tenant?->isStore()
+            && in_array($user->role, ['admin', 'manager'], true)
+        );
+
         Gate::define('delete-orders', fn ($user) => $user->isTenantUser() && $user->role === 'admin' && $user->tenant?->isStore());
 
         Gate::define('manage-connections', fn ($user) => $user->isTenantUser() && $user->role === 'admin');

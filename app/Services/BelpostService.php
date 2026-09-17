@@ -98,14 +98,18 @@ class BelpostService
         // Priority: explicit param → persisted on order → autoResolve
         $addressId = $belpostAddressId ?? ($order->belpost_address_id ?: null);
         $resolvedItem = null;
+        $isPosteRestante = (bool) $order->poste_restante;
 
         if (!$addressId) {
             /** @var AddressService $addressService */
             $addressService = app(AddressService::class);
+            $streetForResolve = $isPosteRestante
+                ? (trim((string) ($order->street ?? '')) ?: Order::POSTE_RESTANTE_STREET)
+                : (string) ($order->street ?? '');
             $resolvedItem = $addressService->autoResolve(
-                (string)($order->city ?? ''),
-                (string)($order->street ?? ''),
-                (string)($order->building ?? '')
+                (string) ($order->city ?? ''),
+                $streetForResolve,
+                $isPosteRestante ? '' : (string) ($order->building ?? '')
             );
 
             if (!$resolvedItem) {
@@ -157,8 +161,8 @@ class BelpostService
                 'address' => [
                     'id'           => $addressId,
                     'country_code' => 'BY',
-                    'type'         => 'address',
-                    'house'        => trim((string)($order->building ?? '')),
+                    'type'         => $isPosteRestante ? 'on_demand' : 'address',
+                    'house'        => $isPosteRestante ? '' : trim((string) ($order->building ?? '')),
                     'cell_number'  => null,
                     'block'        => ($order->housing  ?? '') ?: null,
                     'flat'         => ($order->apartment ?? '') ?: null,
@@ -228,11 +232,14 @@ class BelpostService
         /** @var AddressService $addressService */
         $addressService = app(AddressService::class);
 
-        if ($s10code && $addr && $respCity && $respStreet) {
-            if (
-                $addressService->addressPartsMatch((string) ($order->city ?? ''), $respCity)
-                && $addressService->addressPartsMatch((string) ($order->street ?? ''), $respStreet)
-            ) {
+        $addressComplete = $s10code && $addr && $respCity && ($isPosteRestante || $respStreet);
+
+        if ($addressComplete) {
+            $cityMatches = $addressService->addressPartsMatch((string) ($order->city ?? ''), $respCity);
+            $streetMatches = $isPosteRestante
+                || $addressService->addressPartsMatch((string) ($order->street ?? ''), $respStreet);
+
+            if ($cityMatches && $streetMatches) {
                 // ── 9. Update order ──
                 $order->update([
                     'status'            => 'Оформлен',
@@ -250,7 +257,7 @@ class BelpostService
                 return ['success' => true, 'track_number' => $s10code, 'error' => null, 'error_message' => null];
             }
 
-            // Address mismatch
+            // Address mismatch (poste restante: never solely because street is empty / «До востребования»)
             return [
                 'success'       => false,
                 'track_number'  => null,
@@ -435,7 +442,6 @@ class BelpostService
             return [0, 0];
         }
 
-        $fullWeight    = 0;
         $cashOnDelivery = 0;
 
         // Load all products for this tenant in one query
@@ -448,13 +454,31 @@ class BelpostService
         foreach ($goods as $i => $goodName) {
             $qty   = (int)($quantities[$i] ?? 1);
             $price = (float)($prices[$i] ?? 0);
-            $weight = (float)($productWeights[trim($goodName)] ?? 0);
 
             $cashOnDelivery += (int)round($qty * $price);
-            $fullWeight     += (int)round($qty * $weight);
         }
 
-        return [$fullWeight, $cashOnDelivery];
+        return [self::sumGoodsWeightGrams($goods, $quantities, $productWeights), $cashOnDelivery];
+    }
+
+    /**
+     * Sum product weights in grams: products.weight × qty for matching goods names.
+     *
+     * @param  array<int, mixed>          $goods
+     * @param  array<int, mixed>          $quantities
+     * @param  array<string, float|int|null> $productWeights  name → grams
+     */
+    public static function sumGoodsWeightGrams(array $goods, array $quantities, array $productWeights): int
+    {
+        $fullWeight = 0;
+
+        foreach ($goods as $i => $goodName) {
+            $qty    = (int) ($quantities[$i] ?? 1);
+            $weight = (float) ($productWeights[trim((string) $goodName)] ?? 0);
+            $fullWeight += (int) round($qty * $weight);
+        }
+
+        return $fullWeight;
     }
 
     /**

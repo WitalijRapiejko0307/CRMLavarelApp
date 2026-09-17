@@ -51,7 +51,7 @@ class OrderStatusUpdateTest extends TestCase
         $order->refresh();
         $this->assertSame('Отдал заявку', $order->status);
 
-        $this->assertDatabaseHas('order_status_histories', [
+        $this->assertDatabaseHas('order_status_history', [
             'order_id'    => $order->id,
             'from_status' => 'Позвонить',
             'to_status'   => 'Отдал заявку',

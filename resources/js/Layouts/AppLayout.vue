@@ -79,6 +79,13 @@
                             Аналитика
                         </Link>
                         <Link
+                            v-if="canViewReports"
+                            href="/reports"
+                            :class="navLinkClass('/reports')"
+                        >
+                            Отчёты
+                        </Link>
+                        <Link
                             v-if="canViewFinances"
                             href="/finances"
                             :class="navLinkClass('/finances')"
@@ -243,6 +250,7 @@ const isStore           = computed(() => !isCallCenter.value)
 const currentRole       = computed(() => page.props.value.auth?.user?.role ?? '')
 const isAdmin           = computed(() => currentRole.value === 'admin')
 const canViewFinances   = computed(() => isStore.value && ['admin', 'manager'].includes(currentRole.value))
+const canViewReports    = computed(() => isStore.value && ['admin', 'manager'].includes(currentRole.value))
 const canViewAnalytics  = computed(() => isCallCenter.value && ['admin', 'manager', 'operator'].includes(currentRole.value))
 
 const mobileLinks = computed(() => {
@@ -258,6 +266,9 @@ const mobileLinks = computed(() => {
     }
     if (canViewAnalytics.value) {
         links.push({ href: '/analytics', label: 'Аналитика', active: isActive('/analytics') })
+    }
+    if (canViewReports.value) {
+        links.push({ href: '/reports', label: 'Отчёты', active: isActive('/reports') })
     }
     if (canViewFinances.value) {
         links.push({ href: '/finances', label: 'Финансы', active: isActive('/finances') })

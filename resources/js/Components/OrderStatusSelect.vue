@@ -36,7 +36,13 @@ function onChange() {
     if (selectedStatus.value === props.status) return
 
     form.status = selectedStatus.value
-    form.patch(`/orders/${props.orderId}/status`, {
+    const payload = { status: selectedStatus.value }
+    if (selectedStatus.value === 'Перезвонить') {
+        const d = new Date(Date.now() + 15 * 60 * 1000)
+        const pad = (n) => String(n).padStart(2, '0')
+        payload.callback_at = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:00`
+    }
+    form.transform(() => payload).patch(`/orders/${props.orderId}/status`, {
         preserveScroll: true,
         only: ['orders'],
         onError: () => {

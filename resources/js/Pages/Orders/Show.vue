@@ -125,6 +125,26 @@
                     </div>
                 </div>
 
+                <!-- Phone return history -->
+                <div v-if="phoneHistory.length" class="card">
+                    <h2 class="section-title mb-4">Возвраты по телефону</h2>
+                    <ul class="space-y-2 text-sm">
+                        <li
+                            v-for="row in phoneHistory"
+                            :key="row.id"
+                            class="flex items-center justify-between gap-3"
+                        >
+                            <a :href="`/orders/${row.id}`" class="text-indigo-600 hover:underline dark:text-indigo-400 truncate">
+                                #{{ row.id }} {{ row.full_name }}
+                            </a>
+                            <span class="flex items-center gap-2 text-xs text-muted">
+                                <OrderStatusBadge :status="row.status" />
+                                <span>{{ formatDate(row.created_at) }}</span>
+                            </span>
+                        </li>
+                    </ul>
+                </div>
+
                 <!-- Notes -->
                 <div class="card">
                     <h2 class="section-title mb-4 flex items-center gap-2">
@@ -209,6 +229,12 @@
 
                     <!-- View mode: structured display -->
                     <div v-if="!editing" class="text-sm text-body space-y-0.5">
+                        <span
+                            v-if="order.poste_restante"
+                            class="inline-flex items-center text-xs font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 rounded-full mb-1"
+                        >
+                            До востребования
+                        </span>
                         <template v-if="fullAddress">
                             <div v-if="order.city" class="text-gray-800 dark:text-gray-200">{{ order.city }}</div>
                             <div v-if="order.street" class="text-gray-600 dark:text-gray-400">{{ order.street }}</div>
@@ -218,13 +244,21 @@
                                 <span v-if="order.apartment"> · кв. {{ order.apartment }}</span>
                             </div>
                         </template>
-                        <span v-else class="text-gray-400 dark:text-gray-500">—</span>
+                        <span v-else-if="!order.poste_restante" class="text-gray-400 dark:text-gray-500">—</span>
                     </div>
 
                     <!-- Edit mode: belpost → inline picker, others → plain fields -->
                     <div v-else>
                         <!-- Belpost: inline picker -->
                         <template v-if="order.delivery_type === 'belpost'">
+                            <label class="flex items-center gap-2 mb-3 cursor-pointer">
+                                <input
+                                    v-model="form.poste_restante"
+                                    type="checkbox"
+                                    class="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-indigo-600 dark:bg-gray-700"
+                                />
+                                <span class="text-sm text-gray-700 dark:text-gray-300">До востребования</span>
+                            </label>
                             <AddressInlinePicker
                                 ref="pickerRef"
                                 v-model:city="form.city"
@@ -232,6 +266,7 @@
                                 v-model:building="form.building"
                                 v-model:belpostAddressId="form.belpost_address_id"
                                 :initial-query="pickerInitialQuery"
+                                :poste-restante="form.poste_restante"
                             />
                             <!-- Housing + apartment remain plain inputs -->
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
@@ -395,15 +430,85 @@
                 </div>
             </div>
 
-            <!-- Right: Status + delivery + history -->
+            <!-- Right: Script + status + delivery + history -->
             <div class="space-y-6">
+                <div v-if="isCallCenter" class="card">
+                    <h2 class="section-title mb-3">Скрипт</h2>
+                    <p v-if="callScript" class="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">{{ callScript }}</p>
+                    <p v-else class="text-sm text-muted">Скрипт не задан в настройках</p>
+
+                    <div v-if="catalogProduct?.manager_note" class="mt-3 text-xs text-muted whitespace-pre-wrap">
+                        {{ catalogProduct.manager_note }}
+                    </div>
+
+                    <div v-if="catalogProduct?.upsell_name" class="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700 space-y-2">
+                        <p v-if="catalogProduct.upsell_text" class="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">
+                            {{ catalogProduct.upsell_text }}
+                        </p>
+                        <p class="text-sm text-gray-700 dark:text-gray-300">
+                            {{ catalogProduct.upsell_name }}
+                            <span v-if="catalogProduct.upsell_price != null" class="text-muted">
+                                · {{ formatPrice(catalogProduct.upsell_price) }}
+                            </span>
+                        </p>
+                        <button
+                            type="button"
+                            class="btn-secondary btn-sm"
+                            :disabled="readOnly || addingOffer"
+                            @click="addOfferLine('upsell')"
+                        >
+                            Добавить апсейл
+                        </button>
+                    </div>
+
+                    <div v-if="catalogProduct?.cross_name" class="mt-3 space-y-2">
+                        <p v-if="catalogProduct.cross_text" class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                            {{ catalogProduct.cross_text }}
+                        </p>
+                        <p class="text-xs text-muted">
+                            {{ catalogProduct.cross_name }}
+                            <span v-if="catalogProduct.cross_price != null">
+                                · {{ formatPrice(catalogProduct.cross_price) }}
+                            </span>
+                        </p>
+                        <button
+                            type="button"
+                            class="btn-secondary btn-sm"
+                            :disabled="readOnly || addingOffer"
+                            @click="addOfferLine('cross')"
+                        >
+                            Добавить кроссейл
+                        </button>
+                    </div>
+                </div>
+
                 <!-- Status change -->
                 <div class="card">
                     <h2 class="section-title mb-4">Статус заказа</h2>
+                    <div
+                        v-if="isCallCenter && !readOnly"
+                        class="flex flex-wrap gap-2 mb-4"
+                    >
+                        <button type="button" class="btn-secondary btn-sm" @click="callbackModalOpen = true">
+                            Перезвон
+                        </button>
+                        <button type="button" class="btn-secondary btn-sm" @click="applyNoAnswer">
+                            Недозвон
+                        </button>
+                        <button type="button" class="btn-secondary btn-sm" @click="applyRefusal">
+                            Отказ
+                        </button>
+                        <button type="button" class="btn-secondary btn-sm" @click="openDuplicateQuick">
+                            Дубль
+                        </button>
+                    </div>
                     <div class="space-y-3">
                         <div class="flex items-center justify-between text-sm text-muted">
                             <span>Текущий:</span>
                             <OrderStatusBadge :status="order.status" />
+                        </div>
+                        <div v-if="order.callback_at" class="text-xs text-muted">
+                            Перезвон: {{ formatDate(order.callback_at) }}
                         </div>
                         <div v-if="order.status_changed_at" class="text-xs text-gray-400 dark:text-gray-500">
                             Изменён: {{ formatDate(order.status_changed_at) }}
@@ -519,6 +624,37 @@
             @cancel="deleteModalOpen = false"
             @confirm="confirmDeleteOrder"
         />
+
+        <DuplicateFunnelModal
+            :open="duplicateModalOpen"
+            :processing="statusForm.processing"
+            @cancel="cancelDuplicateFunnel"
+            @confirm="confirmDuplicateFunnel"
+        />
+
+        <div v-if="callbackModalOpen" class="modal-backdrop" @click.self="cancelCallback">
+            <div class="modal-box">
+                <h2 class="section-title mb-3">Перезвонить</h2>
+                <p class="text-sm text-body mb-4">Когда перезвонить клиенту?</p>
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <button
+                        v-for="preset in callbackPresets"
+                        :key="preset.label"
+                        type="button"
+                        class="btn-secondary justify-center"
+                        :disabled="statusForm.processing"
+                        @click="confirmCallback(preset.minutes)"
+                    >
+                        {{ preset.label }}
+                    </button>
+                </div>
+                <div class="flex justify-end mt-5">
+                    <button class="btn-secondary" :disabled="statusForm.processing" @click="cancelCallback">
+                        Отмена
+                    </button>
+                </div>
+            </div>
+        </div>
     </AppLayout>
 </template>
 
@@ -533,6 +669,7 @@ import OrderStatusBadge from '@/Components/OrderStatusBadge.vue'
 import { statusColorClass } from '@/utils/orderStatusColors'
 import AddressInlinePicker from '@/Components/AddressInlinePicker.vue'
 import DeleteOrderModal from '@/Components/DeleteOrderModal.vue'
+import DuplicateFunnelModal from '@/Components/DuplicateFunnelModal.vue'
 import FormAlert from '@/Components/FormAlert.vue'
 import { useSubscription } from '@/composables/useSubscription'
 import { formatPhone, isFullNameComplete, isInCatalog as checkInCatalog } from '@/utils/phone'
@@ -557,6 +694,8 @@ const props = defineProps({
     updatedByCallCenter: { type: Boolean, default: false },
     orderHandlers: { type: Array, default: () => [] },
     productLinks:  { type: Object, default: () => ({}) },
+    phoneHistory:  { type: Array, default: () => [] },
+    callScript:    { type: String, default: null },
 })
 
 const isAdmin = computed(() => page.props.value.auth?.user?.role === 'admin')
@@ -579,6 +718,9 @@ function isInCatalog(name) {
 const editing         = ref(false)
 const editWarningOpen = ref(false)
 const deleteModalOpen = ref(false)
+const duplicateModalOpen = ref(false)
+const callbackModalOpen = ref(false)
+const addingOffer     = ref(false)
 const deletingOrder   = ref(false)
 const pickerRef       = ref(null)
 const fieldErrors     = ref({ full_name: false, phone: false, goods: false })
@@ -605,6 +747,7 @@ const form = useForm({
     comment:            props.order.comment            ?? '',
     upsell:             props.order.upsell             ?? '',
     cross_sell:         props.order.cross_sell         ?? '',
+    poste_restante:     props.order.poste_restante     ?? false,
 })
 
 // Initial query for the picker pre-fills with current city + street
@@ -648,7 +791,7 @@ function saveEdit() {
     }
     formAlert.value = ''
 
-    if (props.order.delivery_type === 'belpost' && pickerRef.value) {
+    if (props.order.delivery_type === 'belpost' && pickerRef.value && !form.poste_restante) {
         if (!pickerRef.value.validate()) return
     }
     form.transform(data => normalizeOrderFormFields(data))
@@ -677,9 +820,153 @@ const newStatus    = ref(props.order.status)
 const statusForm   = useForm({ status: props.order.status })
 
 function changeStatus() {
-    statusForm.status = newStatus.value
-    statusForm.patch(`/orders/${props.order.id}/status`, {
-        onSuccess: () => {},
+    if (newStatus.value === 'Дубль') {
+        duplicateModalOpen.value = true
+        return
+    }
+    if (newStatus.value === 'Перезвонить') {
+        callbackModalOpen.value = true
+        return
+    }
+    patchStatus({ status: newStatus.value })
+}
+
+function cancelDuplicateFunnel() {
+    duplicateModalOpen.value = false
+    newStatus.value = props.order.status
+}
+
+function confirmDuplicateFunnel({ funnel_exclude, funnel_reason }) {
+    patchStatus({
+        status: 'Дубль',
+        funnel_exclude,
+        funnel_reason,
+    })
+}
+
+function patchStatus(payload) {
+    statusForm.transform(() => payload)
+        .patch(`/orders/${props.order.id}/status`, {
+            onSuccess: () => {
+                duplicateModalOpen.value = false
+                callbackModalOpen.value = false
+            },
+        })
+}
+
+const callbackPresets = [
+    { label: '10 мин', minutes: 10 },
+    { label: '15 мин', minutes: 15 },
+    { label: '30 мин', minutes: 30 },
+    { label: '60 мин', minutes: 60 },
+    { label: '2 ч', minutes: 120 },
+    { label: '4 ч', minutes: 240 },
+]
+
+function cancelCallback() {
+    if (statusForm.processing) return
+    callbackModalOpen.value = false
+    newStatus.value = props.order.status
+}
+
+function localDateTimePlusMinutes(minutes) {
+    const d = new Date(Date.now() + minutes * 60 * 1000)
+    const pad = (n) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:00`
+}
+
+function confirmCallback(minutes) {
+    newStatus.value = 'Перезвонить'
+    patchStatus({
+        status: 'Перезвонить',
+        callback_at: localDateTimePlusMinutes(minutes),
+    })
+}
+
+function nextNoAnswerStatus(current) {
+    if (current === 'Позвонить') return 'Недозвон'
+    if (current === 'Недозвон') return 'Недозвон1'
+    if (current === 'Недозвон1') return 'Недозвон2'
+    return 'Недозвон'
+}
+
+function applyNoAnswer() {
+    const status = nextNoAnswerStatus(props.order.status)
+    newStatus.value = status
+    patchStatus({ status })
+}
+
+function applyRefusal() {
+    newStatus.value = 'Отказ'
+    patchStatus({ status: 'Отказ' })
+}
+
+function openDuplicateQuick() {
+    newStatus.value = 'Дубль'
+    duplicateModalOpen.value = true
+}
+
+const catalogProduct = computed(() => {
+    const first = props.order.goods?.[0]
+    if (!first) return null
+    return (props.products ?? []).find(p => p.name === first) ?? null
+})
+
+function currentGoodsState() {
+    if (editing.value) {
+        return {
+            goods:      [...form.goods],
+            quantities: [...form.quantities],
+            prices:     [...form.prices],
+            upsell:     form.upsell,
+            cross_sell: form.cross_sell,
+        }
+    }
+    return {
+        goods:      [...(props.order.goods ?? [])],
+        quantities: [...(props.order.quantities ?? [])],
+        prices:     [...(props.order.prices ?? [])],
+        upsell:     props.order.upsell ?? '',
+        cross_sell: props.order.cross_sell ?? '',
+    }
+}
+
+function appendNote(current, name) {
+    if (!name) return current || ''
+    if (!current) return name
+    return current.includes(name) ? current : `${current}, ${name}`
+}
+
+function addOfferLine(kind) {
+    const product = catalogProduct.value
+    if (!product || addingOffer.value || readOnly.value) return
+
+    const name = kind === 'cross' ? product.cross_name : product.upsell_name
+    const price = kind === 'cross' ? product.cross_price : product.upsell_price
+    const field = kind === 'cross' ? 'cross_sell' : 'upsell'
+    if (!name) return
+
+    const state = currentGoodsState()
+    state.goods.push(name)
+    state.quantities.push(1)
+    state.prices.push(Number(price) || 0)
+    state[field] = appendNote(state[field], name)
+
+    form.goods = state.goods
+    form.quantities = state.quantities
+    form.prices = state.prices
+    form[field] = state[field]
+
+    addingOffer.value = true
+    Inertia.put(`/orders/${props.order.id}`, {
+        goods:      state.goods,
+        quantities: state.quantities,
+        prices:     state.prices,
+        [field]:    state[field],
+    }, {
+        preserveScroll: true,
+        preserveState: editing.value,
+        onFinish: () => { addingOffer.value = false },
     })
 }
 

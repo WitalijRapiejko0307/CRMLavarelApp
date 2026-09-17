@@ -136,12 +136,21 @@
                         Адрес
                     </h2>
                     <template v-if="form.delivery_type === 'belpost'">
+                        <label class="flex items-center gap-2 cursor-pointer mb-3">
+                            <input
+                                type="checkbox"
+                                v-model="form.poste_restante"
+                                class="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-indigo-600 dark:bg-gray-700"
+                            />
+                            <span class="text-sm">До востребования</span>
+                        </label>
                         <AddressInlinePicker
                             ref="pickerRef"
                             v-model:city="form.city"
                             v-model:street="form.street"
                             v-model:building="form.building"
                             v-model:belpostAddressId="form.belpost_address_id"
+                            :poste-restante="form.poste_restante"
                         />
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
                             <div>
@@ -374,6 +383,7 @@ const form = useForm({
     housing:           '',
     apartment:         '',
     belpost_address_id: '',
+    poste_restante: false,
     goods:      [],
     quantities: [],
     prices:     [],
@@ -408,7 +418,7 @@ function submit() {
     }
     formAlert.value = ''
 
-    if (form.delivery_type === 'belpost' && pickerRef.value) {
+    if (form.delivery_type === 'belpost' && pickerRef.value && !form.poste_restante) {
         if (!pickerRef.value.validate()) return
     }
     form.transform(data => normalizeOrderFormFields({

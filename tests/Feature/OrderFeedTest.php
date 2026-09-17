@@ -32,12 +32,15 @@ class OrderFeedTest extends TestCase
         ]);
 
         $oldOrder = Order::create([
-            'tenant_id'  => $tenant->id,
-            'full_name'  => 'Old Order',
-            'status'     => 'Позвонить',
+            'tenant_id' => $tenant->id,
+            'full_name' => 'Old Order',
+            'status'    => 'Позвонить',
+        ]);
+        $oldOrder->timestamps = false;
+        $oldOrder->forceFill([
             'updated_at' => now()->subHour(),
             'created_at' => now()->subHour(),
-        ]);
+        ])->save();
 
         $newOrder = Order::create([
             'tenant_id' => $tenant->id,
@@ -47,7 +50,7 @@ class OrderFeedTest extends TestCase
 
         $since = now()->subMinutes(30)->toIso8601String();
 
-        $response = $this->actingAs($user)->getJson("/api/orders/feed?since={$since}");
+        $response = $this->actingAs($user)->getJson('/api/orders/feed?since=' . urlencode($since));
 
         $response->assertOk();
         $ids = collect($response->json('orders'))->pluck('id')->all();

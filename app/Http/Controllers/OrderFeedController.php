@@ -35,6 +35,7 @@ class OrderFeedController extends Controller
             $query = CallCenterOrderQuery::forTenant($tenant->id)
                 ->with('tenant:id,name')
                 ->where('updated_at', '>', $since);
+            CallCenterOrderQuery::applyAssigneeVisibility($query, $user);
         } else {
             $query = Order::query()
                 ->where('tenant_id', $tenant->id)

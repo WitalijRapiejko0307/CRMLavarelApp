@@ -36,6 +36,8 @@ class WebhookController extends Controller
      *
      * Body (JSON):
      *   name, phone, offer, options (price in BYN), source
+     *   optional UTM: utm_source, utm_medium, utm_campaign
+     *     or nested utm.source, utm.medium, utm.campaign
      */
     public function lead(Request $request): JsonResponse
     {
@@ -66,12 +68,27 @@ class WebhookController extends Controller
         $tenant = \App\Models\Tenant::find($tenantId);
 
         $data = $request->validate([
-            'name'    => ['required', 'string', 'max:255'],
-            'phone'   => ['required', 'string', 'max:30'],
-            'offer'   => ['nullable', 'string', 'max:255'],
-            'options' => ['nullable', 'numeric', 'min:0'],
-            'source'  => ['nullable', 'string', 'max:50'],
+            'name'          => ['required', 'string', 'max:255'],
+            'phone'         => ['required', 'string', 'max:30'],
+            'offer'         => ['nullable', 'string', 'max:255'],
+            'options'       => ['nullable', 'numeric', 'min:0'],
+            'source'        => ['nullable', 'string', 'max:50'],
+            'utm_source'    => ['nullable', 'string', 'max:255'],
+            'utm_medium'    => ['nullable', 'string', 'max:255'],
+            'utm_campaign'  => ['nullable', 'string', 'max:255'],
+            'utm'           => ['nullable', 'array'],
+            'utm.source'    => ['nullable', 'string', 'max:255'],
+            'utm.medium'    => ['nullable', 'string', 'max:255'],
+            'utm.campaign'  => ['nullable', 'string', 'max:255'],
         ]);
+
+        $utm = is_array($data['utm'] ?? null) ? $data['utm'] : [];
+        $utmOrNull = static function ($value): ?string {
+            return ($value === null || $value === '') ? null : (string) $value;
+        };
+        $utmSource   = $utmOrNull($data['utm_source'] ?? ($utm['source'] ?? null));
+        $utmMedium   = $utmOrNull($data['utm_medium'] ?? ($utm['medium'] ?? null));
+        $utmCampaign = $utmOrNull($data['utm_campaign'] ?? ($utm['campaign'] ?? null));
 
         $phone = PhoneNormalizer::normalize($data['phone']);
 
@@ -93,15 +110,18 @@ class WebhookController extends Controller
 
         // ── 2. Create order ───────────────────────────────────────────────────
         $order = Order::withoutGlobalScopes()->create([
-            'tenant_id'  => $tenantId,
-            'full_name'  => $fullName,
-            'phone'      => $phone,
-            'goods'      => $data['offer'] ? [$data['offer']] : [],
-            'quantities' => [1],
-            'prices'     => $data['offer'] ? [(float) ($data['options'] ?? 0)] : [],
-            'status'     => 'Позвонить',
-            'source'     => $data['source'] ?? 'site',
-            'sms_log'    => null,
+            'tenant_id'     => $tenantId,
+            'full_name'     => $fullName,
+            'phone'         => $phone,
+            'goods'         => $data['offer'] ? [$data['offer']] : [],
+            'quantities'    => [1],
+            'prices'        => $data['offer'] ? [(float) ($data['options'] ?? 0)] : [],
+            'status'        => 'Позвонить',
+            'source'        => $data['source'] ?? 'site',
+            'utm_source'    => $utmSource,
+            'utm_medium'    => $utmMedium,
+            'utm_campaign'  => $utmCampaign,
+            'sms_log'       => null,
         ]);
 
         Log::info('Webhook: order created', ['order_id' => $order->id, 'tenant_id' => $tenantId]);

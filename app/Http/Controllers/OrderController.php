@@ -16,6 +16,8 @@ use App\Services\OrderHandlerService;
 use App\Services\TrackingRunService;
 use App\Support\CallCenterOrderQuery;
 use App\Support\CsvOrderLineParser;
+use App\Support\OrderIndexSort;
+use App\Support\OrderSegment;
 use App\Support\CsvOrderReader;
 use App\Support\PhoneNormalizer;
 use App\Support\ProductLinkResolver;
@@ -89,11 +91,14 @@ class OrderController extends Controller
             'cross_sell'         => ['nullable', 'string', 'max:1000'],
             'delivery_type'      => ['nullable', Order::deliveryTypeRule()],
             'belpost_address_id' => ['nullable', 'string', 'max:50'],
+            'poste_restante'     => ['sometimes', 'boolean'],
         ]);
 
         $data['tenant_id'] = Auth::user()->tenant_id;
         $data['source']  ??= 'manual';
         $data['phone'] = PhoneNormalizer::normalize($data['phone']);
+        $data['poste_restante'] = $request->boolean('poste_restante');
+        $data = Order::applyPosteRestanteDefaults($data);
 
         $order = Order::create($data);
         $this->orderAssignment->assignCallCenter($order);
@@ -271,19 +276,32 @@ class OrderController extends Controller
     {
         $tenant = $this->tenant();
 
+        $user = Auth::user();
+
         if ($tenant->isCallCenter()) {
             $query = CallCenterOrderQuery::forTenant($tenant->id)
-                ->with('tenant:id,name')
-                ->orderByDesc('created_at');
+                ->with('tenant:id,name');
+
+            CallCenterOrderQuery::applyAssigneeVisibility($query, $user);
+
+            if (
+                CallCenterOrderQuery::roundRobinEnabled($tenant->id)
+                && in_array($user->role, ['admin', 'manager'], true)
+                && $request->input('assignee') === 'mine'
+            ) {
+                CallCenterOrderQuery::applyMineFilter($query, $user);
+            }
         } else {
-            $query = Order::query()->orderByDesc('created_at');
+            $query = Order::query();
         }
 
         if ($search = $request->input('search')) {
             $query->where(function ($q) use ($search) {
                 $q->where('full_name', 'like', "%{$search}%")
                   ->orWhere('phone', 'like', "%{$search}%")
-                  ->orWhere('external_id', 'like', "%{$search}%");
+                  ->orWhere('external_id', 'like', "%{$search}%")
+                  ->orWhere('track_number', 'like', "%{$search}%")
+                  ->orWhereRaw('CAST(goods AS CHAR) LIKE ?', ['%'.$search.'%']);
             });
         }
 
@@ -302,6 +320,19 @@ class OrderController extends Controller
         if ($tenant->isCallCenter() && ($storeId = $request->input('store_id'))) {
             $query->where('tenant_id', $storeId);
         }
+
+        $segment = $request->input('segment');
+        if (is_string($segment) && $segment !== '') {
+            OrderSegment::apply($query, $segment);
+        }
+
+        $deliveryType = $request->input('delivery_type');
+        if (is_string($deliveryType) && array_key_exists($deliveryType, Order::DELIVERY_TYPES)) {
+            $query->where('delivery_type', $deliveryType);
+        }
+
+        [$sort, $dir] = OrderIndexSort::resolve($request->input('sort'), $request->input('dir'));
+        OrderIndexSort::apply($query, $sort, $dir);
 
         $orders = $query
             ->with('mailBatch:id,batch_id')
@@ -324,13 +355,19 @@ class OrderController extends Controller
 
         return Inertia::render('Orders/Index', [
             'orders'          => $orders,
-            'filters'         => $request->only('search', 'status', 'date_from', 'date_to', 'store_id'),
+            'filters'         => array_merge(
+                $request->only('search', 'status', 'date_from', 'date_to', 'store_id', 'segment', 'delivery_type', 'assignee'),
+                ['sort' => $sort, 'dir' => $dir],
+            ),
             'statuses'             => $tenant->isCallCenter() ? Order::CALL_CENTER_STATUSES : Order::STATUSES,
             'bulkConfirmStatuses'  => Order::BULK_CONFIRM_STATUSES,
             'deliveryTypes'        => Order::DELIVERY_TYPES,
+            'segments'             => OrderSegment::labels(),
             'isCallCenter'    => $tenant->isCallCenter(),
             'connectedStores' => $connectedStores,
             'orderHandlers'   => $orderHandlers,
+            'roundRobinEnabled' => $tenant->isCallCenter()
+                && CallCenterOrderQuery::roundRobinEnabled($tenant->id),
         ]);
     }
 
@@ -352,11 +389,13 @@ class OrderController extends Controller
         $order->setAttribute('is_phone_duplicate', $duplicateFlags['is_phone_duplicate']);
         $order->setAttribute('duplicate_of_order_id', $duplicateFlags['duplicate_of_order_id']);
 
+        $productColumns = ['id', 'name', 'stock', 'upsell_name', 'upsell_price', 'upsell_text', 'cross_name', 'cross_price', 'cross_text', 'manager_note'];
+
         return Inertia::render('Orders/Show', [
             'order'               => $order,
             'statuses'            => $this->isCallCenter() ? Order::CALL_CENTER_STATUSES : Order::STATUSES,
             'deliveryTypes'       => Order::DELIVERY_TYPES,
-            'products'              => $catalogQuery->orderBy('name')->get(['id', 'name', 'stock']),
+            'products'              => $catalogQuery->orderBy('name')->get($productColumns),
             'unknownGoods'          => array_values(array_diff($order->goods ?? [], $catalogNames)),
             'isCallCenter'          => $this->isCallCenter(),
             'updatedByCallCenter'   => !$this->isCallCenter()
@@ -364,6 +403,8 @@ class OrderController extends Controller
                 && $order->lastUpdatedBy->tenant_id !== $order->tenant_id,
             'orderHandlers'         => $this->orderHandlers->handlersForOrder($order->id),
             'productLinks'          => ProductLinkResolver::forOrder($order),
+            'phoneHistory'          => $this->phoneReturnHistory($order),
+            'callScript'            => $this->isCallCenter() ? $this->renderCallScript($order) : null,
         ]);
     }
 
@@ -389,13 +430,15 @@ class OrderController extends Controller
             'comment'            => ['sometimes', 'nullable', 'string', 'max:2000'],
             'upsell'             => ['sometimes', 'nullable', 'string', 'max:1000'],
             'cross_sell'         => ['sometimes', 'nullable', 'string', 'max:1000'],
+            'poste_restante'     => ['sometimes', 'boolean'],
+            'callback_at'        => ['sometimes', 'nullable', 'date'],
         ];
 
         if ($this->isCallCenter()) {
             $rules = array_intersect_key($rules, array_flip([
                 'full_name', 'phone', 'city', 'street', 'building', 'housing', 'apartment',
                 'goods', 'quantities', 'prices', 'source', 'delivery_type',
-                'comment', 'upsell', 'cross_sell',
+                'comment', 'upsell', 'cross_sell', 'poste_restante', 'callback_at',
             ]));
         }
 
@@ -407,6 +450,11 @@ class OrderController extends Controller
 
         if (array_key_exists('phone', $data)) {
             $data['phone'] = PhoneNormalizer::normalize($data['phone']);
+        }
+
+        if (array_key_exists('poste_restante', $data)) {
+            $data['poste_restante'] = $request->boolean('poste_restante');
+            $data = Order::applyPosteRestanteDefaults($data);
         }
 
         $data['last_updated_by_user_id'] = Auth::id();
@@ -422,14 +470,33 @@ class OrderController extends Controller
 
         $allowed = $this->isCallCenter() ? Order::CALL_CENTER_STATUSES : Order::STATUSES;
 
-        $request->validate([
+        $rules = [
             'status' => ['required', 'in:' . implode(',', $allowed)],
-        ]);
+        ];
 
-        $order->update([
-            'status'                  => $request->input('status'),
+        if ($request->input('status') === 'Дубль') {
+            $rules['funnel_exclude'] = ['sometimes', 'boolean'];
+            $rules['funnel_reason']  = ['sometimes', 'nullable', 'in:' . implode(',', array_keys(Order::FUNNEL_EXCLUDE_REASONS))];
+        }
+
+        if ($request->input('status') === 'Перезвонить') {
+            $rules['callback_at'] = ['required', 'date'];
+        }
+
+        $request->validate($rules);
+
+        $status = $request->input('status');
+
+        $payload = array_merge([
+            'status'                  => $status,
             'last_updated_by_user_id' => Auth::id(),
-        ]);
+        ], $this->funnelFieldsForStatusChange($order, $status, $request));
+
+        if ($status === 'Перезвонить') {
+            $payload['callback_at'] = $request->input('callback_at');
+        }
+
+        $order->update($payload);
 
         return back()->with('message', 'Статус обновлён.');
     }
@@ -462,10 +529,10 @@ class OrderController extends Controller
                 continue;
             }
 
-            $order->update([
+            $order->update(array_merge([
                 'status'                  => $data['status'],
                 'last_updated_by_user_id' => Auth::id(),
-            ]);
+            ], $this->funnelFieldsForStatusChange($order, $data['status'])));
             $updated++;
         }
 
@@ -473,6 +540,39 @@ class OrderController extends Controller
             'updated' => $updated,
             'failed'  => $failed,
         ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function funnelFieldsForStatusChange(Order $order, string $newStatus, ?Request $request = null): array
+    {
+        if ($newStatus === 'Дубль') {
+            $fields = [
+                'funnel_exclude' => $request && $request->exists('funnel_exclude')
+                    ? $request->boolean('funnel_exclude')
+                    : true,
+            ];
+
+            $reason = $request?->input('funnel_reason');
+            if ($reason && $reason !== 'duplicate' && isset(Order::FUNNEL_EXCLUDE_REASONS[$reason])) {
+                $label   = Order::FUNNEL_EXCLUDE_REASONS[$reason];
+                $comment = (string) ($order->comment ?? '');
+                if ($comment === '') {
+                    $fields['comment'] = $label;
+                } elseif (!str_contains($comment, $label)) {
+                    $fields['comment'] = $comment . "\n" . $label;
+                }
+            }
+
+            return $fields;
+        }
+
+        if ($order->status === 'Дубль') {
+            return ['funnel_exclude' => false];
+        }
+
+        return [];
     }
 
     public function updateDeliveryType(Request $request, Order $order)
@@ -619,5 +719,58 @@ class OrderController extends Controller
         }
 
         return response()->json(null, 204);
+    }
+
+    private function renderCallScript(Order $order): string
+    {
+        $template = (string) TenantSetting::get('call_script', '');
+        if ($template === '') {
+            return '';
+        }
+
+        $goods = $order->goods ?? [];
+        $tovar = $goods[0] ?? '';
+        $sum   = 0.0;
+
+        foreach ($order->prices ?? [] as $i => $price) {
+            $qty = $order->quantities[$i] ?? 1;
+            $sum += (float) $price * (float) $qty;
+        }
+
+        return strtr($template, [
+            '{name}'  => (string) $order->full_name,
+            '{tovar}' => (string) $tovar,
+            '{sum}'   => number_format($sum, 2, '.', ''),
+        ]);
+    }
+
+    /**
+     * @return list<array{id:int, full_name:string, status:string, created_at:?string, track_number:?string}>
+     */
+    private function phoneReturnHistory(Order $order): array
+    {
+        $suffix = PhoneNormalizer::lastNineDigits($order->phone);
+        if ($suffix === '') {
+            return [];
+        }
+
+        return Order::withoutGlobalScopes()
+            ->where('tenant_id', $order->tenant_id)
+            ->where('id', '!=', $order->id)
+            ->whereIn('status', ['Возврат', 'Возврат в пути'])
+            ->orderByDesc('id')
+            ->limit(50)
+            ->get(['id', 'full_name', 'status', 'phone', 'created_at', 'track_number'])
+            ->filter(fn (Order $row) => PhoneNormalizer::lastNineDigits($row->phone) === $suffix)
+            ->take(10)
+            ->values()
+            ->map(fn (Order $row) => [
+                'id'           => $row->id,
+                'full_name'    => $row->full_name,
+                'status'       => $row->status,
+                'created_at'   => optional($row->created_at)->toIso8601String(),
+                'track_number' => $row->track_number,
+            ])
+            ->all();
     }
 }

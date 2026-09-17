@@ -27,10 +27,6 @@ class AddSuperAdminRoleAndNullableTenantId extends Migration
             return;
         }
 
-        Schema::table('users', function (Blueprint $table) {
-            $table->dropForeign(['tenant_id']);
-        });
-
         DB::statement('PRAGMA foreign_keys=OFF');
         DB::statement('CREATE TABLE users__temp AS SELECT * FROM users');
         Schema::drop('users');

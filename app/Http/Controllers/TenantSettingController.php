@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\TenantSetting;
 use App\Services\ConnectionService;
+use App\Services\SmsService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -36,6 +37,23 @@ class TenantSettingController extends Controller
                 'label' => 'Магазин',
                 'keys'  => [
                     'shop_name' => ['Название магазина', 'text', 'BaseCRM', 'Отображается в шапке сайта'],
+                ],
+            ],
+            'cc' => [
+                'label' => 'Скрипт',
+                'keys'  => [
+                    'call_script' => [
+                        'Скрипт звонка',
+                        'textarea',
+                        'Здравствуйте, {name}! По поводу {tovar} на сумму {sum} р.',
+                        'Плейсхолдеры: {name} {tovar} {sum}',
+                    ],
+                    'cc_round_robin' => [
+                        'Распределять новые лиды',
+                        'toggle',
+                        '',
+                        'Оператор видит только свои; admin и manager — все',
+                    ],
                 ],
             ],
             'belpost' => [
@@ -72,8 +90,14 @@ class TenantSettingController extends Controller
             'sms' => [
                 'label' => 'SMS.by',
                 'keys'  => [
-                    'token_sms_by' => ['API-токен',     'password', '…', ''],
-                    'alphaname_id' => ['ID альфаимени', 'text',     '…', ''],
+                    'token_sms_by'       => ['API-токен',     'password', '…', ''],
+                    'alphaname_id'       => ['ID альфаимени', 'text',     '…', ''],
+                    'sms_rules'          => ['Когда отправлять SMS', 'custom', '', 'Склеивается из тогглов при сохранении'],
+                    'sms_reminder_day_1' => ['Первый день напоминания', 'text', '5', 'День после прибытия в отделение'],
+                    'sms_reminder_day_2' => ['Второй день напоминания', 'text', '10', 'День после прибытия в отделение'],
+                    'sms_tpl_shipped'    => ['Текст при отправке', 'textarea', SmsService::DEFAULT_TPL_SHIPPED, 'Плейсхолдеры: {name} {track} {tovar}'],
+                    'sms_tpl_arrived'    => ['Текст в отделении', 'textarea', SmsService::DEFAULT_TPL_ARRIVED, 'Плейсхолдеры: {name} {track} {tovar}'],
+                    'sms_tpl_reminder'   => ['Текст напоминания', 'textarea', SmsService::DEFAULT_TPL_REMINDER, 'Плейсхолдеры: {name} {track} {tovar} {days}'],
                 ],
             ],
             'blacklist' => [
@@ -202,8 +226,10 @@ class TenantSettingController extends Controller
         $schema = static::schema();
 
         if ($tenant->isCallCenter()) {
-            return array_intersect_key($schema, array_flip(['shop']));
+            return array_intersect_key($schema, array_flip(['shop', 'cc']));
         }
+
+        unset($schema['cc']);
 
         return $schema;
     }
@@ -225,13 +251,16 @@ class TenantSettingController extends Controller
                 $value = isset($stored[$key]) ? (string) $stored[$key] : '';
 
                 if ($value === '') {
+                    if ($key === 'sms_rules') {
+                        $current[$key] = '';
+                    }
                     continue;
                 }
 
                 if ($type === 'password') {
                     $secretPreviews[$key] = static::maskSecret($value);
                 } else {
-                    // text, select, toggle, textarea
+                    // text, select, toggle, textarea, custom
                     $current[$key] = $value;
                 }
             }
@@ -247,6 +276,7 @@ class TenantSettingController extends Controller
      * Saves { settings: { key: value } } for the current tenant.
      *
      * Toggle fields ('1' / '') are always saved so the user can explicitly disable them.
+     * sms_rules is always saved (empty string = all SMS events off).
      * Other fields: empty strings are NOT saved (keeps existing value intact).
      */
     public function update(Request $request): RedirectResponse
@@ -267,7 +297,11 @@ class TenantSettingController extends Controller
         foreach ($allowed as $key) {
             $value = isset($input[$key]) ? trim((string)$input[$key]) : '';
 
-            if (in_array($key, $toggles, true)) {
+            if ($key === 'sms_rules') {
+                if (array_key_exists($key, $input)) {
+                    TenantSetting::put($tenantId, $key, static::normalizeSmsRules($value));
+                }
+            } elseif (in_array($key, $toggles, true)) {
                 // Always persist toggles (empty string = disabled)
                 TenantSetting::put($tenantId, $key, $value);
             } elseif ($value !== '') {
@@ -276,6 +310,28 @@ class TenantSettingController extends Controller
         }
 
         return back()->with('message', 'Настройки сохранены.');
+    }
+
+    /**
+     * Keep only known SMS event tokens, comma-separated, no extra spaces.
+     */
+    protected static function normalizeSmsRules(string $posted): string
+    {
+        if ($posted === '') {
+            return '';
+        }
+
+        $parts = [];
+        foreach (explode(',', $posted) as $token) {
+            $token = trim($token);
+            if ($token === 'Отправка' || $token === 'В отделении') {
+                $parts[] = $token;
+            } elseif (preg_match('/^Напоминание \d+ день$/u', $token) === 1) {
+                $parts[] = $token;
+            }
+        }
+
+        return implode(',', $parts);
     }
 
     /**

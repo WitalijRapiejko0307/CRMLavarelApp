@@ -161,6 +161,31 @@
                     <p class="text-xs text-muted mt-2">Передайте этот код администратору магазина для подключения.</p>
                 </div>
 
+                <div class="mb-6">
+                    <p class="label mb-1">Распределять новые лиды</p>
+                    <div class="flex items-center gap-3 mt-1">
+                        <button
+                            type="button"
+                            :class="[
+                                'relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-300',
+                                isToggleOn('cc_round_robin') ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-600',
+                                (!canEditSettings || readOnly || savingRoundRobin) && 'opacity-60 cursor-not-allowed',
+                            ]"
+                            :disabled="!canEditSettings || readOnly || savingRoundRobin"
+                            @click="toggleRoundRobin"
+                        >
+                            <span :class="[
+                                'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
+                                isToggleOn('cc_round_robin') ? 'translate-x-6' : 'translate-x-1',
+                            ]" />
+                        </button>
+                        <span class="text-sm text-muted">{{ isToggleOn('cc_round_robin') ? 'Включено' : 'Выключено' }}</span>
+                    </div>
+                    <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                        Оператор видит только свои; admin и manager — все. Выключено — все видят все заказы.
+                    </p>
+                </div>
+
                 <div v-if="pendingConnections.length" class="mb-6">
                     <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Входящие заявки</h3>
                     <div class="space-y-2">
@@ -263,6 +288,7 @@
 
                     <div v-show="isGroupOpen(groupKey)" class="space-y-4">
                         <template v-for="(meta, key) in group.keys" :key="key">
+                            <template v-if="key !== 'cc_round_robin'">
                             <div v-if="isVisible(meta) && key === 'webhook_secret'" class="setting-row space-y-4">
                                 <div>
                                     <p class="label mb-1">URL для заявок</p>
@@ -354,6 +380,33 @@
                                         <pre class="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md p-3 overflow-x-auto font-mono text-xs text-gray-700 dark:text-gray-300 whitespace-pre">{{ webhookExample }}</pre>
                                     </div>
                                 </details>
+                            </div>
+
+                            <div v-else-if="isVisible(meta) && key === 'sms_rules'" class="setting-row space-y-3">
+                                <p class="label">{{ meta[0] }}</p>
+                                <div
+                                    v-for="toggle in smsToggleDefs"
+                                    :key="toggle.key"
+                                    class="flex items-center gap-3"
+                                >
+                                    <button
+                                        type="button"
+                                        :class="[
+                                            'relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-300',
+                                            smsToggles[toggle.key] ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-600',
+                                            (!canEditSettings || readOnly) && 'opacity-60 cursor-not-allowed',
+                                        ]"
+                                        :disabled="!canEditSettings || readOnly"
+                                        @click="toggleSmsRule(toggle.key)"
+                                    >
+                                        <span :class="[
+                                            'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
+                                            smsToggles[toggle.key] ? 'translate-x-6' : 'translate-x-1',
+                                        ]" />
+                                    </button>
+                                    <span class="text-sm text-gray-700 dark:text-gray-300">{{ toggle.label }}</span>
+                                </div>
+                                <p v-if="meta[3]" class="text-xs text-gray-400 dark:text-gray-500">{{ meta[3] }}</p>
                             </div>
 
                             <!-- depends_on: hide if condition not met -->
@@ -466,6 +519,7 @@
                                     ✓ Сохранено
                                 </p>
                             </div>
+                            </template>
                         </template>
                     </div>
                 </div>
@@ -674,6 +728,8 @@ const form = reactive((() => {
                 f[key] = props.current[key] ?? ''
             } else if (type === 'password') {
                 f[key] = ''
+            } else if (type === 'custom') {
+                f[key] = props.current[key] ?? ''
             } else {
                 // text / textarea — show saved values
                 f[key] = props.current[key] ?? ''
@@ -685,6 +741,7 @@ const form = reactive((() => {
 
 const visibleKeys = reactive({})
 const saving      = ref(false)
+const savingRoundRobin = ref(false)
 const generating  = ref(false)
 const revealingSecret = ref(false)
 const revealedWebhookSecret = ref('')
@@ -747,6 +804,58 @@ function toggleSwitch(key) {
     form[key] = next
 }
 
+function toggleRoundRobin() {
+    if (!props.canEditSettings || readOnly.value || savingRoundRobin.value) return
+    const next = isToggleOn('cc_round_robin') ? '' : '1'
+    form.cc_round_robin = next
+    savingRoundRobin.value = true
+    Inertia.post('/settings', { settings: { cc_round_robin: next } }, {
+        preserveScroll: true,
+        preserveState: true,
+        onSuccess: () => {
+            currentValues.value.cc_round_robin = next
+        },
+        onFinish: () => { savingRoundRobin.value = false },
+    })
+}
+
+const smsToggleDefs = [
+    { key: 'shipped', label: 'Отправка' },
+    { key: 'arrived', label: 'В отделении' },
+    { key: 'reminder1', label: 'Напоминание 5 день' },
+    { key: 'reminder2', label: 'Напоминание 10 день' },
+]
+
+function parseSmsToggles(rules) {
+    const s = String(rules || '')
+    const day1 = String(form.sms_reminder_day_1 || '5').trim() || '5'
+    const day2 = String(form.sms_reminder_day_2 || '10').trim() || '10'
+    return {
+        shipped: s.includes('Отправка'),
+        arrived: s.includes('В отделении'),
+        reminder1: s.includes(`Напоминание ${day1} день`) || s.includes('Напоминание 5 день'),
+        reminder2: s.includes(`Напоминание ${day2} день`) || s.includes('Напоминание 10 день'),
+    }
+}
+
+const smsToggles = reactive(parseSmsToggles(props.current.sms_rules || form.sms_rules || ''))
+
+function toggleSmsRule(key) {
+    if (!props.canEditSettings || readOnly.value) return
+    smsToggles[key] = !smsToggles[key]
+}
+
+function assembleSmsRules() {
+    const day1 = String(form.sms_reminder_day_1 || '5').trim() || '5'
+    const day2 = String(form.sms_reminder_day_2 || '10').trim() || '10'
+    const parts = []
+    if (smsToggles.shipped) parts.push('Отправка')
+    if (smsToggles.arrived) parts.push('В отделении')
+    if (smsToggles.reminder1) parts.push(`Напоминание ${day1} день`)
+    if (smsToggles.reminder2) parts.push(`Напоминание ${day2} день`)
+    return parts.join(',')
+}
+
 function maskedPlaceholder(key) {
     return secretPreviewsLocal.value[key] ?? ''
 }
@@ -782,7 +891,7 @@ function save() {
 
     for (const group of Object.values(props.schema)) {
         for (const [key, meta] of Object.entries(group.keys)) {
-            if (key === 'webhook_secret') {
+            if (key === 'webhook_secret' || key === 'sms_rules') {
                 continue
             }
             const type = meta[1]
@@ -794,12 +903,18 @@ function save() {
                 if (raw && String(raw).trim() !== '') {
                     settings[key] = String(raw).trim()
                 }
+            } else if (type === 'custom') {
+                continue
             } else {
                 if (raw && String(raw).trim() !== '') {
                     settings[key] = String(raw).trim()
                 }
             }
         }
+    }
+
+    if (props.schema.sms && props.schema.sms.keys && props.schema.sms.keys.sms_rules !== undefined) {
+        settings.sms_rules = assembleSmsRules()
     }
 
     saving.value = true

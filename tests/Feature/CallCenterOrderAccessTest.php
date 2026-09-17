@@ -80,8 +80,10 @@ class CallCenterOrderAccessTest extends TestCase
         $response = $this->actingAs($ccUser)->get('/orders');
 
         $response->assertOk();
-        $content = $response->getContent();
-        $this->assertStringContainsString($assignedOrder->full_name, $content);
+        $response->assertInertia(fn ($page) => $page
+            ->where('roundRobinEnabled', false)
+            ->where('orders.data.0.full_name', $assignedOrder->full_name)
+        );
     }
 
     public function test_call_center_cannot_view_foreign_order(): void

@@ -13,6 +13,7 @@ use App\Http\Controllers\OrderController;
 use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\OrderFeedController;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\TenantSettingController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
@@ -49,6 +50,7 @@ Route::prefix('belpost')->name('belpost.')->middleware('tenant.type:store')->gro
     Route::get('/', [BelpostController::class, 'index'])->name('index');
     Route::post('/batches', [BelpostController::class, 'createBatch'])->name('batches.create');
     Route::post('/batches/{batch}/items', [BelpostController::class, 'processOrder'])->name('batches.processOrder');
+    Route::post('/batches/{batch}/items/{order}/remove', [BelpostController::class, 'removeOrder'])->name('batches.removeOrder');
     Route::post('/batches/{batch}/commit', [BelpostController::class, 'commit'])->name('batches.commit');
     Route::post('/batches/{batch}/download-blanks', [BelpostController::class, 'downloadBlanks'])->name('batches.downloadBlanks');
     Route::post('/batches/{batch}/retry-download', [BelpostController::class, 'retryDownload'])->name('batches.retryDownload');
@@ -81,6 +83,9 @@ Route::prefix('finances')->name('finances.')->middleware('tenant.type:store')->g
     Route::post('/income', [FinanceController::class, 'storeIncome'])->name('income.store');
     Route::delete('/income/{income}', [FinanceController::class, 'destroyIncome'])->name('income.destroy');
 });
+
+// Shop funnel reports (store admin/manager; type + gate in controller, like analytics)
+Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
 
 // Onboarding (store checklist; dismiss/restore allowed in read-only)
 Route::prefix('onboarding')->name('onboarding.')->middleware(['auth', 'tenant'])->group(function () {

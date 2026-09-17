@@ -55,7 +55,10 @@ class RouteServiceProvider extends ServiceProvider
             $tenant = $user->tenant;
 
             if ($tenant->isCallCenter()) {
-                return CallCenterOrderQuery::forTenant($tenant->id)->findOrFail($value);
+                $query = CallCenterOrderQuery::forTenant($tenant->id);
+                CallCenterOrderQuery::applyAssigneeVisibility($query, $user);
+
+                return $query->findOrFail($value);
             }
 
             return Order::findOrFail($value);

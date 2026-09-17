@@ -44,10 +44,16 @@ class SettingsAccessTest extends TestCase
 
     private function getSettingsPage(User $user)
     {
-        return $this->actingAs($user)->get('/settings', [
+        $headers = [
             'X-Inertia'         => 'true',
             'X-Requested-With'  => 'XMLHttpRequest',
-        ]);
+        ];
+        $manifest = public_path('mix-manifest.json');
+        if (is_file($manifest)) {
+            $headers['X-Inertia-Version'] = md5_file($manifest);
+        }
+
+        return $this->actingAs($user)->get('/settings', $headers);
     }
 
     public function test_operator_sees_only_theme(): void
@@ -118,11 +124,12 @@ class SettingsAccessTest extends TestCase
         ]);
 
         $response->assertRedirect();
-        $this->assertDatabaseHas('tenant_settings', [
-            'tenant_id' => $user->tenant_id,
-            'key'       => 'shop_name',
-            'value'     => 'Updated Shop',
-        ]);
+        $row = TenantSetting::withoutGlobalScopes()
+            ->where('tenant_id', $user->tenant_id)
+            ->where('key', 'shop_name')
+            ->first();
+        $this->assertNotNull($row);
+        $this->assertSame('Updated Shop', $row->value);
     }
 
     public function test_all_roles_can_change_theme(): void
@@ -140,5 +147,49 @@ class SettingsAccessTest extends TestCase
             $user->refresh();
             $this->assertSame('dark', $user->theme);
         }
+    }
+
+    public function test_call_center_schema_includes_call_script_not_store_groups(): void
+    {
+        $tenant = Tenant::create([
+            'name'                => 'CC Settings',
+            'type'                => Tenant::TYPE_CALL_CENTER,
+            'created_at'          => now(),
+            'subscription_status' => Tenant::STATUS_ACTIVE,
+            'subscribed_at'       => now(),
+        ]);
+
+        $user = User::create([
+            'tenant_id' => $tenant->id,
+            'name'      => 'CC Admin',
+            'email'     => 'cc-settings@example.com',
+            'password'  => Hash::make('password'),
+            'role'      => 'admin',
+        ]);
+
+        $response = $this->getSettingsPage($user);
+
+        $response->assertOk();
+        $schema = $response->json('props.schema');
+        $this->assertArrayHasKey('shop', $schema);
+        $this->assertArrayHasKey('cc', $schema);
+        $this->assertArrayNotHasKey('sms', $schema);
+        $this->assertArrayNotHasKey('belpost', $schema);
+        $this->assertSame('textarea', $schema['cc']['keys']['call_script'][1]);
+        $this->assertArrayHasKey('cc_round_robin', $schema['cc']['keys']);
+        $this->assertSame('toggle', $schema['cc']['keys']['cc_round_robin'][1]);
+    }
+
+    public function test_store_schema_does_not_include_call_script(): void
+    {
+        $user = $this->createActiveTenantUser('admin');
+        $this->seedTenantSettings($user);
+
+        $response = $this->getSettingsPage($user);
+
+        $response->assertOk();
+        $schema = $response->json('props.schema');
+        $this->assertArrayNotHasKey('cc', $schema);
+        $this->assertArrayHasKey('sms', $schema);
     }
 }
