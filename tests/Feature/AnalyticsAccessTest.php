@@ -99,6 +99,16 @@ class AnalyticsAccessTest extends TestCase
         $this->actingAs($user)->get('/analytics')->assertForbidden();
     }
 
+    public function test_analytics_rejects_invalid_date(): void
+    {
+        [, , , $operator] = $this->createScenario();
+
+        $this->actingAs($operator)
+            ->getJson('/analytics?date_from=not-a-date')
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('date_from');
+    }
+
     /**
      * @return array{0: Tenant, 1: Tenant, 2: Order, 3: User, 4: User, 5?: User}
      */

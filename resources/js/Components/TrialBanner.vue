@@ -1,7 +1,7 @@
 <template>
     <div
         v-if="visible"
-        class="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 mt-4"
+        class="page-shell mt-4"
     >
         <div
             :class="[

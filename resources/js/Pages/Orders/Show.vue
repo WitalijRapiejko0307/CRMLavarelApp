@@ -225,6 +225,12 @@
                             </svg>
                             Белпочта
                         </span>
+                        <span
+                            v-else-if="order.delivery_type === 'europochta' && order.ops_id"
+                            class="inline-flex items-center gap-1 ml-1 text-xs font-normal text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 rounded-full"
+                        >
+                            ОПС №{{ order.ops_id }}
+                        </span>
                     </h2>
 
                     <!-- View mode: structured display -->
@@ -244,10 +250,16 @@
                                 <span v-if="order.apartment"> · кв. {{ order.apartment }}</span>
                             </div>
                         </template>
-                        <span v-else-if="!order.poste_restante" class="text-gray-400 dark:text-gray-500">—</span>
+                        <div
+                            v-if="order.delivery_type === 'europochta' && order.ops_id"
+                            class="text-gray-600 dark:text-gray-400"
+                        >
+                            ОПС №{{ order.ops_id }}
+                        </div>
+                        <span v-else-if="!fullAddress && !order.poste_restante" class="text-gray-400 dark:text-gray-500">—</span>
                     </div>
 
-                    <!-- Edit mode: belpost → inline picker, others → plain fields -->
+                    <!-- Edit mode: belpost → picker, new EP → OPS picker, others → plain fields -->
                     <div v-else>
                         <!-- Belpost: inline picker -->
                         <template v-if="order.delivery_type === 'belpost'">
@@ -281,7 +293,27 @@
                             </div>
                         </template>
 
-                        <!-- Non-belpost: plain text fields -->
+                        <template v-else-if="useEvropostPicker">
+                            <EvropostOfficePicker
+                                v-model:city="form.city"
+                                v-model:street="form.street"
+                                v-model:building="form.building"
+                                v-model:opsId="form.ops_id"
+                                v-model:europochtaStoreId="form.europochta_store_id"
+                            />
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                                <div>
+                                    <label class="label">Корпус</label>
+                                    <input v-model="form.housing" type="text" class="w-full mt-1" />
+                                </div>
+                                <div>
+                                    <label class="label">Квартира</label>
+                                    <input v-model="form.apartment" type="text" class="w-full mt-1" />
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- Non-belpost / legacy EP: plain text fields -->
                         <div v-else class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div class="sm:col-span-3">
                                 <label class="label">Город</label>
@@ -668,6 +700,7 @@ import AppScrollSelect from '@/Components/AppScrollSelect.vue'
 import OrderStatusBadge from '@/Components/OrderStatusBadge.vue'
 import { statusColorClass } from '@/utils/orderStatusColors'
 import AddressInlinePicker from '@/Components/AddressInlinePicker.vue'
+import EvropostOfficePicker from '@/Components/EvropostOfficePicker.vue'
 import DeleteOrderModal from '@/Components/DeleteOrderModal.vue'
 import DuplicateFunnelModal from '@/Components/DuplicateFunnelModal.vue'
 import FormAlert from '@/Components/FormAlert.vue'
@@ -696,6 +729,7 @@ const props = defineProps({
     productLinks:  { type: Object, default: () => ({}) },
     phoneHistory:  { type: Array, default: () => [] },
     callScript:    { type: String, default: null },
+    ep_api_version: { type: String, default: 'new' },
 })
 
 const isAdmin = computed(() => page.props.value.auth?.user?.role === 'admin')
@@ -744,11 +778,17 @@ const form = useForm({
     prices:             [...(props.order.prices        ?? [])],
     track_number:       props.order.track_number       ?? '',
     belpost_address_id: props.order.belpost_address_id ?? '',
+    ops_id:             props.order.ops_id             ?? '',
+    europochta_store_id: props.order.europochta_store_id ?? null,
     comment:            props.order.comment            ?? '',
     upsell:             props.order.upsell             ?? '',
     cross_sell:         props.order.cross_sell         ?? '',
     poste_restante:     props.order.poste_restante     ?? false,
 })
+
+const useEvropostPicker = computed(() =>
+    props.order.delivery_type === 'europochta' && props.ep_api_version === 'new'
+)
 
 // Initial query for the picker pre-fills with current city + street
 const pickerInitialQuery = computed(() =>

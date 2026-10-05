@@ -6,6 +6,7 @@ use App\Models\MailBatch;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\TenantSetting;
+use App\Support\BelpostBatchRules;
 use App\Support\PhoneNormalizer;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -43,7 +44,7 @@ class BelpostService
      * @return MailBatch  Created and persisted batch record
      * @throws \RuntimeException on API or parsing error
      */
-    public function createList(string $postalDeliveryType, string $whoPays): MailBatch
+    public function createList(string $postalDeliveryType, string $whoPays, bool $isPartialReceipt = false): MailBatch
     {
         $response = Http::timeout(30)
             ->withHeaders($this->headers())
@@ -53,7 +54,7 @@ class BelpostService
                 'postal_delivery_type' => $postalDeliveryType,
                 'negotiated_rate'      => '1',
                 'is_declared_value'    => false,
-                'is_partial_receipt'   => false,
+                'is_partial_receipt'   => $isPartialReceipt,
                 'is_priority'          => 0,
                 'card_number'          => $this->elc,
             ]);
@@ -70,12 +71,13 @@ class BelpostService
         }
 
         return MailBatch::withoutGlobalScopes()->create([
-            'tenant_id'  => $this->tenantId,
-            'batch_id'   => $batchId,
-            'type'       => $postalDeliveryType,
-            'who_pays'   => $whoPays,
-            'label_size' => TenantSetting::get('belpost_label_size', '150x100'),
-            'status'     => MailBatch::STATUS_DRAFT,
+            'tenant_id'          => $this->tenantId,
+            'batch_id'           => $batchId,
+            'type'               => $postalDeliveryType,
+            'who_pays'           => $whoPays,
+            'is_partial_receipt' => $isPartialReceipt,
+            'label_size'         => TenantSetting::get('belpost_label_size', '150x100'),
+            'status'             => MailBatch::STATUS_DRAFT,
         ]);
     }
 
@@ -103,14 +105,17 @@ class BelpostService
         if (!$addressId) {
             /** @var AddressService $addressService */
             $addressService = app(AddressService::class);
-            $streetForResolve = $isPosteRestante
-                ? (trim((string) ($order->street ?? '')) ?: Order::POSTE_RESTANTE_STREET)
-                : (string) ($order->street ?? '');
-            $resolvedItem = $addressService->autoResolve(
-                (string) ($order->city ?? ''),
-                $streetForResolve,
-                $isPosteRestante ? '' : (string) ($order->building ?? '')
-            );
+
+            if ($isPosteRestante) {
+                $resolvedItem = $addressService->autoResolveOnDemand((string) ($order->city ?? ''));
+            } else {
+                $streetForResolve = (string) ($order->street ?? '');
+                $resolvedItem = $addressService->autoResolve(
+                    (string) ($order->city ?? ''),
+                    $streetForResolve,
+                    (string) ($order->building ?? '')
+                );
+            }
 
             if (!$resolvedItem) {
                 return [
@@ -124,17 +129,70 @@ class BelpostService
             $addressId = (string)$resolvedItem['id'];
         }
 
-        // ── 2. Weight + cash_on_delivery ──
-        [$fullWeight, $cashOnDelivery] = $this->calculateWeightAndCod($order);
+        // ── 2. Weight + cash_on_delivery + pre-API validation ──
+        $totals = $this->calculateWeightAndCod($order);
+        if (!$totals['ok']) {
+            return [
+                'success'       => false,
+                'track_number'  => null,
+                'error'         => 'goods_mismatch',
+                'error_message' => $totals['error_message'],
+            ];
+        }
+
+        $fullWeight      = $totals['weight'];
+        $cashOnDelivery  = $totals['cod'];
+
+        $batchType = (string) $batch->type;
+        if ($error = BelpostBatchRules::validateWeight($batchType, $fullWeight)) {
+            return [
+                'success'       => false,
+                'track_number'  => null,
+                'error'         => 'validation',
+                'error_message' => $error,
+            ];
+        }
+
+        $isEcommerce  = str_contains($batchType, 'ecommerce');
+        $senderEmail  = $isEcommerce ? (TenantSetting::get('belpost_sender_email', '') ?: '') : '';
+        $shelfLifeRaw = $isEcommerce ? TenantSetting::get('shelf_life', '10') : null;
+
+        if ($error = BelpostBatchRules::validateShelfLife($batchType, $shelfLifeRaw)) {
+            return [
+                'success'       => false,
+                'track_number'  => null,
+                'error'         => 'validation',
+                'error_message' => $error,
+            ];
+        }
+
+        if ($error = BelpostBatchRules::validateEcommerceEmail($batchType, $senderEmail)) {
+            return [
+                'success'       => false,
+                'track_number'  => null,
+                'error'         => 'validation',
+                'error_message' => $error,
+            ];
+        }
+
+        if ($batch->is_partial_receipt) {
+            $linesCheck = $this->buildPartialReceiptLines($order);
+            if (!$linesCheck['ok']) {
+                return [
+                    'success'       => false,
+                    'track_number'  => null,
+                    'error'         => 'validation',
+                    'error_message' => $linesCheck['message'],
+                ];
+            }
+        }
 
         // ── 3. FIO split ──
         [$lastName, $firstName, $secondName] = $this->splitFio((string)$order->full_name);
 
         // ── 4. Notification + email (ecommerce) ──
-        $isEcommerce  = str_contains((string)$batch->type, 'ecommerce');
         $notification = $isEcommerce ? '5' : '0';
-        $senderEmail  = $isEcommerce ? (TenantSetting::get('belpost_sender_email', '') ?: '') : '';
-        $shelfLife    = $isEcommerce ? (TenantSetting::get('shelf_life', '10') ?: '10') : null;
+        $shelfLife    = $isEcommerce ? (string) (is_numeric($shelfLifeRaw) ? (int) $shelfLifeRaw : 10) : null;
 
         // ── 5. Recipient payment ──
         $whoPays          = $batch->who_pays ?? 'Покупатель';
@@ -164,8 +222,8 @@ class BelpostService
                     'type'         => $isPosteRestante ? 'on_demand' : 'address',
                     'house'        => $isPosteRestante ? '' : trim((string) ($order->building ?? '')),
                     'cell_number'  => null,
-                    'block'        => ($order->housing  ?? '') ?: null,
-                    'flat'         => ($order->apartment ?? '') ?: null,
+                    'block'        => $isPosteRestante ? null : (($order->housing  ?? '') ?: null),
+                    'flat'         => $isPosteRestante ? null : (($order->apartment ?? '') ?: null),
                 ],
             ],
             's10code'               => '',
@@ -228,6 +286,8 @@ class BelpostService
         $addr    = $widget['address'] ?? null;
         $respCity   = (string) ($addr['city'] ?? '');
         $respStreet = (string) ($addr['street'] ?? '');
+        $respPostcode = (string) ($addr['postcode'] ?? '');
+        $respAddressId = (string) ($addr['id'] ?? '');
 
         /** @var AddressService $addressService */
         $addressService = app(AddressService::class);
@@ -235,17 +295,28 @@ class BelpostService
         $addressComplete = $s10code && $addr && $respCity && ($isPosteRestante || $respStreet);
 
         if ($addressComplete) {
-            $cityMatches = $addressService->addressPartsMatch((string) ($order->city ?? ''), $respCity);
+            $sheetPostcode = $addressService->extractPostcodeFromCity((string) ($order->city ?? ''));
+            $cityMatches = $isPosteRestante
+                ? (
+                    ($respAddressId !== '' && $respAddressId === (string) $addressId)
+                    || ($sheetPostcode && $respPostcode === $sheetPostcode)
+                    || $addressService->addressPartsMatch((string) ($order->city ?? ''), $respCity)
+                    || ($resolvedItem && $addressService->addressPartsMatch((string) ($resolvedItem['city'] ?? ''), $respCity))
+                )
+                : $addressService->addressPartsMatch((string) ($order->city ?? ''), $respCity);
             $streetMatches = $isPosteRestante
                 || $addressService->addressPartsMatch((string) ($order->street ?? ''), $respStreet);
 
             if ($cityMatches && $streetMatches) {
+                $itemId = (string) ($obj['id'] ?? '');
+
                 // ── 9. Update order ──
                 $order->update([
-                    'status'            => 'Оформлен',
-                    'status_changed_at' => now(),
-                    'track_number'      => $s10code,
-                    'mail_batch_id'     => $batch->id,
+                    'status'                  => 'Оформлен',
+                    'status_changed_at'       => now(),
+                    'track_number'            => $s10code,
+                    'mail_batch_id'           => $batch->id,
+                    'belpost_mailing_item_id' => $itemId !== '' ? $itemId : null,
                 ]);
 
                 Log::info('BelpostService::createItem success', [
@@ -428,9 +499,7 @@ class BelpostService
     }
 
     /**
-     * Calculate full_weight (g) and cash_on_delivery (kopecks or units per API).
-     *
-     * @return array [int $weight, int $cashOnDelivery]
+     * @return array{ok: bool, weight: int, cod: int, error_message: string}
      */
     private function calculateWeightAndCod(Order $order): array
     {
@@ -439,12 +508,17 @@ class BelpostService
         $prices     = $order->prices     ?? [];
 
         if (count($goods) !== count($quantities) || count($goods) !== count($prices)) {
-            return [0, 0];
+            return [
+                'ok'             => false,
+                'weight'         => 0,
+                'cod'            => 0,
+                'error_message'  => 'Проверьте количсвто значений в полях товар, штуки, цена у клиента '
+                    . ($order->full_name ?? ''),
+            ];
         }
 
         $cashOnDelivery = 0;
 
-        // Load all products for this tenant in one query
         $productWeights = Product::withoutGlobalScopes()
             ->where('tenant_id', $this->tenantId)
             ->whereIn('name', $goods)
@@ -458,7 +532,99 @@ class BelpostService
             $cashOnDelivery += (int)round($qty * $price);
         }
 
-        return [self::sumGoodsWeightGrams($goods, $quantities, $productWeights), $cashOnDelivery];
+        return [
+            'ok'            => true,
+            'weight'        => self::sumGoodsWeightGrams($goods, $quantities, $productWeights),
+            'cod'           => $cashOnDelivery,
+            'error_message' => '',
+        ];
+    }
+
+    /**
+     * @return array{ok: bool, message: string, lines: array<int, array{article: string, name: string, quantity: int, price: float}>}
+     */
+    public function buildPartialReceiptLines(Order $order): array
+    {
+        $goods      = $order->goods      ?? [];
+        $quantities = $order->quantities ?? [];
+        $prices     = $order->prices     ?? [];
+        $client     = (string) ($order->full_name ?? '');
+
+        if (count($goods) !== count($quantities) || count($goods) !== count($prices)) {
+            return [
+                'ok'      => false,
+                'message' => 'Проверьте количсвто значений в полях товар, штуки, цена у клиента ' . $client,
+                'lines'   => [],
+            ];
+        }
+
+        if (count($goods) > 20) {
+            return [
+                'ok'      => false,
+                'message' => 'Состав вложения у клиента ' . $client . ': больше 20 позиций (сейчас ' . count($goods) . ').',
+                'lines'   => [],
+            ];
+        }
+
+        $lines = [];
+        foreach ($goods as $i => $goodName) {
+            $name  = trim((string) $goodName);
+            $qty   = (int) ($quantities[$i] ?? 0);
+            $price = (float) ($prices[$i] ?? 0);
+
+            if ($name === '') {
+                return [
+                    'ok'      => false,
+                    'message' => 'Состав вложения у клиента ' . $client . ': пустое наименование товара.',
+                    'lines'   => [],
+                ];
+            }
+
+            if ($qty < 1 || $qty > 999) {
+                return [
+                    'ok'      => false,
+                    'message' => 'Состав вложения у клиента ' . $client . ': количество «'
+                        . ($quantities[$i] ?? '') . '», допустимо от 1 до 999.',
+                    'lines'   => [],
+                ];
+            }
+
+            if ($price < 0.01 || $price > 99999.99) {
+                return [
+                    'ok'      => false,
+                    'message' => 'Состав вложения у клиента ' . $client . ': цена «'
+                        . ($prices[$i] ?? '') . '», допустимо от 0,01 до 99 999,99.',
+                    'lines'   => [],
+                ];
+            }
+
+            $lines[] = [
+                'article'  => mb_substr($name, 0, 20),
+                'name'     => mb_substr($name, 0, 60),
+                'quantity' => $qty,
+                'price'    => $price,
+            ];
+        }
+
+        if ($lines === []) {
+            return [
+                'ok'      => false,
+                'message' => 'Состав вложения у клиента ' . $client . ': нет позиций.',
+                'lines'   => [],
+            ];
+        }
+
+        return ['ok' => true, 'message' => '', 'lines' => $lines];
+    }
+
+    /**
+     * Cash-on-delivery total in rubles (same source as blank payload cash_on_delivery).
+     */
+    public function orderCashOnDeliveryRubles(Order $order): int
+    {
+        $totals = $this->calculateWeightAndCod($order);
+
+        return $totals['ok'] ? $totals['cod'] : 0;
     }
 
     /**

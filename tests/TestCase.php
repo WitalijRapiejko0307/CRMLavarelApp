@@ -28,6 +28,8 @@ abstract class TestCase extends BaseTestCase
 
         parent::setUp();
 
+        $this->withoutMiddleware(\App\Http\Middleware\EnsureEmailVerified::class);
+
         $default = (string) config('database.default');
         $name    = (string) config("database.connections.{$default}.database");
         if ($default === 'mysql' && $name === 'crm') {

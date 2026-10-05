@@ -1,7 +1,7 @@
 <template>
     <div class="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-950">
         <nav class="bg-slate-800 dark:bg-slate-950 text-white shadow-md border-b border-slate-700">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="page-shell">
                 <div class="flex items-center justify-between h-14 gap-3">
                     <div class="flex items-center gap-3 min-w-0">
                         <MobileNav title="BaseCRM Admin" theme="slate" :links="mobileLinks">
@@ -34,7 +34,7 @@
             </div>
         </nav>
 
-        <div v-if="flash.message || flash.error" class="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 mt-4">
+        <div v-if="flash.message || flash.error" class="page-shell mt-4">
             <div v-if="flash.message" class="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-200 rounded-md px-4 py-3 text-sm">
                 {{ flash.message }}
             </div>
@@ -43,7 +43,7 @@
             </div>
         </div>
 
-        <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <main class="flex-1 page-shell py-6">
             <header v-if="$slots.header" class="mb-6">
                 <slot name="header" />
             </header>

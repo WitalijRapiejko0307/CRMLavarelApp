@@ -136,30 +136,35 @@ class EvropostService
         // ── 1. Calculate weight and COD ──
         [$fullWeight, $cashOnDelivery] = $this->calculateWeightAndCod($order, $tenantId);
 
-        // ── 2. Get list of delivery offices ──
-        $storesResp = $this->newApiRequest('GET', self::STORES_PATH . '?type=1', null, $token);
+        // ── 2. Destination office: picked store id skips fuzzy match ──
+        $storeIdFinish = !empty($order->europochta_store_id)
+            ? (int) $order->europochta_store_id
+            : null;
 
-        if ($storesResp['status'] === 401) {
-            return $this->failure('auth_error', 'Ошибка авторизации API Европочты (401). Проверьте token_ep.');
-        }
-        if ($storesResp['status'] !== 200) {
-            $msg = $storesResp['body']['message'] ?? ('HTTP ' . $storesResp['status']);
-            return $this->failure('api_error', 'Ошибка получения списка ОПС: ' . $msg);
-        }
+        if (!$storeIdFinish) {
+            $storesResp = $this->newApiRequest('GET', self::STORES_PATH . '?type=1', null, $token);
 
-        $storesList = $storesResp['body'];
-        if (!is_array($storesList)) {
-            $storesList = $storesList['data'] ?? $storesList['stores'] ?? $storesList['Table'] ?? [];
-        }
+            if ($storesResp['status'] === 401) {
+                return $this->failure('auth_error', 'Ошибка авторизации API Европочты (401). Проверьте token_ep.');
+            }
+            if ($storesResp['status'] !== 200) {
+                $msg = $storesResp['body']['message'] ?? ('HTTP ' . $storesResp['status']);
+                return $this->failure('api_error', 'Ошибка получения списка ОПС: ' . $msg);
+            }
 
-        // ── 3. Find destination office ──
-        $storeIdFinish = $this->findStoreNew(
-            $storesList,
-            (string)($order->city ?? ''),
-            (string)($order->street ?? ''),
-            (string)($order->building ?? ''),
-            (string)($order->ops_id ?? '')
-        );
+            $storesList = $storesResp['body'];
+            if (!is_array($storesList)) {
+                $storesList = $storesList['data'] ?? $storesList['stores'] ?? $storesList['Table'] ?? [];
+            }
+
+            $storeIdFinish = $this->findStoreNew(
+                $storesList,
+                (string)($order->city ?? ''),
+                (string)($order->street ?? ''),
+                (string)($order->building ?? ''),
+                (string)($order->ops_id ?? '')
+            );
+        }
 
         if (!$storeIdFinish) {
             return $this->failure(
@@ -348,7 +353,103 @@ class EvropostService
         return $this->failure('api_error', 'Европочта не вернула номер бланка');
     }
 
+    /**
+     * Directory of OPS (type=1) from new API §2.2. Does not cache — caller owns TTL.
+     *
+     * @return array{ok: bool, stores?: array, error?: string, status?: int, message?: string}
+     */
+    public function listStores(int $tenantId, int $type = 1): array
+    {
+        $token = $this->tokenEpForTenant($tenantId);
+        if ($token === '') {
+            return [
+                'ok'      => false,
+                'error'   => 'no_token',
+                'status'  => 0,
+                'message' => 'Подключите Европочту',
+            ];
+        }
+
+        $path = self::STORES_PATH . '?type=' . (int) $type;
+        $resp = $this->newApiRequest('GET', $path, null, $token);
+
+        if ($resp['status'] === 401) {
+            return [
+                'ok'      => false,
+                'error'   => 'auth_error',
+                'status'  => 401,
+                'message' => 'Ошибка авторизации API Европочты (401). Проверьте token_ep.',
+            ];
+        }
+
+        if ($resp['status'] !== 200) {
+            $msg = $resp['body']['message'] ?? ('HTTP ' . $resp['status']);
+
+            return [
+                'ok'      => false,
+                'error'   => 'api_error',
+                'status'  => (int) $resp['status'],
+                'message' => 'Ошибка получения списка ОПС: ' . $msg,
+            ];
+        }
+
+        $stores = $this->unwrapStoresList($resp['body']);
+        if ($stores === null) {
+            return [
+                'ok'      => false,
+                'error'   => 'api_error',
+                'status'  => 200,
+                'message' => 'Ошибка получения списка ОПС: неожиданный ответ',
+            ];
+        }
+
+        return [
+            'ok'     => true,
+            'stores' => $stores,
+        ];
+    }
+
     // ─── Private helpers ──────────────────────────────────────────────────────
+
+    /**
+     * Decrypt token_ep for a tenant without relying on request-scoped TenantScope.
+     */
+    private function tokenEpForTenant(int $tenantId): string
+    {
+        $row = TenantSetting::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('key', 'token_ep')
+            ->first();
+
+        return $row ? trim((string) $row->value) : '';
+    }
+
+    /**
+     * @param  mixed $body
+     * @return array|null  List of stores, or null if the payload is not a directory
+     */
+    private function unwrapStoresList($body): ?array
+    {
+        if (!is_array($body)) {
+            return null;
+        }
+
+        if ($body === []) {
+            return [];
+        }
+
+        if (array_keys($body) === range(0, count($body) - 1)) {
+            return $body;
+        }
+
+        foreach (['data', 'stores', 'Table'] as $key) {
+            if (isset($body[$key]) && is_array($body[$key])) {
+                return $body[$key];
+            }
+        }
+
+        return null;
+    }
 
     /**
      * Send request to legacy JWT API endpoint.

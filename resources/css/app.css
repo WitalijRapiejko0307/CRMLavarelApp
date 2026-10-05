@@ -105,6 +105,11 @@
         @apply text-2xl font-bold text-gray-800 dark:text-gray-200;
     }
 
+    /* Full-width page column: 16px on mobile, 2% gutters from md up. */
+    .page-shell {
+        @apply w-full mx-auto px-4 md:px-[2%];
+    }
+
     /* ── Mobile-adaptive utilities ─────────────────────────────────────── */
     .card-compact {
         @apply p-4 md:p-6;

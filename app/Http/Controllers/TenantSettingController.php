@@ -2,13 +2,19 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\TelegramException;
+use App\Jobs\SendDailyDigestJob;
 use App\Models\TenantSetting;
 use App\Services\ConnectionService;
+use App\Services\EvropostStoreSearchService;
 use App\Services\SmsService;
+use App\Services\TelegramService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -61,8 +67,14 @@ class TenantSettingController extends Controller
                 'keys'  => [
                     'auth_token_bp'        => ['Токен авторизации (Bearer)',    'password', 'Bearer …',        ''],
                     'elc'                  => ['ЭЛС (электронный лицевой счёт)', 'text', '…', 'Номер электронного лицевого счёта из кабинета Белпочты'],
-                    'belpost_sender_email' => ['Email отправителя (ecommerce)', 'text', 'shop@example.by', 'Уведомление о выдаче; обязателен для ecommerce-типов'],
-                    'shelf_life'           => ['Срок хранения в ПВЗ, дней', 'text', '10', 'Количество дней хранения в отделении; по умолчанию 10'],
+                    'belpost_sender_email'    => ['Email отправителя (ecommerce)', 'text', 'shop@example.by', 'Уведомление о выдаче; обязателен для ecommerce-типов'],
+                    'belpost_sender_name'     => ['Имя / ИП отправителя', 'text', '', 'Печатается на бланке слева'],
+                    'belpost_sender_street'   => ['Улица, дом, кв. отправителя', 'text', '', ''],
+                    'belpost_sender_postcode' => ['Индекс отправителя', 'text', '', ''],
+                    'belpost_sender_city'     => ['Город отправителя', 'text', '', ''],
+                    'belpost_contract_no'     => ['№ договора', 'text', '', 'Строка «Оплачено по договору» на бланке'],
+                    'belpost_contract_date'   => ['Дата договора', 'text', '', ''],
+                    'shelf_life'              => ['Срок хранения в ПВЗ, дней', 'text', '10', 'Количество дней хранения в отделении; по умолчанию 10'],
                     'belpost_label_size'   => ['Размер бланка по умолчанию',   'select',   '', '', ['210x150' => '210×150', '150x100' => '150×100', '120x80' => '120×80']],
                 ],
             ],
@@ -98,6 +110,36 @@ class TenantSettingController extends Controller
                     'sms_tpl_shipped'    => ['Текст при отправке', 'textarea', SmsService::DEFAULT_TPL_SHIPPED, 'Плейсхолдеры: {name} {track} {tovar}'],
                     'sms_tpl_arrived'    => ['Текст в отделении', 'textarea', SmsService::DEFAULT_TPL_ARRIVED, 'Плейсхолдеры: {name} {track} {tovar}'],
                     'sms_tpl_reminder'   => ['Текст напоминания', 'textarea', SmsService::DEFAULT_TPL_REMINDER, 'Плейсхолдеры: {name} {track} {tovar} {days}'],
+                ],
+            ],
+            'telegram' => [
+                'label' => 'Telegram',
+                'keys'  => [
+                    'telegram_bot_token' => ['Токен бота', 'password', '…', 'Токен из @BotFather'],
+                    'telegram_chat_id'   => ['Chat ID', 'text', '…', 'Куда слать PDF и сводку'],
+                ],
+            ],
+            'digest' => [
+                'label' => 'Ежедневная сводка',
+                'keys'  => [
+                    'digest_enabled' => [
+                        'Ежедневная сводка',
+                        'toggle',
+                        '',
+                        'Заявки, принятые, продажи и топ товаров за сегодня',
+                    ],
+                    'digest_time' => [
+                        'Время отправки',
+                        'text',
+                        '21:00',
+                        'Часовой пояс Europe/Minsk, формат ЧЧ:ММ',
+                    ],
+                    'digest_email' => [
+                        'Email для сводки',
+                        'text',
+                        'owner@example.com',
+                        'Пусто — не отправлять письмо. Telegram — из настроек бота выше',
+                    ],
                 ],
             ],
             'blacklist' => [
@@ -277,6 +319,7 @@ class TenantSettingController extends Controller
      *
      * Toggle fields ('1' / '') are always saved so the user can explicitly disable them.
      * sms_rules is always saved (empty string = all SMS events off).
+     * digest_email and digest_time are always saved so the admin can clear them.
      * Other fields: empty strings are NOT saved (keeps existing value intact).
      */
     public function update(Request $request): RedirectResponse
@@ -294,6 +337,8 @@ class TenantSettingController extends Controller
         $allowed  = static::keysForTenant($tenant);
         $toggles  = static::toggleKeysForTenant($tenant);
 
+        $this->assertDigestCanBeEnabled($input);
+
         foreach ($allowed as $key) {
             $value = isset($input[$key]) ? trim((string)$input[$key]) : '';
 
@@ -301,8 +346,8 @@ class TenantSettingController extends Controller
                 if (array_key_exists($key, $input)) {
                     TenantSetting::put($tenantId, $key, static::normalizeSmsRules($value));
                 }
-            } elseif (in_array($key, $toggles, true)) {
-                // Always persist toggles (empty string = disabled)
+            } elseif (in_array($key, $toggles, true) || $key === 'digest_email' || $key === 'digest_time') {
+                // Always persist toggles and digest text fields (empty string = off / clear)
                 TenantSetting::put($tenantId, $key, $value);
             } elseif ($value !== '') {
                 TenantSetting::put($tenantId, $key, $value);
@@ -351,10 +396,132 @@ class TenantSettingController extends Controller
     }
 
     /**
+     * POST /settings/europochta/refresh-stores
+     * Drop the instance-wide OPS directory so the next search hits Europochta.
+     */
+    public function refreshEuropochtaStores(EvropostStoreSearchService $search): \Illuminate\Http\JsonResponse
+    {
+        Gate::authorize('manage-settings');
+
+        $search->forgetCache();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Справочник отделений обновлён',
+        ]);
+    }
+
+    /**
+     * Validate digest settings before persist when the admin is turning the digest on.
+     *
+     * @param  array<string, mixed>  $input
+     */
+    protected function assertDigestCanBeEnabled(array $input): void
+    {
+        $enabled = array_key_exists('digest_enabled', $input)
+            ? trim((string) $input['digest_enabled'])
+            : '';
+
+        if ($enabled !== '1') {
+            return;
+        }
+
+        $time = array_key_exists('digest_time', $input)
+            ? trim((string) $input['digest_time'])
+            : trim((string) TenantSetting::get('digest_time', ''));
+
+        $email = array_key_exists('digest_email', $input)
+            ? trim((string) $input['digest_email'])
+            : trim((string) TenantSetting::get('digest_email', ''));
+
+        $chatId = array_key_exists('telegram_chat_id', $input)
+            ? trim((string) $input['telegram_chat_id'])
+            : trim((string) TenantSetting::get('telegram_chat_id', ''));
+
+        $errors = [];
+        if (!preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $time)) {
+            $errors['settings.digest_time'] = 'Укажите время в формате ЧЧ:ММ.';
+        }
+        if ($email === '' && $chatId === '') {
+            $errors['settings.digest_email'] = 'Укажите email или Chat ID Telegram, чтобы включить сводку.';
+        }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+    }
+
+    /**
+     * POST /settings/digest/send-now
+     * Sends today's digest immediately (stamps last_sent so evening cron will not duplicate).
+     */
+    public function sendDigestNow(): JsonResponse
+    {
+        Gate::authorize('manage-settings');
+
+        $tenant = Auth::user()->tenant;
+        if (!$tenant || !$tenant->isStore()) {
+            return response()->json([
+                'success'       => false,
+                'error_message' => 'Сводка доступна только магазину',
+            ], 422);
+        }
+
+        $result = SendDailyDigestJob::dispatchNow((int) Auth::user()->tenant_id, true);
+
+        if (!is_array($result) || empty($result['ok'])) {
+            return response()->json([
+                'success'       => false,
+                'error_message' => is_array($result)
+                    ? (string) ($result['error'] ?? 'Не удалось отправить сводку')
+                    : 'Не удалось отправить сводку',
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => (string) ($result['message'] ?? 'Сводка отправлена'),
+        ]);
+    }
+
+    /**
+     * POST /settings/telegram/test
+     * Sends a short ping via Bot API so the admin can verify token + chat.
+     */
+    public function testTelegram(): JsonResponse
+    {
+        Gate::authorize('manage-settings');
+
+        $service = TelegramService::forTenant((int) Auth::user()->tenant_id);
+        if ($service === null) {
+            return response()->json([
+                'success'       => false,
+                'error'         => 'config_error',
+                'error_message' => 'Подключите Telegram в Настройках',
+            ], 422);
+        }
+
+        try {
+            $service->sendMessage('CRM: связь ок');
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Сообщение отправлено',
+            ]);
+        } catch (TelegramException $e) {
+            return response()->json([
+                'success'       => false,
+                'error'         => 'telegram_error',
+                'error_message' => $e->getMessage(),
+            ], 422);
+        }
+    }
+
+    /**
      * POST /settings/reveal-webhook-secret
      * Returns the current decrypted webhook secret. Admin only; allowed on expired trial.
      */
-    public function revealWebhookSecret(): \Illuminate\Http\JsonResponse
+    public function revealWebhookSecret(): JsonResponse
     {
         Gate::authorize('manage-settings');
 

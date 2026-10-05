@@ -127,6 +127,47 @@ class OrderIndexFilterTest extends TestCase
         $this->assertIndexHasOrder($response, $augustOrder->full_name);
     }
 
+    public function test_orders_index_rejects_invalid_date_from(): void
+    {
+        $user = $this->createActiveTenantUser();
+
+        $this->actingAs($user)
+            ->getJson('/orders?date_from=23/23/1233')
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('date_from');
+    }
+
+    public function test_orders_index_rejects_invalid_date_to(): void
+    {
+        $user = $this->createActiveTenantUser();
+
+        $this->actingAs($user)
+            ->getJson('/orders?date_to=2026-13-40')
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('date_to');
+    }
+
+    public function test_orders_index_empty_date_query_params_show_all_orders(): void
+    {
+        $user = $this->createActiveTenantUser();
+
+        $julyOrder = $this->createOrder($user, [
+            'full_name'  => 'Июльский Заказ Тестов',
+            'created_at' => '2026-07-15 10:00:00',
+        ]);
+
+        $augustOrder = $this->createOrder($user, [
+            'full_name'  => 'Августовский Заказ Тестов',
+            'created_at' => '2026-08-15 10:00:00',
+        ]);
+
+        $response = $this->actingAs($user)->get('/orders?date_from=&date_to=');
+
+        $response->assertOk();
+        $this->assertIndexHasOrder($response, $julyOrder->full_name);
+        $this->assertIndexHasOrder($response, $augustOrder->full_name);
+    }
+
     public function test_segment_stuck_returns_only_old_at_branch_orders(): void
     {
         Carbon::setTestNow('2026-09-16 12:00:00');

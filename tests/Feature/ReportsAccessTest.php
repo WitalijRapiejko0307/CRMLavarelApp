@@ -306,6 +306,26 @@ class ReportsAccessTest extends TestCase
         $this->assertSame(3, $this->funnelStep($this->reportsProps($unfiltered), 'leads')['count']);
     }
 
+    public function test_reports_reject_invalid_date(): void
+    {
+        $user = $this->createStoreUser();
+
+        $this->actingAs($user)
+            ->getJson('/reports?date_from=23/23/1233')
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('date_from');
+    }
+
+    public function test_reports_empty_dates_still_ok(): void
+    {
+        $user = $this->createStoreUser();
+
+        $this->actingAs($user)
+            ->get('/reports?date_from=&date_to=')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Reports/Index'));
+    }
+
     public function test_utm_campaign_filter_applies_and_echoes_campaigns(): void
     {
         $user = $this->createStoreUser();

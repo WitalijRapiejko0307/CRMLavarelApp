@@ -163,6 +163,25 @@
                             </div>
                         </div>
                     </template>
+                    <template v-else-if="useEvropostPicker">
+                        <EvropostOfficePicker
+                            v-model:city="form.city"
+                            v-model:street="form.street"
+                            v-model:building="form.building"
+                            v-model:opsId="form.ops_id"
+                            v-model:europochtaStoreId="form.europochta_store_id"
+                        />
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                            <div>
+                                <label class="label">Корпус</label>
+                                <input v-model="form.housing" type="text" class="w-full mt-1" />
+                            </div>
+                            <div>
+                                <label class="label">Квартира</label>
+                                <input v-model="form.apartment" type="text" class="w-full mt-1" />
+                            </div>
+                        </div>
+                    </template>
                     <div v-else class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div class="sm:col-span-3">
                             <label class="label">Город</label>
@@ -339,6 +358,7 @@ import PageHeader from '@/Components/PageHeader.vue'
 import AppScrollSelect from '@/Components/AppScrollSelect.vue'
 import { statusColorClass } from '@/utils/orderStatusColors'
 import AddressInlinePicker from '@/Components/AddressInlinePicker.vue'
+import EvropostOfficePicker from '@/Components/EvropostOfficePicker.vue'
 import FormAlert from '@/Components/FormAlert.vue'
 import { useSubscription } from '@/composables/useSubscription'
 import { isInCatalog as checkInCatalog } from '@/utils/phone'
@@ -358,6 +378,7 @@ const props = defineProps({
     statuses:      Array,
     deliveryTypes: Object,
     products:      Array,
+    ep_api_version: { type: String, default: 'new' },
 })
 
 const productNames = computed(() => props.products.map(p => p.name))
@@ -383,15 +404,25 @@ const form = useForm({
     housing:           '',
     apartment:         '',
     belpost_address_id: '',
+    ops_id: '',
+    europochta_store_id: null,
     poste_restante: false,
     goods:      [],
     quantities: [],
     prices:     [],
 })
 
+const useEvropostPicker = computed(() =>
+    form.delivery_type === 'europochta' && props.ep_api_version === 'new'
+)
+
 watch(() => form.delivery_type, (newType, oldType) => {
     if (oldType === 'belpost' && newType !== 'belpost') {
         form.belpost_address_id = ''
+    }
+    if (oldType === 'europochta' && newType !== 'europochta') {
+        form.europochta_store_id = null
+        form.ops_id = ''
     }
 })
 

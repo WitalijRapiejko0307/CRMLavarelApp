@@ -2,7 +2,7 @@
     <div class="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-950">
         <!-- Navigation -->
         <nav class="bg-indigo-700 dark:bg-indigo-950 text-white shadow-md dark:border-b dark:border-indigo-900">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="page-shell">
                 <div class="flex items-center justify-between h-14 gap-3">
                     <!-- Mobile: burger + logo -->
                     <div class="flex items-center gap-3 min-w-0">
@@ -50,20 +50,12 @@
                         >
                             Заказы
                         </Link>
-                        <Link
+                        <NavDropdown
                             v-if="isStore"
-                            href="/belpost"
-                            :class="navLinkClass('/belpost')"
-                        >
-                            Белпочта
-                        </Link>
-                        <Link
-                            v-if="isStore"
-                            href="/europochta"
-                            :class="navLinkClass('/europochta')"
-                        >
-                            Европочта
-                        </Link>
+                            label="Отгрузка"
+                            :active="isShippingActive"
+                            :items="shippingItems"
+                        />
                         <Link
                             v-if="isStore"
                             href="/products"
@@ -91,6 +83,12 @@
                             :class="navLinkClass('/finances')"
                         >
                             Финансы
+                        </Link>
+                        <Link
+                            href="/support"
+                            :class="navLinkClass('/support')"
+                        >
+                            Поддержка
                         </Link>
                     </div>
 
@@ -134,7 +132,7 @@
         <!-- Auto tracking notice -->
         <div
             v-if="showTrackingNotice && isStore"
-            class="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 mt-4"
+            class="page-shell mt-4"
         >
             <div class="bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 text-indigo-900 dark:text-indigo-100 rounded-md px-4 py-3 text-sm flex items-start justify-between gap-3">
                 <div class="flex items-start gap-2">
@@ -161,7 +159,7 @@
         <!-- SalesRender sync failures -->
         <div
             v-if="showSrSyncFailures"
-            class="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 mt-4"
+            class="page-shell mt-4"
         >
             <div class="bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-100 rounded-md px-4 py-3 text-sm flex items-start justify-between gap-3">
                 <div class="flex items-start gap-2 min-w-0">
@@ -197,7 +195,7 @@
         </div>
 
         <!-- Flash messages -->
-        <div v-if="flash.message || flash.error" class="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 mt-4">
+        <div v-if="flash.message || flash.error" class="page-shell mt-4">
             <div v-if="flash.message" class="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-200 rounded-md px-4 py-3 text-sm flex items-center gap-2">
                 <svg class="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
@@ -214,13 +212,13 @@
 
         <!-- Page header -->
         <header v-if="$slots.header" class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div class="page-shell py-4">
                 <slot name="header" />
             </div>
         </header>
 
         <!-- Main content -->
-        <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <main class="flex-1 page-shell py-6">
             <slot />
         </main>
     </div>
@@ -235,6 +233,7 @@ import TrialBanner from '@/Components/TrialBanner.vue'
 import OnboardingChecklist from '@/Components/OnboardingChecklist.vue'
 import OnboardingWelcomeModal from '@/Components/OnboardingWelcomeModal.vue'
 import MobileNav from '@/Components/MobileNav.vue'
+import NavDropdown from '@/Components/NavDropdown.vue'
 
 const page = usePage()
 
@@ -261,6 +260,7 @@ const mobileLinks = computed(() => {
         links.push(
             { href: '/belpost', label: 'Белпочта', active: isActive('/belpost') },
             { href: '/europochta', label: 'Европочта', active: isActive('/europochta') },
+            { href: '/courier', label: 'Курьер', active: isActive('/courier') },
             { href: '/products', label: 'Склад', active: isActive('/products') },
         )
     }
@@ -273,6 +273,7 @@ const mobileLinks = computed(() => {
     if (canViewFinances.value) {
         links.push({ href: '/finances', label: 'Финансы', active: isActive('/finances') })
     }
+    links.push({ href: '/support', label: 'Поддержка', active: isActive('/support') })
     return links
 })
 
@@ -332,6 +333,16 @@ async function dismissSrSyncFailures() {
         // Non-fatal — banner already hidden locally
     }
 }
+
+const shippingItems = [
+    { href: '/belpost', label: 'Белпочта' },
+    { href: '/europochta', label: 'Европочта' },
+    { href: '/courier', label: 'Курьер' },
+]
+
+const isShippingActive = computed(() =>
+    isActive('/belpost') || isActive('/europochta') || isActive('/courier')
+)
 
 function isActive(path) {
     return window.location.pathname.startsWith(path)

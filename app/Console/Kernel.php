@@ -5,6 +5,7 @@ namespace App\Console;
 use App\Console\Commands\SumOrdersCommand;
 use App\Jobs\SyncSalesRenderJob;
 use App\Models\Tenant;
+use App\Services\DailyDigestScheduler;
 use App\Services\TrackingRunService;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
@@ -54,6 +55,10 @@ class Kernel extends ConsoleKernel
                 dispatch(new SyncSalesRenderJob($tenant->id));
             }
         })->everyFiveMinutes()->name('dispatch-salesrender')->withoutOverlapping();
+
+        $schedule->call(function () {
+            app(DailyDigestScheduler::class)->dispatchDue();
+        })->everyMinute()->name('dispatch-daily-digest')->withoutOverlapping();
 
         // Phase 4: aggregate revenue from completed orders daily at midnight.
         $schedule->command(SumOrdersCommand::class)

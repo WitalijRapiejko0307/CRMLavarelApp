@@ -29,6 +29,12 @@
             </PageHeader>
         </template>
 
+        <PackingChecklist
+            :orders="eligibleOrders"
+            :screen="'europochta'"
+            :print-url="'/europochta/packing.pdf'"
+        />
+
         <!-- Empty state -->
         <div v-if="orderQueue.length === 0" class="card text-center py-16 text-gray-400 dark:text-gray-500">
             <svg class="w-12 h-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -126,6 +132,7 @@
 import { ref, computed } from 'vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import PageHeader from '@/Components/PageHeader.vue'
+import PackingChecklist from '@/Components/PackingChecklist.vue'
 import { useSubscription } from '@/composables/useSubscription'
 import { apiFetch } from '@/utils/api'
 

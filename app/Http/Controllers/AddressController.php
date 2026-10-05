@@ -29,7 +29,8 @@ class AddressController extends Controller
             return response()->json(['items' => []]);
         }
 
-        $raw   = $this->service->search($q);
+        $type = $request->input('mode') === 'on_demand' ? 'on_demand' : 'address';
+        $raw   = $this->service->search($q, $type);
         $items = $this->service->formatAll($raw);
 
         return response()->json(['items' => $items]);

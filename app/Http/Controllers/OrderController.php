@@ -50,6 +50,17 @@ class OrderController extends Controller
         return $this->tenant()->isCallCenter();
     }
 
+    private function epApiVersion(int $tenantId): string
+    {
+        $row = TenantSetting::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('key', 'ep_api_version')
+            ->first();
+        $value = $row ? trim((string) $row->value) : '';
+
+        return $value !== '' ? $value : 'new';
+    }
+
     // ─── Manual create ────────────────────────────────────────────────────────
 
     /**
@@ -63,6 +74,7 @@ class OrderController extends Controller
             'statuses'       => Order::STATUSES,
             'deliveryTypes'  => Order::DELIVERY_TYPES,
             'products'       => Product::orderBy('name')->get(['id', 'name', 'stock']),
+            'ep_api_version' => $this->epApiVersion((int) Auth::user()->tenant_id),
         ]);
     }
 
@@ -89,9 +101,11 @@ class OrderController extends Controller
             'comment'            => ['nullable', 'string', 'max:2000'],
             'upsell'             => ['nullable', 'string', 'max:1000'],
             'cross_sell'         => ['nullable', 'string', 'max:1000'],
-            'delivery_type'      => ['nullable', Order::deliveryTypeRule()],
-            'belpost_address_id' => ['nullable', 'string', 'max:50'],
-            'poste_restante'     => ['sometimes', 'boolean'],
+            'delivery_type'        => ['nullable', Order::deliveryTypeRule()],
+            'belpost_address_id'   => ['nullable', 'string', 'max:50'],
+            'ops_id'               => ['nullable', 'string', 'max:50'],
+            'europochta_store_id'  => ['nullable', 'integer'],
+            'poste_restante'       => ['sometimes', 'boolean'],
         ]);
 
         $data['tenant_id'] = Auth::user()->tenant_id;
@@ -274,6 +288,11 @@ class OrderController extends Controller
 
     public function index(Request $request): Response
     {
+        $request->validate([
+            'date_from' => ['nullable', 'date_format:Y-m-d'],
+            'date_to'   => ['nullable', 'date_format:Y-m-d'],
+        ]);
+
         $tenant = $this->tenant();
 
         $user = Auth::user();
@@ -405,6 +424,7 @@ class OrderController extends Controller
             'productLinks'          => ProductLinkResolver::forOrder($order),
             'phoneHistory'          => $this->phoneReturnHistory($order),
             'callScript'            => $this->isCallCenter() ? $this->renderCallScript($order) : null,
+            'ep_api_version'        => $this->epApiVersion((int) $order->tenant_id),
         ]);
     }
 
@@ -425,8 +445,10 @@ class OrderController extends Controller
             'prices'        => ['sometimes', 'nullable', 'array'],
             'track_number'       => ['sometimes', 'nullable', 'string', 'max:50'],
             'source'             => ['sometimes', 'nullable', 'string', 'max:50'],
-            'belpost_address_id' => ['sometimes', 'nullable', 'string', 'max:50'],
-            'delivery_type'      => ['sometimes', 'nullable', Order::deliveryTypeRule()],
+            'belpost_address_id'  => ['sometimes', 'nullable', 'string', 'max:50'],
+            'ops_id'              => ['sometimes', 'nullable', 'string', 'max:50'],
+            'europochta_store_id' => ['sometimes', 'nullable', 'integer'],
+            'delivery_type'       => ['sometimes', 'nullable', Order::deliveryTypeRule()],
             'comment'            => ['sometimes', 'nullable', 'string', 'max:2000'],
             'upsell'             => ['sometimes', 'nullable', 'string', 'max:1000'],
             'cross_sell'         => ['sometimes', 'nullable', 'string', 'max:1000'],
@@ -439,6 +461,7 @@ class OrderController extends Controller
                 'full_name', 'phone', 'city', 'street', 'building', 'housing', 'apartment',
                 'goods', 'quantities', 'prices', 'source', 'delivery_type',
                 'comment', 'upsell', 'cross_sell', 'poste_restante', 'callback_at',
+                'ops_id', 'europochta_store_id',
             ]));
         }
 
@@ -583,10 +606,17 @@ class OrderController extends Controller
             'delivery_type' => ['required', Order::deliveryTypeRule()],
         ]);
 
-        $order->update([
-            'delivery_type'           => $request->input('delivery_type'),
+        $deliveryType = $request->input('delivery_type');
+        $payload = [
+            'delivery_type'           => $deliveryType,
             'last_updated_by_user_id' => Auth::id(),
-        ]);
+        ];
+        if ($deliveryType !== 'europochta') {
+            $payload['europochta_store_id'] = null;
+            $payload['ops_id'] = null;
+        }
+
+        $order->update($payload);
 
         return back()->with('message', 'Тип доставки обновлён.');
     }

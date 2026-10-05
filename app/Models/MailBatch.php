@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Scopes\TenantScope;
+use App\Support\BelpostBatchRules;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -23,6 +24,9 @@ class MailBatch extends Model
     public const STATUS_FAILED      = 'failed';
 
     public const LABEL_SIZES = ['210x150', '150x100', '120x80'];
+
+    /** Types where partial receipt (attachment lines) is available. */
+    public const PARTIAL_RECEIPT_TYPES = BelpostBatchRules::PARTIAL_RECEIPT_TYPES;
 
     /** Types where the seller always pays (cannot select «Покупатель»). */
     public const SELLER_ONLY_TYPES = ['ecommerce_light', 'ecommerce_optima'];
@@ -45,6 +49,32 @@ class MailBatch extends Model
         'ecommerce_light'       => 'E-commerce Лайт',
         'ecommerce_optima'      => 'E-commerce Оптима',
     ];
+
+    /**
+     * Package type titles printed on CRM Belpost blanks.
+     * Not stored in tenant_settings.
+     */
+    public const BLANK_TYPE_LABELS = [
+        'ecommerce_economical' => 'Пакет Эконом',
+        'ecommerce_standard'   => 'Пакет Стандарт',
+        'ecommerce_elite'      => 'Пакет Элит',
+        'ecommerce_express'    => 'Пакет Экспресс',
+        'ecommerce_light'      => 'Пакет Лайт',
+        'ecommerce_optima'     => 'Пакет Оптима',
+    ];
+
+    public static function blankTypeLabel(?string $type): string
+    {
+        $key = (string) $type;
+        if ($key !== '' && isset(self::BLANK_TYPE_LABELS[$key])) {
+            return self::BLANK_TYPE_LABELS[$key];
+        }
+        if ($key !== '' && isset(self::DELIVERY_TYPES[$key])) {
+            return self::DELIVERY_TYPES[$key];
+        }
+
+        return $key;
+    }
 
     /**
      * Packer tariff orientir from parcel weight (grams). Not stored in tenant_settings.
@@ -87,6 +117,7 @@ class MailBatch extends Model
         'batch_id',
         'type',
         'who_pays',
+        'is_partial_receipt',
         'label_size',
         'belpost_committed',
         'status',
@@ -97,6 +128,7 @@ class MailBatch extends Model
 
     protected $casts = [
         'belpost_committed' => 'boolean',
+        'is_partial_receipt' => 'boolean',
         'created_at'        => 'datetime',
         'updated_at'        => 'datetime',
     ];

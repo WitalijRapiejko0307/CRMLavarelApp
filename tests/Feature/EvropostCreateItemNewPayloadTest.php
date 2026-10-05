@@ -85,4 +85,73 @@ class EvropostCreateItemNewPayloadTest extends TestCase
                 && !array_key_exists('declared_amount', $data);
         });
     }
+
+    public function test_create_item_new_uses_saved_store_id_without_fuzzy_match(): void
+    {
+        $tenant = Tenant::create([
+            'name'                => 'EP Picked ' . uniqid(),
+            'created_at'          => now(),
+            'subscription_status' => Tenant::STATUS_ACTIVE,
+            'subscribed_at'       => now(),
+        ]);
+
+        app()->instance('current_tenant_id', $tenant->id);
+
+        TenantSetting::put($tenant->id, 'token_ep', 'ep-token');
+        TenantSetting::put($tenant->id, 'contractor_unn', '123456789');
+        TenantSetting::put($tenant->id, 'warehouse_id_start', '7');
+
+        Product::create([
+            'tenant_id' => $tenant->id,
+            'name'      => 'Крем',
+            'stock'     => 10,
+            'weight'    => 200,
+        ]);
+
+        $order = Order::create([
+            'tenant_id'            => $tenant->id,
+            'full_name'            => 'Иванов Иван Иванович',
+            'status'               => 'Отправить',
+            'phone'                => '291234567',
+            'city'                 => 'Гродно',
+            'street'               => 'ул. Другая',
+            'building'             => '99',
+            'ops_id'               => '777',
+            'europochta_store_id'  => 42,
+            'goods'                => ['Крем'],
+            'quantities'           => [1],
+            'prices'               => [20],
+        ]);
+
+        Http::fake(function ($request) {
+            if (str_contains($request->url(), '/api/external/stores')) {
+                return Http::response(['message' => 'stores must not be fetched'], 500);
+            }
+
+            if (str_contains($request->url(), '/api/external/postal/create')) {
+                return Http::response(['number' => 'EP111'], 200);
+            }
+
+            return Http::response(['message' => 'unexpected'], 404);
+        });
+
+        $result = (new EvropostService())->createItemNew($order, $tenant->id, 'Покупатель');
+
+        $this->assertTrue($result['success']);
+        $this->assertSame('EP111', $result['track_number']);
+
+        Http::assertNotSent(function ($request) {
+            return str_contains($request->url(), '/api/external/stores');
+        });
+
+        Http::assertSent(function ($request) {
+            if (!str_contains($request->url(), '/api/external/postal/create')) {
+                return false;
+            }
+
+            $data = $request->data();
+
+            return ($data['store_id_finish'] ?? null) === 42;
+        });
+    }
 }

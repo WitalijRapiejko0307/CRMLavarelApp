@@ -521,6 +521,43 @@
                             </div>
                             </template>
                         </template>
+
+                        <div v-if="groupKey === 'europochta' && canEditSettings" class="pt-1">
+                            <button
+                                type="button"
+                                class="btn-secondary btn-sm"
+                                :disabled="readOnly || refreshingStores"
+                                @click="refreshEuropochtaStores"
+                            >
+                                {{ refreshingStores ? 'Обновляю…' : 'Обновить отделения' }}
+                            </button>
+                            <p v-if="storesRefreshMessage" class="text-xs text-muted mt-1">{{ storesRefreshMessage }}</p>
+                        </div>
+
+                        <div v-if="groupKey === 'telegram' && canEditSettings" class="pt-1">
+                            <button
+                                type="button"
+                                class="btn-secondary btn-sm"
+                                :disabled="readOnly || testingTelegram"
+                                @click="testTelegram"
+                            >
+                                {{ testingTelegram ? 'Проверяю…' : 'Проверить Telegram' }}
+                            </button>
+                            <p v-if="telegramTestMessage" class="text-xs text-muted mt-1">{{ telegramTestMessage }}</p>
+                        </div>
+
+                        <div v-if="groupKey === 'digest' && canEditSettings" class="pt-1">
+                            <button
+                                type="button"
+                                class="btn-secondary btn-sm"
+                                :disabled="readOnly || sendingDigest"
+                                @click="sendDigestNow"
+                            >
+                                {{ sendingDigest ? 'Отправляю…' : 'Отправить сейчас' }}
+                            </button>
+                            <p v-if="digestSaveError" class="text-xs text-red-600 dark:text-red-400 mt-1">{{ digestSaveError }}</p>
+                            <p v-else-if="digestSendMessage" class="text-xs text-muted mt-1">{{ digestSendMessage }}</p>
+                        </div>
                     </div>
                 </div>
 
@@ -743,6 +780,12 @@ const visibleKeys = reactive({})
 const saving      = ref(false)
 const savingRoundRobin = ref(false)
 const generating  = ref(false)
+const refreshingStores = ref(false)
+const storesRefreshMessage = ref('')
+const testingTelegram = ref(false)
+const telegramTestMessage = ref('')
+const sendingDigest = ref(false)
+const digestSendMessage = ref('')
 const revealingSecret = ref(false)
 const revealedWebhookSecret = ref('')
 const webhookSecretVisible = ref(false)
@@ -751,6 +794,17 @@ const copiedField = ref('')
 let copiedTimer = null
 
 const webhookUrl = computed(() => props.webhook_url || '')
+const digestSaveError = computed(() => {
+    const errors = page.props.value.errors || {}
+    const raw = errors['settings.digest_email']
+        || errors['settings.digest_time']
+        || errors.digest_email
+        || errors.digest_time
+        || errors.settings?.digest_email
+        || errors.settings?.digest_time
+        || ''
+    return Array.isArray(raw) ? (raw[0] || '') : raw
+})
 const hasWebhookSecret = computed(() =>
     !!secretPreviewsLocal.value.webhook_secret || !!revealedWebhookSecret.value
 )
@@ -899,6 +953,8 @@ function save() {
 
             if (type === 'toggle') {
                 settings[key] = raw === '1' ? '1' : ''
+            } else if (key === 'digest_email' || key === 'digest_time') {
+                settings[key] = raw ? String(raw).trim() : ''
             } else if (type === 'select') {
                 if (raw && String(raw).trim() !== '') {
                     settings[key] = String(raw).trim()
@@ -1033,6 +1089,51 @@ async function generateSecret() {
         }
     } finally {
         generating.value = false
+    }
+}
+
+async function refreshEuropochtaStores() {
+    if (!props.canEditSettings || readOnly.value || refreshingStores.value) return
+    refreshingStores.value = true
+    storesRefreshMessage.value = ''
+    try {
+        const resp = await apiFetch('/settings/europochta/refresh-stores', 'POST')
+        const data = await resp.json()
+        storesRefreshMessage.value = data.message || (resp.ok ? 'Справочник отделений обновлён' : 'Не удалось обновить справочник')
+    } catch (e) {
+        storesRefreshMessage.value = 'Не удалось обновить справочник'
+    } finally {
+        refreshingStores.value = false
+    }
+}
+
+async function testTelegram() {
+    if (!props.canEditSettings || readOnly.value || testingTelegram.value) return
+    testingTelegram.value = true
+    telegramTestMessage.value = ''
+    try {
+        const resp = await apiFetch('/settings/telegram/test', 'POST')
+        const data = await resp.json()
+        telegramTestMessage.value = data.message || data.error_message || (resp.ok ? 'Связь ок' : 'Не удалось проверить Telegram')
+    } catch (e) {
+        telegramTestMessage.value = 'Не удалось проверить Telegram'
+    } finally {
+        testingTelegram.value = false
+    }
+}
+
+async function sendDigestNow() {
+    if (!props.canEditSettings || readOnly.value || sendingDigest.value) return
+    sendingDigest.value = true
+    digestSendMessage.value = ''
+    try {
+        const resp = await apiFetch('/settings/digest/send-now', 'POST')
+        const data = await resp.json()
+        digestSendMessage.value = data.message || data.error_message || (resp.ok ? 'Сводка отправлена' : 'Не удалось отправить сводку')
+    } catch (e) {
+        digestSendMessage.value = 'Не удалось отправить сводку'
+    } finally {
+        sendingDigest.value = false
     }
 }
 </script>

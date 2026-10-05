@@ -175,6 +175,8 @@ class SettingsAccessTest extends TestCase
         $this->assertArrayHasKey('cc', $schema);
         $this->assertArrayNotHasKey('sms', $schema);
         $this->assertArrayNotHasKey('belpost', $schema);
+        $this->assertArrayNotHasKey('telegram', $schema);
+        $this->assertArrayNotHasKey('digest', $schema);
         $this->assertSame('textarea', $schema['cc']['keys']['call_script'][1]);
         $this->assertArrayHasKey('cc_round_robin', $schema['cc']['keys']);
         $this->assertSame('toggle', $schema['cc']['keys']['cc_round_robin'][1]);
@@ -191,5 +193,6 @@ class SettingsAccessTest extends TestCase
         $schema = $response->json('props.schema');
         $this->assertArrayNotHasKey('cc', $schema);
         $this->assertArrayHasKey('sms', $schema);
+        $this->assertArrayHasKey('digest', $schema);
     }
 }

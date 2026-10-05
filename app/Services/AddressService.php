@@ -43,7 +43,7 @@ class AddressService
      * @param  string $query  Combined city + street (e.g. "Минск Ленина")
      * @return array
      */
-    public function search(string $query): array
+    public function search(string $query, string $type = 'address'): array
     {
         try {
             $response = Http::timeout(15)
@@ -53,7 +53,7 @@ class AddressService
                     'search'           => $this->normalizeAddressPart($query),
                     'per_page'         => '30',
                     'page'             => '1',
-                    'type'             => 'address',
+                    'type'             => $type === 'on_demand' ? 'on_demand' : 'address',
                     'additional_rules' => self::ADDITIONAL_RULES,
                 ]);
 
@@ -188,6 +188,41 @@ class AddressService
         foreach ($items as $item) {
             if ($this->addressItemMatchesOrder($item, $city, $street, 'legacy', null)) {
                 if ($this->isHouseAllowed($item, $building)) {
+                    return $item;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Poste restante / on_demand: resolve post office by city or postcode only (no street/house).
+     *
+     * @return array|null
+     */
+    public function autoResolveOnDemand(string $city): ?array
+    {
+        $city = trim($city);
+        if ($city === '') {
+            return null;
+        }
+
+        $postcode = $this->extractPostcodeFromCity($city);
+        $normalized = $this->normalizeAddressPart($city);
+        $queries = $postcode ? [$postcode] : [];
+        if ($normalized !== '' && $normalized !== $postcode) {
+            $queries[] = $normalized;
+        }
+        if ($queries === []) {
+            $queries = [$normalized];
+        }
+
+        foreach ($queries as $query) {
+            $items = $this->search($query, 'on_demand');
+            foreach ($items as $item) {
+                $itemPostcode = (string) ($item['postcode'] ?? '');
+                if (($postcode && $itemPostcode === $postcode) || $this->addressPartsMatch($city, $item['city'] ?? '')) {
                     return $item;
                 }
             }

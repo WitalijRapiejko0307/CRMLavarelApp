@@ -9,6 +9,8 @@ use App\Models\Product;
 use App\Models\TenantSetting;
 use App\Rules\BelarusPhone;
 use App\Rules\FullNameTwoParts;
+use App\Services\BelpostLabelService;
+use App\Services\BelpostPartialReceiptOpisService;
 use App\Services\BelpostService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,6 +20,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
+use RuntimeException;
 
 class BelpostController extends Controller
 {
@@ -47,7 +50,10 @@ class BelpostController extends Controller
 
         $batchOrders = Order::whereIn('mail_batch_id', $batches->pluck('id'))
             ->orderBy('status_changed_at')
-            ->get(['id', 'mail_batch_id', 'full_name', 'phone', 'city', 'street', 'building', 'track_number', 'status_changed_at'])
+            ->get([
+                'id', 'mail_batch_id', 'full_name', 'phone', 'city', 'street', 'building',
+                'track_number', 'status_changed_at', 'goods', 'quantities', 'prices',
+            ])
             ->groupBy('mail_batch_id');
 
         return Inertia::render('Belpost/Batch', [
@@ -73,12 +79,21 @@ class BelpostController extends Controller
     public function createBatch(Request $request): JsonResponse
     {
         $request->validate([
-            'type'     => ['required', 'string', 'max:100'],
-            'who_pays' => ['required', 'string', 'in:Покупатель,Продавец'],
+            'type'               => ['required', 'string', 'max:100'],
+            'who_pays'           => ['required', 'string', 'in:Покупатель,Продавец'],
+            'is_partial_receipt' => ['sometimes', 'boolean'],
         ]);
 
         $type    = $request->input('type');
         $whoPays = $request->input('who_pays');
+        $isPartialReceipt = $request->boolean('is_partial_receipt');
+
+        if ($isPartialReceipt && !in_array($type, MailBatch::PARTIAL_RECEIPT_TYPES, true)) {
+            return response()->json([
+                'success' => false,
+                'message' => '«Получение части вложения» доступно только для E-commerce Стандарт, Элит и Экспресс.',
+            ], 422);
+        }
 
         // Seller-only types enforce 'Продавец'
         if (in_array($type, MailBatch::SELLER_ONLY_TYPES, true)) {
@@ -92,7 +107,7 @@ class BelpostController extends Controller
 
         try {
             $service = new BelpostService(Auth::user()->tenant_id);
-            $batch   = $service->createList($type, $whoPays);
+            $batch   = $service->createList($type, $whoPays, $isPartialReceipt);
 
             return response()->json([
                 'success' => true,
@@ -255,67 +270,70 @@ class BelpostController extends Controller
     }
 
     /**
-     * POST /belpost/batches/{batch}/download-blanks
-     * Generate blanks PDF (before or after commit) and dispatch download job.
+     * POST /belpost/batches/{batch}/download-partial-receipt-opis
+     * Attachment inventory docx (one file or zip) for partial-receipt batches.
+     *
+     * @return \Illuminate\Http\Response|JsonResponse
      */
-    public function downloadBlanks(Request $request, MailBatch $batch): JsonResponse
+    public function downloadPartialReceiptOpis(MailBatch $batch)
+    {
+        try {
+            $result = (new BelpostPartialReceiptOpisService())->buildBatchDownload(
+                $batch,
+                Auth::user()->tenant_id
+            );
+
+            return response($result['binary'], 200, [
+                'Content-Type'        => $result['content_type'],
+                'Content-Disposition' => 'attachment; filename="' . $result['filename'] . '"',
+            ]);
+        } catch (RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        } catch (\Throwable $e) {
+            Log::error('BelpostController::downloadPartialReceiptOpis error', [
+                'batch_id' => $batch->id,
+                'error'    => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Ошибка генерации описи: ' . $e->getMessage(),
+            ], 422);
+        }
+    }
+
+    /**
+     * POST /belpost/batches/{batch}/download-blanks
+     * GET  /belpost/batches/{batch}/labels.pdf
+     * Stream CRM-generated Belpost blanks (no Belpost generate-blank / ZIP job).
+     *
+     * @return \Illuminate\Http\Response|JsonResponse
+     */
+    public function downloadBlanks(Request $request, MailBatch $batch)
     {
         $request->validate([
             'label_size' => ['nullable', 'string', 'in:' . implode(',', MailBatch::LABEL_SIZES)],
         ]);
-
-        if (!$batch->orders()->exists()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'В партии нет оформленных бланков',
-            ], 422);
-        }
-
-        if ($batch->status === MailBatch::STATUS_DOWNLOADING) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Скачивание уже выполняется',
-            ], 422);
-        }
-
-        if ($this->hasPendingPdfDownloadJob($batch->id)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Скачивание уже в очереди',
-            ], 422);
-        }
 
         $labelSize = $request->input('label_size')
             ?? $batch->label_size
             ?? TenantSetting::get('belpost_label_size', '150x100');
 
         try {
-            $service      = new BelpostService(Auth::user()->tenant_id);
-            $idToDownload = $service->prepareBlankDownload($batch, $labelSize);
+            $result = (new BelpostLabelService())->generate($batch, $labelSize);
 
-            $batch->update([
-                'id_to_download' => $idToDownload,
-                'label_size'     => $labelSize,
-                'status'         => MailBatch::STATUS_DOWNLOADING,
-                'error_message'  => null,
-                'pdf_path'       => null,
+            return response($result['binary'], 200, [
+                'Content-Type'        => 'application/pdf',
+                'Content-Disposition' => 'attachment; filename="' . $result['filename'] . '"',
             ]);
-
-            DownloadBelpostPdfJob::dispatch($batch->id, Auth::user()->tenant_id)
-                ->delay(now()->addSeconds(15));
-
-            Log::info('BelpostController::downloadBlanks dispatched PDF job', [
-                'batch_id'   => $batch->id,
-                'label_size' => $labelSize,
-                'delay_s'    => 15,
-            ]);
-
+        } catch (RuntimeException $e) {
             return response()->json([
-                'success'        => true,
-                'id_to_download' => $idToDownload,
-                'label_size'     => $labelSize,
-                'message'        => 'Бланки генерируются. PDF будет готов через ~15–30 с.',
-            ]);
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
         } catch (\Throwable $e) {
             Log::error('BelpostController::downloadBlanks error', [
                 'batch_id' => $batch->id,

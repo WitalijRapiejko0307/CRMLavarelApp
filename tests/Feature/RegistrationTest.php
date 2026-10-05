@@ -2,10 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Mail\EmailVerificationCodeMail;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
 class RegistrationTest extends TestCase
@@ -14,15 +16,20 @@ class RegistrationTest extends TestCase
 
     public function test_register_creates_trial_tenant_and_admin(): void
     {
+        Mail::fake();
+
         $response = $this->post('/register', [
             'company_name'          => 'New Shop',
+            'tenant_type'           => 'store',
             'name'                  => 'Owner',
             'email'                 => 'owner@example.com',
             'password'              => 'password123',
             'password_confirmation' => 'password123',
         ]);
 
-        $response->assertRedirect('/settings');
+        $response->assertRedirect(route('email.verify.show'));
+
+        Mail::assertSent(EmailVerificationCodeMail::class);
 
         $this->assertDatabaseHas('tenants', [
             'name'                => 'New Shop',
@@ -38,6 +45,10 @@ class RegistrationTest extends TestCase
             'tenant_id' => $tenant->id,
             'role'      => 'admin',
         ]);
+
+        $user = User::where('email', 'owner@example.com')->first();
+        $this->assertNotNull($user);
+        $this->assertNull($user->email_verified_at);
 
         $this->assertDatabaseHas('tenant_settings', [
             'tenant_id' => $tenant->id,
@@ -62,6 +73,7 @@ class RegistrationTest extends TestCase
 
         $response = $this->from('/register')->post('/register', [
             'company_name'          => 'Another',
+            'tenant_type'           => 'store',
             'name'                  => 'Another',
             'email'                 => 'dup@example.com',
             'password'              => 'password123',

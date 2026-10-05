@@ -6,6 +6,7 @@
 /public/mix-manifest.json
 /storage/*.key
 /vendor
+/pdf-vendor-dropin.tar.gz
 .env
 .env.backup
 .phpunit.result.cache

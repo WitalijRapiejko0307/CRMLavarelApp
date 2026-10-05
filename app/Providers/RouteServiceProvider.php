@@ -41,6 +41,10 @@ class RouteServiceProvider extends ServiceProvider
         \Illuminate\Support\Facades\RateLimiter::for('connections', function (\Illuminate\Http\Request $request) {
             return \Illuminate\Cache\RateLimiting\Limit::perMinute(10)->by($request->user()?->id ?: $request->ip());
         });
+
+        \Illuminate\Support\Facades\RateLimiter::for('support', function (\Illuminate\Http\Request $request) {
+            return \Illuminate\Cache\RateLimiting\Limit::perHour(5)->by($request->user()?->id ?: $request->ip());
+        });
     }
 
     protected function configureBindings(): void

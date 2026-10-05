@@ -24,6 +24,7 @@ class Kernel extends HttpKernel
             \App\Http\Middleware\VerifyCsrfToken::class,
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
             \App\Http\Middleware\HandleInertiaRequests::class,
+            \App\Http\Middleware\EnsureEmailVerified::class,
         ],
 
         'api' => [
@@ -45,5 +46,22 @@ class Kernel extends HttpKernel
         'tenant'           => \App\Http\Middleware\SetTenant::class,
         'tenant.writable'  => \App\Http\Middleware\EnsureTenantWritable::class,
         'tenant.type'      => \App\Http\Middleware\EnsureTenantType::class,
+    ];
+
+    /**
+     * tenant.type must 403 before {order} binding: CC uses CallCenterOrderQuery
+     * and would otherwise 404 on store-only routes like /courier/orders/{order}/sheet.pdf.
+     */
+    protected $middlewarePriority = [
+        \Illuminate\Cookie\Middleware\EncryptCookies::class,
+        \Illuminate\Session\Middleware\StartSession::class,
+        \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+        \Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests::class,
+        \Illuminate\Routing\Middleware\ThrottleRequests::class,
+        \Illuminate\Routing\Middleware\ThrottleRequestsWithRedis::class,
+        \Illuminate\Contracts\Session\Middleware\AuthenticatesSessions::class,
+        \App\Http\Middleware\EnsureTenantType::class,
+        \Illuminate\Routing\Middleware\SubstituteBindings::class,
+        \Illuminate\Auth\Middleware\Authorize::class,
     ];
 }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Services\EmailVerificationCodeService;
 use App\Services\TenantProvisioner;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -55,6 +56,8 @@ class RegisterController extends Controller
         Auth::login($user);
         $request->session()->regenerate();
 
-        return redirect('/settings');
+        app(EmailVerificationCodeService::class)->sendCode($user);
+
+        return redirect()->route('email.verify.show');
     }
 }

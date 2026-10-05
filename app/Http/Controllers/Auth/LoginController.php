@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Services\EmailVerificationCodeService;
 use App\Services\OnboardingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -30,6 +31,12 @@ class LoginController extends Controller
 
             if ($user->isSuperAdmin()) {
                 return redirect()->intended('/admin/tenants');
+            }
+
+            if ($user->email_verified_at === null) {
+                app(EmailVerificationCodeService::class)->ensureCodeSent($user);
+
+                return redirect()->route('email.verify.show');
             }
 
             $fallback = app(OnboardingService::class)->loginFallbackHref($user);

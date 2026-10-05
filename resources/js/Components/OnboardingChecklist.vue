@@ -1,7 +1,7 @@
 <template>
     <div
         v-if="visible"
-        class="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 mt-4"
+        class="page-shell mt-4"
     >
         <div class="bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 text-indigo-900 dark:text-indigo-100 rounded-md px-4 py-3 text-sm">
             <div class="flex items-center justify-between gap-3">
@@ -57,7 +57,7 @@
     </div>
     <div
         v-else-if="dismissed && currentStep"
-        class="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 mt-4"
+        class="page-shell mt-4"
     >
         <div class="rounded-md px-4 py-2 text-sm border border-indigo-200 dark:border-indigo-800 bg-indigo-50/70 dark:bg-indigo-900/20 text-indigo-800 dark:text-indigo-200 flex items-center justify-between gap-3">
             <span>Первые шаги скрыты</span>

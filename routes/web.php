@@ -3,11 +3,15 @@
 use App\Http\Controllers\AddressController;
 use App\Http\Controllers\Admin\TenantController as AdminTenantController;
 use App\Http\Controllers\AnalyticsController;
+use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
+use App\Http\Controllers\SupportController;
 use App\Http\Controllers\BelpostController;
+use App\Http\Controllers\CourierController;
 use App\Http\Controllers\ConnectionController;
 use App\Http\Controllers\EvropostController;
+use App\Http\Controllers\EvropostStoreController;
 use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\OnboardingController;
@@ -24,6 +28,23 @@ Route::post('/login', [LoginController::class, 'login'])->name('login.post')->mi
 Route::get('/register', [RegisterController::class, 'showRegistrationForm'])->name('register')->middleware('guest');
 Route::post('/register', [RegisterController::class, 'register'])->name('register.post')->middleware(['guest', 'throttle:6,1']);
 Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
+
+Route::middleware('auth')->group(function () {
+    Route::get('/email/verify', [EmailVerificationController::class, 'show'])->name('email.verify.show');
+    Route::post('/email/verify', [EmailVerificationController::class, 'verify'])
+        ->name('email.verify')
+        ->middleware('throttle:10,1');
+    Route::post('/email/verify/resend', [EmailVerificationController::class, 'resend'])
+        ->name('email.verify.resend')
+        ->middleware('throttle:6,1');
+});
+
+Route::middleware(['auth', 'tenant'])->group(function () {
+    Route::get('/support', [SupportController::class, 'index'])->name('support.index');
+    Route::post('/support', [SupportController::class, 'store'])
+        ->name('support.store')
+        ->middleware('throttle:support');
+});
 
 // Root redirect
 Route::get('/', fn () => redirect('/orders'));
@@ -53,6 +74,8 @@ Route::prefix('belpost')->name('belpost.')->middleware('tenant.type:store')->gro
     Route::post('/batches/{batch}/items/{order}/remove', [BelpostController::class, 'removeOrder'])->name('batches.removeOrder');
     Route::post('/batches/{batch}/commit', [BelpostController::class, 'commit'])->name('batches.commit');
     Route::post('/batches/{batch}/download-blanks', [BelpostController::class, 'downloadBlanks'])->name('batches.downloadBlanks');
+    Route::post('/batches/{batch}/download-partial-receipt-opis', [BelpostController::class, 'downloadPartialReceiptOpis'])->name('batches.downloadPartialReceiptOpis');
+    Route::get('/batches/{batch}/labels.pdf', [BelpostController::class, 'downloadBlanks'])->name('batches.labelsPdf');
     Route::post('/batches/{batch}/retry-download', [BelpostController::class, 'retryDownload'])->name('batches.retryDownload');
     Route::get('/batches/{batch}/pdf', [BelpostController::class, 'downloadPdf'])->name('batches.pdf');
 });
@@ -63,6 +86,16 @@ Route::prefix('europochta')->name('europochta.')->middleware('tenant.type:store'
     Route::post('/orders/{order}/register', [EvropostController::class, 'register'])->name('register');
     Route::post('/register-all', [EvropostController::class, 'registerAll'])->name('registerAll');
 });
+
+// Courier queue
+Route::prefix('courier')->name('courier.')->middleware('tenant.type:store')->group(function () {
+    Route::get('/', [CourierController::class, 'index'])->name('index');
+    Route::get('/orders/{order}/sheet.pdf', [CourierController::class, 'sheet'])->name('sheet');
+    Route::post('/orders/{order}/telegram', [CourierController::class, 'telegram'])->name('telegram');
+    Route::post('/telegram-all', [CourierController::class, 'telegramAll'])->name('telegramAll');
+});
+
+require __DIR__ . '/packing.php';
 
 // Products (store only)
 Route::prefix('products')->name('products.')->middleware('tenant.type:store')->group(function () {
@@ -101,6 +134,9 @@ Route::prefix('settings')->name('settings.')->group(function () {
     Route::patch('/theme', [TenantSettingController::class, 'updateTheme'])->name('theme');
     Route::post('/', [TenantSettingController::class, 'update'])->name('update');
     Route::post('/generate-webhook-secret', [TenantSettingController::class, 'generateWebhookSecret'])->name('generateWebhookSecret');
+    Route::post('/europochta/refresh-stores', [TenantSettingController::class, 'refreshEuropochtaStores'])->name('europochta.refreshStores');
+    Route::post('/telegram/test', [TenantSettingController::class, 'testTelegram'])->name('telegram.test');
+    Route::post('/digest/send-now', [TenantSettingController::class, 'sendDigestNow'])->name('digest.sendNow');
     Route::post('/reveal-webhook-secret', [TenantSettingController::class, 'revealWebhookSecret'])->name('revealWebhookSecret');
     Route::post('/regenerate-connection-code', [ConnectionController::class, 'regenerateConnectionCode'])->name('regenerateConnectionCode');
 });
@@ -125,6 +161,7 @@ Route::prefix('users')->name('users.')->group(function () {
 // Authenticated AJAX endpoints (session-based auth, inside web middleware group)
 Route::prefix('api')->name('api.')->middleware(['auth', 'tenant', 'tenant.writable'])->group(function () {
     Route::get('/address/search', [AddressController::class, 'search'])->name('address.search')->withoutMiddleware('tenant.writable');
+    Route::get('/europochta/stores/search', [EvropostStoreController::class, 'search'])->name('europochta.stores.search')->withoutMiddleware('tenant.writable');
     Route::get('/belpost/batches/{batch}/status', [BelpostController::class, 'batchStatus'])->name('belpost.batchStatus')->withoutMiddleware('tenant.writable');
     Route::get('/orders/tracking-status', [OrderController::class, 'trackingStatus'])->name('orders.trackingStatus')->withoutMiddleware('tenant.writable');
     Route::get('/orders/feed', [OrderFeedController::class, 'index'])->name('orders.feed')->withoutMiddleware('tenant.writable');

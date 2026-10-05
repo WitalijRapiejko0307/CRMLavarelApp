@@ -35,7 +35,10 @@
 
         <!-- Filters -->
         <div class="card mb-4">
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div
+                class="grid grid-cols-1 md:grid-cols-2 gap-4"
+                :class="isCallCenter && connectedStores.length ? 'lg:grid-cols-6' : 'lg:grid-cols-5'"
+            >
                 <div v-if="isCallCenter && connectedStores.length">
                     <label class="label mb-1">Магазин</label>
                     <AppScrollSelect
@@ -395,7 +398,6 @@ import { useOrderFeed } from '@/composables/useOrderFeed'
 import { hasOpenScrollSelect } from '@/utils/scrollSelectRegistry'
 import { apiFetch } from '@/utils/api'
 import { bulkStatusWarning } from '@/utils/bulkStatusWarnings'
-import { formatDateDMY, isValidDateDMY, parseDateDMY } from '@/utils/date'
 import {
     useVueTable,
     createColumnHelper,
@@ -718,15 +720,11 @@ onMounted(() => {
 onUnmounted(stopPolling)
 
 // --- Filters ---
-function toDisplayDate(value) {
-    return formatDateDMY(value) || value || ''
-}
-
 const filters = ref({
     search:        props.filters?.search        ?? '',
     status:        props.filters?.status        ?? '',
-    date_from:     toDisplayDate(props.filters?.date_from),
-    date_to:       toDisplayDate(props.filters?.date_to),
+    date_from:     props.filters?.date_from     ?? '',
+    date_to:       props.filters?.date_to       ?? '',
     store_id:      props.filters?.store_id      ?? '',
     segment:       props.filters?.segment       ?? '',
     delivery_type: props.filters?.delivery_type ?? '',
@@ -862,8 +860,8 @@ function buildFilterQuery() {
     const query = {
         search:        filters.value.search,
         status:        filters.value.status,
-        date_from:     isValidDateDMY(filters.value.date_from) ? parseDateDMY(filters.value.date_from) : '',
-        date_to:       isValidDateDMY(filters.value.date_to)   ? parseDateDMY(filters.value.date_to)   : '',
+        date_from:     filters.value.date_from || '',
+        date_to:       filters.value.date_to   || '',
         segment:       filters.value.segment,
         delivery_type: filters.value.delivery_type,
         assignee:      filters.value.assignee,

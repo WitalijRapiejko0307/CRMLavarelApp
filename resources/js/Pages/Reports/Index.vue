@@ -84,7 +84,6 @@ import AppLayout from '@/Layouts/AppLayout.vue'
 import PageHeader from '@/Components/PageHeader.vue'
 import DateInput from '@/Components/DateInput.vue'
 import AppScrollSelect from '@/Components/AppScrollSelect.vue'
-import { formatDateDMY, isValidDateDMY, parseDateDMY } from '@/utils/date'
 
 const props = defineProps({
     funnel:         { type: Array, default: () => [] },
@@ -93,13 +92,9 @@ const props = defineProps({
     utm_campaigns:  { type: Array, default: () => [] },
 })
 
-function toDisplayDate(value) {
-    return formatDateDMY(value) || value || ''
-}
-
 const localFilters = ref({
-    date_from:     toDisplayDate(props.filters?.date_from),
-    date_to:       toDisplayDate(props.filters?.date_to),
+    date_from:     props.filters?.date_from ?? '',
+    date_to:       props.filters?.date_to   ?? '',
     utm_campaign:  props.filters?.utm_campaign ? String(props.filters.utm_campaign) : '',
 })
 
@@ -141,8 +136,8 @@ function barWidth(step) {
 
 function buildQuery() {
     const query = {
-        date_from: isValidDateDMY(localFilters.value.date_from) ? parseDateDMY(localFilters.value.date_from) : '',
-        date_to:   isValidDateDMY(localFilters.value.date_to)   ? parseDateDMY(localFilters.value.date_to)   : '',
+        date_from: localFilters.value.date_from || '',
+        date_to:   localFilters.value.date_to   || '',
     }
 
     if (localFilters.value.utm_campaign) {

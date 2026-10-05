@@ -269,7 +269,7 @@ async function doSearch() {
 
     try {
         const resp = await fetch(
-            `/api/address/search?q=${encodeURIComponent(query.value.trim())}`,
+            `/api/address/search?q=${encodeURIComponent(query.value.trim())}${props.posteRestante ? '&mode=on_demand' : ''}`,
             { headers: { 'X-Requested-With': 'XMLHttpRequest' } }
         )
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`)

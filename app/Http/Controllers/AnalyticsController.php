@@ -27,6 +27,11 @@ class AnalyticsController extends Controller
         $user   = Auth::user();
         $tenant = $user->tenant;
 
+        $request->validate([
+            'date_from' => ['nullable', 'date_format:Y-m-d'],
+            'date_to'   => ['nullable', 'date_format:Y-m-d'],
+        ]);
+
         $tab      = $request->input('tab', 'managers');
         $dateFrom = $request->input('date_from');
         $dateTo   = $request->input('date_to');

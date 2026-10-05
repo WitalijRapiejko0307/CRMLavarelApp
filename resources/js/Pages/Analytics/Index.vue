@@ -118,7 +118,6 @@ import AppLayout from '@/Layouts/AppLayout.vue'
 import PageHeader from '@/Components/PageHeader.vue'
 import DateInput from '@/Components/DateInput.vue'
 import AppScrollSelect from '@/Components/AppScrollSelect.vue'
-import { formatDateDMY, isValidDateDMY, parseDateDMY } from '@/utils/date'
 
 const props = defineProps({
     summary:         { type: Object, default: () => ({}) },
@@ -131,13 +130,9 @@ const props = defineProps({
 
 const activeTab = computed(() => props.filters?.tab ?? 'managers')
 
-function toDisplayDate(value) {
-    return formatDateDMY(value) || value || ''
-}
-
 const localFilters = ref({
-    date_from: toDisplayDate(props.filters?.date_from),
-    date_to:   toDisplayDate(props.filters?.date_to),
+    date_from: props.filters?.date_from ?? '',
+    date_to:   props.filters?.date_to   ?? '',
     user_id:   props.filters?.user_id ? String(props.filters.user_id) : '',
     store_id:  props.filters?.store_id ? String(props.filters.store_id) : '',
 })
@@ -206,8 +201,8 @@ function formatCell(row, key) {
 function buildQuery(tab = activeTab.value) {
     const query = {
         tab,
-        date_from: isValidDateDMY(localFilters.value.date_from) ? parseDateDMY(localFilters.value.date_from) : '',
-        date_to:   isValidDateDMY(localFilters.value.date_to)   ? parseDateDMY(localFilters.value.date_to)   : '',
+        date_from: localFilters.value.date_from || '',
+        date_to:   localFilters.value.date_to   || '',
     }
 
     if (props.canFilterTeam) {

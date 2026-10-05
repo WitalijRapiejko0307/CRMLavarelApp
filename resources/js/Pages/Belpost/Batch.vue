@@ -27,6 +27,12 @@
             <Link href="/settings" class="underline font-medium">Настройках</Link>.
         </div>
 
+        <PackingChecklist
+            :orders="packingOrders"
+            :screen="'belpost'"
+            :print-url="packingPrintUrl"
+        />
+
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
             <!-- ── Left column: create batch + history ── -->
@@ -71,6 +77,23 @@
                             <p v-else-if="activeBatch" class="text-xs text-gray-400 dark:text-gray-500 mt-1">
                                 Выберите «Создать партию» без активной партии или дождитесь завершения текущей.
                             </p>
+                        </div>
+                        <div v-if="showPartialReceiptOption">
+                            <label class="flex items-start gap-2 cursor-pointer">
+                                <input
+                                    v-model="newBatchPartialReceipt"
+                                    type="checkbox"
+                                    class="mt-1 rounded border-gray-300 dark:border-gray-600"
+                                    :disabled="creating || readOnly || !belpostReady || !!activeBatch"
+                                />
+                                <span class="text-sm">
+                                    <span class="font-medium">{{ PARTIAL_RECEIPT_LABEL }}</span>
+                                    <span class="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                        Состав заказа (товар, количество, цена) уйдёт в строки вложения бланка.
+                                        Только для всей партии.
+                                    </span>
+                                </span>
+                            </label>
                         </div>
                         <button
                             class="btn-primary w-full justify-center"
@@ -364,7 +387,7 @@
                                 <select
                                     v-model="selectedLabelSize"
                                     class="w-full max-w-xs"
-                                    :disabled="activeBatch.status === 'downloading' || downloadingBlanks"
+                                    :disabled="downloadingBlanks || readOnly"
                                 >
                                     <option v-for="size in labelSizeOptions" :key="size" :value="size">
                                         {{ labelSizeDisplay(size) }}
@@ -375,10 +398,18 @@
                             <div class="flex flex-wrap items-center gap-3">
                                 <button
                                     class="btn-primary"
-                                    :disabled="downloadingBlanks || activeBatch.status === 'downloading' || activeBatchOrders.length === 0 || readOnly"
+                                    :disabled="downloadingBlanks || trackedOrderCount === 0 || readOnly"
                                     @click="downloadBlanks"
                                 >
-                                    {{ downloadingBlanks ? 'Запускаю…' : 'Скачать бланки' }}
+                                    {{ downloadingBlanks ? 'Готовлю PDF…' : 'Скачать бланки' }}
+                                </button>
+                                <button
+                                    v-if="activeBatch.is_partial_receipt"
+                                    class="btn-secondary"
+                                    :disabled="downloadingOpis || trackedOrderCount === 0 || readOnly"
+                                    @click="downloadPartialReceiptOpis"
+                                >
+                                    {{ downloadingOpis ? 'Готовлю опись…' : 'Опись вложения' }}
                                 </button>
                                 <button
                                     class="btn-secondary"
@@ -389,78 +420,10 @@
                                 </button>
                             </div>
 
+                            <p v-if="trackedOrderCount === 0" class="text-xs text-muted">сначала оформите бланки</p>
                             <p v-if="downloadError" class="text-xs text-red-600">{{ downloadError }}</p>
+                            <p v-if="opisDownloadError" class="text-xs text-red-600">{{ opisDownloadError }}</p>
                             <p v-if="commitError" class="text-xs text-red-600">{{ commitError }}</p>
-                        </div>
-                    </div>
-
-                    <!-- PDF status section -->
-                    <div v-if="['downloading', 'ready', 'failed'].includes(activeBatch.status)" class="card">
-                        <h2 class="card-title mb-4">PDF бланки</h2>
-
-                        <!-- Polling -->
-                        <div v-if="activeBatch.status === 'downloading'" class="space-y-3">
-                            <div class="flex items-center gap-3 text-sm text-muted">
-                                <svg class="w-5 h-5 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24">
-                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                                </svg>
-                                <span>
-                                    Скачиваю архив с бланками… Обновляю статус каждые 10 с.
-                                </span>
-                            </div>
-                            <div v-if="showRetryButton" class="flex items-center gap-3">
-                                <button
-                                    class="btn-secondary btn-sm"
-                                    :disabled="retrying"
-                                    @click="retryDownload"
-                                >
-                                    {{ retrying ? 'Запускаю…' : 'Повторить скачивание' }}
-                                </button>
-                                <p class="text-xs text-gray-400 dark:text-gray-500">
-                                    Если статус не меняется более минуты — нажмите «Повторить скачивание»
-                                </p>
-                            </div>
-                        </div>
-
-                        <!-- Ready -->
-                        <div v-else-if="activeBatch.status === 'ready'" class="flex items-center gap-4">
-                            <svg class="w-8 h-8 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                            </svg>
-                            <div>
-                                <p class="text-sm font-medium text-gray-800 dark:text-gray-200">PDF готов к скачиванию</p>
-                                <a
-                                    :href="`/belpost/batches/${activeBatch.id}/pdf`"
-                                    class="inline-flex items-center gap-1.5 mt-2 btn-primary btn-sm"
-                                >
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-                                    </svg>
-                                    Скачать ZIP (бланки)
-                                </a>
-                            </div>
-                        </div>
-
-                        <!-- Failed -->
-                        <div v-else-if="activeBatch.status === 'failed'" class="text-sm space-y-3">
-                            <div>
-                                <p class="text-red-600 font-medium">Ошибка при скачивании PDF</p>
-                                <p class="text-muted mt-1 text-xs">{{ activeBatch.error_message }}</p>
-                            </div>
-                            <div class="flex items-center gap-3 flex-wrap">
-                                <button
-                                    class="btn-secondary btn-sm"
-                                    :disabled="retrying"
-                                    @click="retryDownload"
-                                >
-                                    {{ retrying ? 'Запускаю…' : 'Повторить скачивание' }}
-                                </button>
-                                <p class="text-xs text-gray-400 dark:text-gray-500">
-                                    Если статус не меняется более минуты — нажмите «Повторить скачивание»
-                                </p>
-                            </div>
-                            <p v-if="retryError" class="text-xs text-red-600">{{ retryError }}</p>
                         </div>
                     </div>
                 </template>
@@ -480,10 +443,11 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import PageHeader from '@/Components/PageHeader.vue'
 import AddressSearchModal from '@/Components/AddressSearchModal.vue'
+import PackingChecklist from '@/Components/PackingChecklist.vue'
 import { useSubscription } from '@/composables/useSubscription'
 import { useOnboarding } from '@/composables/useOnboarding'
 import { Inertia } from '@inertiajs/inertia'
@@ -495,6 +459,8 @@ const { belpostReady, currentStep } = useOnboarding()
 const showBelpostHints = computed(() => currentStep.value === 'belpost')
 
 const SELLER_ONLY_TYPES = ['ecommerce_light', 'ecommerce_optima']
+const PARTIAL_RECEIPT_TYPES = ['ecommerce_standard', 'ecommerce_elite', 'ecommerce_express']
+const PARTIAL_RECEIPT_LABEL = 'Получение части вложения'
 const QUICK_TYPES = [
     { type: 'ecommerce_light',    label: 'Лайт' },
     { type: 'ecommerce_optima',   label: 'Оптима' },
@@ -523,6 +489,7 @@ const batchList       = ref([...props.batches])
 const batchOrdersLocal = ref(normalizeBatchOrders(props.batchOrders))
 const newBatchType    = ref(Object.keys(props.deliveryTypes)[0] ?? '')
 const newBatchWhoPays = ref('Покупатель')
+const newBatchPartialReceipt = ref(false)
 const creating        = ref(false)
 const createError     = ref('')
 const quickTypes      = QUICK_TYPES
@@ -532,18 +499,11 @@ const queueFilter     = ref('all')
 // ── Computed ───────────────────────────────────────────────────────────────
 const isSellerOnlyType = computed(() => SELLER_ONLY_TYPES.includes(newBatchType.value))
 
-const activeBatch   = ref(null)
-const pollingSince  = ref(null)
-const pollTick      = ref(0)
+const showPartialReceiptOption = computed(() =>
+    PARTIAL_RECEIPT_TYPES.includes(newBatchType.value)
+)
 
-const showRetryButton = computed(() => {
-    void pollTick.value
-    if (!activeBatch.value) return false
-    if (activeBatch.value.status === 'failed') return true
-    if (activeBatch.value.status !== 'downloading') return false
-    if (!pollingSince.value) return false
-    return Date.now() - pollingSince.value >= 60_000
-})
+const activeBatch = ref(null)
 
 const labelSizeOptions = computed(() => props.labelSizes)
 
@@ -553,6 +513,20 @@ const activeBatchOrders = computed(() => {
     if (!activeBatch.value) return []
     const id = activeBatch.value.id
     return batchOrdersLocal.value[id] ?? batchOrdersLocal.value[String(id)] ?? []
+})
+
+const trackedOrderCount = computed(() =>
+    activeBatchOrders.value.filter(o => o.track_number).length
+)
+
+const packingOrders = computed(() => {
+    if (activeBatch.value) return activeBatchOrders.value
+    return props.eligibleOrders
+})
+
+const packingPrintUrl = computed(() => {
+    if (activeBatch.value) return `/belpost/packing.pdf?batch=${activeBatch.value.id}`
+    return '/belpost/packing.pdf'
 })
 
 const displayedQueue = computed(() => {
@@ -579,18 +553,13 @@ const commitError   = ref('')
 
 // Download blanks
 const downloadingBlanks = ref(false)
+const downloadingOpis   = ref(false)
 const downloadError     = ref('')
-
-// PDF retry
-const retrying      = ref(false)
-const retryError    = ref('')
+const opisDownloadError = ref('')
 
 // Remove from draft batch
 const removingId    = ref(null)
 const removeError   = ref('')
-
-// Polling
-let pollTimer = null
 
 // Address modal
 const modalOpen            = ref(false)
@@ -605,6 +574,9 @@ function onTypeChange() {
     if (SELLER_ONLY_TYPES.includes(newBatchType.value)) {
         newBatchWhoPays.value = 'Продавец'
     }
+    if (!PARTIAL_RECEIPT_TYPES.includes(newBatchType.value)) {
+        newBatchPartialReceipt.value = false
+    }
 }
 
 function setQuickType(code) {
@@ -615,16 +587,9 @@ function setQuickType(code) {
 function selectBatch(b) {
     activeBatch.value = b
     selectedLabelSize.value = b.label_size ?? props.defaultLabelSize
-    stopPolling()
-    pollingSince.value = null
-    retryError.value = ''
     downloadError.value = ''
     commitError.value = ''
     removeError.value = ''
-    if (b.status === 'downloading') {
-        pollingSince.value = Date.now()
-        startPolling()
-    }
 }
 
 // Create batch
@@ -637,6 +602,7 @@ async function createBatch() {
         const resp = await apiFetch('/belpost/batches', 'POST', {
             type: newBatchType.value,
             who_pays: newBatchWhoPays.value,
+            is_partial_receipt: newBatchPartialReceipt.value,
         })
         const data = await resp.json()
 
@@ -708,35 +674,125 @@ async function retrySingle(order) {
     await processOne(order, null)
 }
 
-// Download blanks
+function csrfToken() {
+    const meta = document.querySelector('meta[name="csrf-token"]')
+    return meta ? meta.getAttribute('content') : ''
+}
+
+function filenameFromDisposition(header, fallback) {
+    if (!header) return fallback
+    const match = header.match(/filename="?([^";]+)"?/i)
+    return match ? match[1] : fallback
+}
+
 async function downloadBlanks() {
     if (readOnly.value) return
     if (downloadingBlanks.value || !activeBatch.value) return
+    if (trackedOrderCount.value === 0) return
     downloadingBlanks.value = true
     downloadError.value     = ''
 
     try {
-        const resp = await apiFetch(`/belpost/batches/${activeBatch.value.id}/download-blanks`, 'POST', {
-            label_size: selectedLabelSize.value,
+        const resp = await fetch(`/belpost/batches/${activeBatch.value.id}/download-blanks`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/pdf, application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-TOKEN': csrfToken(),
+            },
+            body: JSON.stringify({ label_size: selectedLabelSize.value }),
         })
-        const data = await resp.json()
+        const contentType = resp.headers.get('Content-Type') || ''
 
-        if (data.success) {
-            activeBatch.value.status         = 'downloading'
-            activeBatch.value.label_size     = data.label_size ?? selectedLabelSize.value
-            activeBatch.value.id_to_download = data.id_to_download ?? null
-            activeBatch.value.error_message  = null
-            activeBatch.value.pdf_path       = null
-            pollingSince.value = Date.now()
-            syncBatchInList(activeBatch.value)
-            startPolling()
-        } else {
-            downloadError.value = data.message ?? 'Ошибка'
+        if (!resp.ok || contentType.indexOf('application/pdf') === -1) {
+            let message = 'Ошибка'
+            try {
+                const data = await resp.json()
+                message = data.message ?? message
+            } catch {
+                // not JSON
+            }
+            downloadError.value = message
+            return
         }
+
+        const blob = await resp.blob()
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = filenameFromDisposition(
+            resp.headers.get('Content-Disposition'),
+            `belpost-${activeBatch.value.batch_id}-labels.pdf`
+        )
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        URL.revokeObjectURL(url)
+        activeBatch.value.label_size = selectedLabelSize.value
+        syncBatchInList(activeBatch.value)
     } catch (e) {
         downloadError.value = e.message
     } finally {
         downloadingBlanks.value = false
+    }
+}
+
+async function downloadPartialReceiptOpis() {
+    if (readOnly.value) return
+    if (downloadingOpis.value || !activeBatch.value) return
+    if (trackedOrderCount.value === 0) return
+    downloadingOpis.value = true
+    opisDownloadError.value = ''
+
+    try {
+        const resp = await fetch(
+            `/belpost/batches/${activeBatch.value.id}/download-partial-receipt-opis`,
+            {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    Accept: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document, application/zip, application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN': csrfToken(),
+                },
+            }
+        )
+        const contentType = resp.headers.get('Content-Type') || ''
+
+        if (
+            !resp.ok
+            || (contentType.indexOf('application/vnd.openxmlformats') === -1
+                && contentType.indexOf('application/zip') === -1)
+        ) {
+            let message = 'Ошибка'
+            try {
+                const data = await resp.json()
+                message = data.message ?? message
+            } catch {
+                // not JSON
+            }
+            opisDownloadError.value = message
+            return
+        }
+
+        const blob = await resp.blob()
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = filenameFromDisposition(
+            resp.headers.get('Content-Disposition'),
+            `${activeBatch.value.batch_id}_Opis_vlozheniya.docx`
+        )
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        URL.revokeObjectURL(url)
+    } catch (e) {
+        opisDownloadError.value = e.message
+    } finally {
+        downloadingOpis.value = false
     }
 }
 
@@ -765,33 +821,6 @@ async function commitBatch() {
     }
 }
 
-async function retryDownload() {
-    if (readOnly.value) return
-    if (retrying.value || !activeBatch.value) return
-    retrying.value  = true
-    retryError.value = ''
-
-    try {
-        const resp = await apiFetch(`/belpost/batches/${activeBatch.value.id}/retry-download`, 'POST')
-        const data = await resp.json()
-
-        if (data.success) {
-            activeBatch.value.status        = 'downloading'
-            activeBatch.value.error_message = null
-            pollingSince.value = Date.now()
-            syncBatchInList(activeBatch.value)
-            startPolling()
-        } else {
-            retryError.value = data.message ?? 'Ошибка'
-        }
-    } catch (e) {
-        retryError.value = e.message
-    } finally {
-        retrying.value = false
-    }
-}
-
-// Address modal
 function openAddressModal(order) {
     pendingOrderForModal.value = order
     modalHint.value            = `Заказ #${order.id} — ${order.full_name}`
@@ -825,46 +854,6 @@ async function onAddressSelected({ id, building, city, street }) {
     await processOne(order, String(id))
 }
 
-// ── Polling ────────────────────────────────────────────────────────────────
-function startPolling() {
-    stopPolling()
-    pollTimer = setInterval(pollStatus, 10_000)
-}
-
-function stopPolling() {
-    if (pollTimer) {
-        clearInterval(pollTimer)
-        pollTimer = null
-    }
-}
-
-async function pollStatus() {
-    if (!activeBatch.value) return
-    pollTick.value++
-
-    try {
-        const resp = await fetch(`/api/belpost/batches/${activeBatch.value.id}/status`, {
-            headers: { 'X-Requested-With': 'XMLHttpRequest' },
-        })
-        const data = await resp.json()
-
-        activeBatch.value.status            = data.status
-        activeBatch.value.error_message     = data.error_message
-        activeBatch.value.belpost_committed = data.belpost_committed ?? activeBatch.value.belpost_committed
-        if (data.id_to_download) activeBatch.value.id_to_download = data.id_to_download
-        if (data.who_pays) activeBatch.value.who_pays = data.who_pays
-        if (data.label_size) activeBatch.value.label_size = data.label_size
-
-        syncBatchInList(activeBatch.value)
-
-        if (data.status !== 'downloading') {
-            stopPolling()
-        }
-    } catch {
-        // silent — will retry on next tick
-    }
-}
-
 function syncBatchInList(updated) {
     const idx = batchList.value.findIndex(b => b.id === updated.id)
     if (idx !== -1) {
@@ -879,8 +868,6 @@ watch(() => props.batchOrders, (val) => {
 watch(() => props.eligibleOrders, (val) => {
     orderQueue.value = [...val]
 })
-
-onUnmounted(stopPolling)
 
 onMounted(() => {
     if (props.selectedBatchId) {
