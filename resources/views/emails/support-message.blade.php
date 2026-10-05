@@ -5,7 +5,8 @@
     <title>Обращение в поддержку CRM</title>
 </head>
 <body style="font-family: sans-serif; line-height: 1.5; white-space: pre-wrap;">Имя: {{ $user->name }}
-Email: {{ $user->email }}
+Email для ответа: {{ $replyEmail }}
+Email аккаунта: {{ $user->email }}
 Компания: {{ $tenantName }}
 
 Сообщение:

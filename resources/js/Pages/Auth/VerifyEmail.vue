@@ -12,6 +12,9 @@
                     Мы отправили 6-значный код на <span class="font-medium text-gray-700 dark:text-gray-200">{{ email }}</span>.
                 </p>
 
+                <div v-if="flashError" class="mb-4 text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-md px-3 py-2">
+                    {{ flashError }}
+                </div>
                 <div v-if="flashMessage" class="mb-4 text-sm text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-md px-3 py-2">
                     {{ flashMessage }}
                 </div>
@@ -79,6 +82,7 @@ const props = defineProps({
 
 const page = usePage()
 const flashMessage = computed(() => page.props.value.flash?.message)
+const flashError = computed(() => page.props.value.flash?.error)
 
 const form = useForm({
     code: '',

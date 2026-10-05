@@ -56,7 +56,15 @@ class RegisterController extends Controller
         Auth::login($user);
         $request->session()->regenerate();
 
-        app(EmailVerificationCodeService::class)->sendCode($user);
+        try {
+            app(EmailVerificationCodeService::class)->sendCode($user);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return redirect()
+                ->route('email.verify.show')
+                ->with('error', 'Аккаунт создан, но письмо с кодом не ушло. Нажмите «Отправить код ещё раз».');
+        }
 
         return redirect()->route('email.verify.show');
     }

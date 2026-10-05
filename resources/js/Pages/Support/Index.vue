@@ -25,6 +25,21 @@
 
                 <form @submit.prevent="submit" class="space-y-5">
                     <div>
+                        <label for="reply_email" class="label mb-1">Email для ответа</label>
+                        <input
+                            id="reply_email"
+                            v-model="form.reply_email"
+                            type="email"
+                            required
+                            maxlength="255"
+                            autocomplete="email"
+                            class="w-full"
+                            :class="{ 'border-red-500': form.errors.reply_email }"
+                        />
+                        <p v-if="form.errors.reply_email" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ form.errors.reply_email }}</p>
+                    </div>
+
+                    <div>
                         <label for="subject" class="label mb-1">Тема</label>
                         <input
                             id="subject"
@@ -75,6 +90,7 @@ import PageHeader from '@/Components/PageHeader.vue'
 
 const props = defineProps({
     telegram_url: { type: String, required: true },
+    reply_email: { type: String, default: '' },
 })
 
 const telegramUsername = computed(() => {
@@ -83,6 +99,7 @@ const telegramUsername = computed(() => {
 })
 
 const form = useForm({
+    reply_email: props.reply_email,
     subject: '',
     message: '',
 })

@@ -23,19 +23,23 @@ class SupportMessageMail extends Mailable
     /** @var string */
     public $tenantName;
 
-    public function __construct(User $user, string $subjectLine, string $messageText, string $tenantName)
+    /** @var string */
+    public $replyEmail;
+
+    public function __construct(User $user, string $subjectLine, string $messageText, string $tenantName, string $replyEmail)
     {
         $this->user         = $user;
         $this->subjectLine  = $subjectLine;
         $this->messageText  = $messageText;
         $this->tenantName   = $tenantName;
+        $this->replyEmail   = $replyEmail;
     }
 
     public function build(): self
     {
         return $this
             ->subject('[CRM] ' . $this->subjectLine)
-            ->replyTo($this->user->email, $this->user->name)
+            ->replyTo($this->replyEmail, $this->user->name)
             ->view('emails.support-message');
     }
 }

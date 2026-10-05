@@ -22,30 +22,39 @@ class SupportController extends Controller
 
         return Inertia::render('Support/Index', [
             'telegram_url' => 'https://t.me/' . ltrim($username, '@'),
+            'reply_email'  => (string) Auth::user()->email,
         ]);
     }
 
     public function store(Request $request)
     {
         $data = $request->validate([
-            'subject' => ['required', 'string', 'max:200'],
-            'message' => ['required', 'string', 'max:5000'],
+            'subject'     => ['required', 'string', 'max:200'],
+            'message'     => ['required', 'string', 'max:5000'],
+            'reply_email' => ['required', 'email', 'max:255'],
         ]);
 
         $user   = Auth::user()->loadMissing('tenant');
         $tenant = $user->tenant;
         $to     = (string) config('support.support_email');
 
+        if ($to === '' || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
+            return back()
+                ->withInput()
+                ->with('error', 'Почта поддержки не настроена. Напишите в Telegram.');
+        }
+
         try {
-            Mail::to($to)
-                ->cc($user->email)
-                ->send(new SupportMessageMail(
-                    $user,
-                    $data['subject'],
-                    $data['message'],
-                    $tenant ? (string) $tenant->name : '—'
-                ));
+            Mail::to($to)->send(new SupportMessageMail(
+                $user,
+                $data['subject'],
+                $data['message'],
+                $tenant ? (string) $tenant->name : '—',
+                $data['reply_email']
+            ));
         } catch (\Throwable $e) {
+            report($e);
+
             return back()
                 ->withInput()
                 ->with('error', 'Не удалось отправить сообщение. Попробуйте позже или напишите в Telegram.');

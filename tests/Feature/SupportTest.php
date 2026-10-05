@@ -75,8 +75,9 @@ class SupportTest extends TestCase
 
         $this->actingAs($user)
             ->post('/support', [
-                'subject' => 'Проблема с заказом',
-                'message' => 'Не открывается карточка заказа.',
+                'subject'     => 'Проблема с заказом',
+                'message'     => 'Не открывается карточка заказа.',
+                'reply_email' => 'answer@example.com',
             ])
             ->assertSessionHasNoErrors()
             ->assertRedirect();
@@ -84,7 +85,8 @@ class SupportTest extends TestCase
         Mail::assertSent(SupportMessageMail::class, function (SupportMessageMail $mail) use ($user) {
             return $mail->user->id === $user->id
                 && $mail->subjectLine === 'Проблема с заказом'
-                && $mail->messageText === 'Не открывается карточка заказа.';
+                && $mail->messageText === 'Не открывается карточка заказа.'
+                && $mail->replyEmail === 'answer@example.com';
         });
     }
 
@@ -95,8 +97,9 @@ class SupportTest extends TestCase
         $this->actingAs($user)
             ->from('/support')
             ->post('/support', [
-                'subject' => 'Тема',
-                'message' => '',
+                'subject'     => 'Тема',
+                'reply_email' => 'answer@example.com',
+                'message'     => '',
             ])
             ->assertSessionHasErrors('message');
     }
