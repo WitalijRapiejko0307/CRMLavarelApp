@@ -324,4 +324,48 @@ class BelpostTrackingProxyJobTest extends TestCase
         $this->assertSame(1, $progress['checked']);
         $this->assertSame(0, $progress['errors']);
     }
+
+    public function test_null_map_event_skips_direct_search_and_status(): void
+    {
+        $this->setProxyEnv();
+
+        $tenant  = $this->createTenantWithBelpostToken();
+        $service = app(TrackingRunService::class);
+        $this->seedRun($service, $tenant->id, 1);
+
+        $order = Order::create([
+            'tenant_id'     => $tenant->id,
+            'full_name'     => 'Клиент',
+            'status'        => 'Оформлен',
+            'delivery_type' => 'belpost',
+            'track_number'  => 'BY-NOT-ACCEPTED',
+        ]);
+
+        Http::fake([
+            self::PROXY_URL => $this->proxyResponder([
+                [
+                    'track'     => 'BY-NOT-ACCEPTED',
+                    'event'     => null,
+                    'createdAt' => null,
+                ],
+            ]),
+        ]);
+
+        (new UpdateTrackingJob($tenant->id, 'manual'))->handle($service);
+
+        Http::assertNotSent(function ($request) {
+            return array_key_exists('items', $request->data());
+        });
+
+        $this->assertSame(1, $this->countProxyRequests());
+
+        $order->refresh();
+        $this->assertSame('Оформлен', $order->status);
+
+        $progress = $service->getProgress($tenant->id);
+        $this->assertSame(1, $progress['checked']);
+        $this->assertSame(0, $progress['errors']);
+
+        $this->assertNoDraftRowsForTenant($tenant->id);
+    }
 }

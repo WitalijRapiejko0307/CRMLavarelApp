@@ -76,7 +76,7 @@ function doPost(e) {
       continue;
     }
 
-    var directResult = directBelpostSearch(track);
+    var directResult = directBelpostSearch(track, authToken);
 
     if (directResult) {
       results.push({
@@ -321,7 +321,7 @@ function resolveBelpostTracking(trackNumber, mapEntry, currentStatus) {
     return parseBelpostTrackingFromMapEntry(mapEntry);
   }
 
-  var directResult = directBelpostSearch(trackNumber);
+  var directResult = directBelpostSearch(trackNumber, null);
   if (directResult) {
     return directResult;
   }
@@ -331,15 +331,20 @@ function resolveBelpostTracking(trackNumber, mapEntry, currentStatus) {
   return null;
 }
 
-function directBelpostSearch(trackNumber) {
+function directBelpostSearch(trackNumber, authToken) {
   Logger.log('Direct search track: ' + trackNumber);
+
+  var headers = {
+    'Content-Type': 'application/json'
+  };
+  if (authToken) {
+    headers.Authorization = authToken;
+  }
 
   var url = 'https://api.belpost.by/api/v1/tracking';
   var options = {
     method: 'post',
-    headers: {
-      'Content-Type': 'application/json'
-    },
+    headers: headers,
     payload: JSON.stringify({ number: trackNumber }),
     muteHttpExceptions: true
   };

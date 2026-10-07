@@ -204,10 +204,12 @@ class UpdateTrackingJob implements ShouldQueue
                         'createdAt' => $draft->event_at,
                     ];
 
-                    if (
-                        !BelpostTrackingService::needsBelpostStepsLookup($mapEntry, (string) $order->status)
-                        && !empty($draft->event)
-                    ) {
+                    if (empty($draft->event)) {
+                        $service->incrementProgress($this->tenantId);
+                        continue;
+                    }
+
+                    if (!BelpostTrackingService::needsBelpostStepsLookup($mapEntry, (string) $order->status)) {
                         $hadError = false;
 
                         try {
