@@ -345,12 +345,12 @@ class UpdateTrackingJob implements ShouldQueue
             return;
         }
 
-        if ($currentStatus === 'Оформлен' && $event) {
+        if (in_array($currentStatus, ['Оформлен', 'Передан на почту'], true) && $event) {
             $this->changeStatus($order, 'Отправлено', $eventAt);
             if ($sms) {
                 $sms->sendForOrder($order, 0);
             }
-            return;
+            $currentStatus = 'Отправлено';
         }
 
         if ($event === 'Поступило в учреждение доставки' && $currentStatus !== 'В отделении') {

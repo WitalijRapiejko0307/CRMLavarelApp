@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Order;
+use App\Models\OrderStatusHistory;
 use App\Models\Product;
 use App\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -66,5 +67,24 @@ class OrderStockObserverTest extends TestCase
 
         $order->update(['status' => 'Возврат']);
         $this->assertSame(10, $product->fresh()->stock);
+    }
+
+    public function test_tracking_event_time_is_stored_in_history(): void
+    {
+        [, , $order] = $this->seedTenantProduct();
+
+        $eventAt = '2026-10-03 11:50:54';
+        $order->update([
+            'status'            => 'Отправлено',
+            'status_changed_at' => $eventAt,
+        ]);
+
+        $history = OrderStatusHistory::where('order_id', $order->id)
+            ->where('to_status', 'Отправлено')
+            ->first();
+
+        $this->assertNotNull($history);
+        $this->assertSame($eventAt, $history->created_at->format('Y-m-d H:i:s'));
+        $this->assertSame($eventAt, $order->fresh()->status_changed_at->format('Y-m-d H:i:s'));
     }
 }

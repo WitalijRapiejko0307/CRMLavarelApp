@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Jobs\UpdateTrackingJob;
 use App\Models\Order;
+use App\Models\OrderStatusHistory;
+use App\Models\Product;
 use App\Models\Tenant;
 use App\Models\TenantSetting;
 use App\Services\TrackingRunService;
@@ -367,5 +369,62 @@ class BelpostTrackingProxyJobTest extends TestCase
         $this->assertSame(0, $progress['errors']);
 
         $this->assertNoDraftRowsForTenant($tenant->id);
+    }
+
+    public function test_delivered_from_oformlen_reaches_collect_money_and_deducts_stock_once(): void
+    {
+        $this->setProxyEnv();
+
+        $tenant  = $this->createTenantWithBelpostToken();
+        $service = app(TrackingRunService::class);
+        app()->instance('current_tenant_id', $tenant->id);
+
+        $product = Product::create([
+            'tenant_id' => $tenant->id,
+            'name'      => 'Крем',
+            'stock'     => 10,
+            'weight'    => 100,
+        ]);
+
+        $this->seedRun($service, $tenant->id, 1);
+
+        $order = Order::create([
+            'tenant_id'     => $tenant->id,
+            'full_name'     => 'Клиент',
+            'status'        => 'Оформлен',
+            'delivery_type' => 'belpost',
+            'track_number'  => 'BY-DELIVERED',
+            'goods'         => ['Крем'],
+            'quantities'    => [2],
+        ]);
+
+        $eventAt = '2026-10-03 11:50:54';
+
+        Http::fake([
+            self::PROXY_URL => $this->proxyResponder([
+                [
+                    'track'     => 'BY-DELIVERED',
+                    'event'     => 'Вручено',
+                    'createdAt' => $eventAt,
+                ],
+            ]),
+        ]);
+
+        (new UpdateTrackingJob($tenant->id, 'manual'))->handle($service);
+
+        $order->refresh();
+        $this->assertSame('Забрать деньги', $order->status);
+        $this->assertSame($eventAt, $order->status_changed_at->format('Y-m-d H:i:s'));
+        $this->assertSame(8, $product->fresh()->stock);
+
+        $history = OrderStatusHistory::where('order_id', $order->id)->orderBy('id')->get();
+        $this->assertSame(['Отправлено', 'Забрать деньги'], $history->pluck('to_status')->all());
+        $this->assertSame(
+            [$eventAt, $eventAt],
+            $history->map(fn ($row) => $row->created_at->format('Y-m-d H:i:s'))->all()
+        );
+
+        (new UpdateTrackingJob($tenant->id, 'manual'))->handle($service);
+        $this->assertSame(8, $product->fresh()->stock);
     }
 }

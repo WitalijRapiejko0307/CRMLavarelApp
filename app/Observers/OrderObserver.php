@@ -23,17 +23,20 @@ class OrderObserver
         $fromStatus = $order->getOriginal('status');
         $toStatus   = $order->status;
 
-        // Record history entry
+        $hasEventAt = $order->isDirty('status_changed_at') && $order->status_changed_at !== null;
+        $eventAt    = $hasEventAt ? $order->status_changed_at : Carbon::now();
+
         OrderStatusHistory::create([
             'order_id'    => $order->id,
             'from_status' => $fromStatus,
             'to_status'   => $toStatus,
             'user_id'     => auth()->id(),
-            'created_at'  => Carbon::now(),
+            'created_at'  => $eventAt,
         ]);
 
-        // Update status_changed_at
-        $order->status_changed_at = Carbon::now();
+        if (!$hasEventAt) {
+            $order->status_changed_at = $eventAt;
+        }
 
         // Manage product stock
         $goods      = $order->goods ?? [];
