@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Order;
 use App\Models\TenantSetting;
+use App\Services\BelpostTrackingProxy;
 use App\Services\BelpostTrackingService;
 use App\Services\EvropostService;
 use App\Services\SmsService;
@@ -13,6 +14,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -111,49 +113,194 @@ class UpdateTrackingJob implements ShouldQueue
             return;
         }
 
-        $trackingService = new BelpostTrackingService($authToken);
-        $map             = $trackingService->loadMap();
+        $proxy = new BelpostTrackingProxy();
+
+        if (!$proxy->isConfigured()) {
+            Log::warning("UpdateTrackingJob: BELPOST_TRACKING_PROXY_URL not set, skipping Belpost API", [
+                'tenant_id' => $this->tenantId,
+            ]);
+
+            foreach ($orders as $order) {
+                $service->incrementProgress($this->tenantId);
+                if ($service->isCancelRequested($this->tenantId)) {
+                    break;
+                }
+            }
+
+            return;
+        }
 
         Log::info("UpdateTrackingJob: Belpost orders to check", [
             'count'     => $orders->count(),
             'tenant_id' => $this->tenantId,
         ]);
 
-        foreach ($orders as $order) {
-            $hadError = false;
+        DB::table('belpost_tracking_drafts')->where('tenant_id', $this->tenantId)->delete();
 
-            try {
-                $trackNumber = trim((string) $order->track_number);
+        try {
+            $mapResult = $proxy->fetchMap($authToken);
 
-                $mapEntry = $map[$trackNumber] ?? null;
-
-                if ($mapEntry === null) {
-                    Log::debug("UpdateTrackingJob: Belpost direct search", ['track' => $trackNumber]);
-                }
-
-                $info = $trackingService->resolveTracking($trackNumber, $mapEntry, (string) $order->status);
-
-                if ($info === null) {
-                    Log::warning("UpdateTrackingJob: track not found", [
-                        'track'    => $trackNumber,
-                        'order_id' => $order->id,
-                    ]);
-                } else {
-                    $this->applyBelpostStatus($order, $info, $sms);
-                }
-            } catch (\Throwable $e) {
-                $hadError = true;
-                Log::error("UpdateTrackingJob: Belpost order error", [
-                    'order_id' => $order->id,
-                    'error'    => $e->getMessage(),
+            if (!($mapResult['ok'] ?? false)) {
+                Log::error('UpdateTrackingJob: Belpost proxy map fetch failed', [
+                    'tenant_id' => $this->tenantId,
+                    'error'     => $mapResult['error'] ?? 'unknown',
                 ]);
-            } finally {
-                $service->incrementProgress($this->tenantId, $hadError);
+
+                foreach ($orders as $order) {
+                    $service->incrementProgress($this->tenantId, true);
+                    if ($service->isCancelRequested($this->tenantId)) {
+                        break;
+                    }
+                }
+
+                return;
             }
 
-            if ($service->isCancelRequested($this->tenantId)) {
-                break;
+            $mapByTrack   = $mapResult['map'] ?? [];
+            $activeTracks = [];
+
+            foreach ($orders as $order) {
+                $track = trim((string) $order->track_number);
+                if ($track !== '') {
+                    $activeTracks[$track] = true;
+                }
             }
+
+            $now = now();
+            foreach ($activeTracks as $track => $_) {
+                if (!isset($mapByTrack[$track])) {
+                    continue;
+                }
+
+                $entry = $mapByTrack[$track];
+                DB::table('belpost_tracking_drafts')->insert([
+                    'tenant_id'    => $this->tenantId,
+                    'track_number' => $track,
+                    'event'        => $entry['event'] ?? null,
+                    'event_at'     => $entry['createdAt'] ?? null,
+                    'created_at'   => $now,
+                    'updated_at'   => $now,
+                ]);
+            }
+
+            $draftRows = DB::table('belpost_tracking_drafts')
+                ->where('tenant_id', $this->tenantId)
+                ->get()
+                ->keyBy('track_number');
+
+            $directSearchOrders = [];
+
+            foreach ($orders as $order) {
+                if ($service->isCancelRequested($this->tenantId)) {
+                    break;
+                }
+
+                $trackNumber = trim((string) $order->track_number);
+                $draft       = $draftRows->get($trackNumber);
+
+                if ($draft !== null) {
+                    $mapEntry = [
+                        'event'     => $draft->event,
+                        'createdAt' => $draft->event_at,
+                    ];
+
+                    if (
+                        !BelpostTrackingService::needsBelpostStepsLookup($mapEntry, (string) $order->status)
+                        && !empty($draft->event)
+                    ) {
+                        $hadError = false;
+
+                        try {
+                            $trackingResult = BelpostTrackingService::parseBelpostTrackingFromMapEntry($mapEntry);
+                            $this->applyBelpostStatus($order, $trackingResult, $sms);
+                        } catch (\Throwable $e) {
+                            $hadError = true;
+                            Log::error('UpdateTrackingJob: Belpost order error', [
+                                'order_id' => $order->id,
+                                'error'    => $e->getMessage(),
+                            ]);
+                        } finally {
+                            $service->incrementProgress($this->tenantId, $hadError);
+                        }
+
+                        continue;
+                    }
+                }
+
+                $directSearchOrders[] = $order;
+            }
+
+            foreach (array_chunk($directSearchOrders, BelpostTrackingProxy::BATCH_SIZE) as $batchOrders) {
+                if ($service->isCancelRequested($this->tenantId)) {
+                    break;
+                }
+
+                $items = [];
+                foreach ($batchOrders as $order) {
+                    $items[] = [
+                        'track'  => trim((string) $order->track_number),
+                        'status' => (string) $order->status,
+                    ];
+                }
+
+                $batchResult = $proxy->directSearchBatch($authToken, $items);
+
+                if (!($batchResult['ok'] ?? false)) {
+                    Log::error('UpdateTrackingJob: Belpost proxy direct search batch failed', [
+                        'tenant_id' => $this->tenantId,
+                        'error'     => $batchResult['error'] ?? 'unknown',
+                    ]);
+
+                    foreach ($batchOrders as $order) {
+                        $service->incrementProgress($this->tenantId, true);
+                        if ($service->isCancelRequested($this->tenantId)) {
+                            break 2;
+                        }
+                    }
+
+                    continue;
+                }
+
+                $resultsByTrack = $batchResult['results'] ?? [];
+
+                foreach ($batchOrders as $order) {
+                    $hadError = false;
+
+                    try {
+                        $trackNumber = trim((string) $order->track_number);
+                        $row         = $resultsByTrack[$trackNumber] ?? null;
+
+                        if ($row === null) {
+                            $hadError = true;
+                            Log::error('UpdateTrackingJob: Belpost proxy missing result for track', [
+                                'track'    => $trackNumber,
+                                'order_id' => $order->id,
+                            ]);
+                        } elseif (!$row['found']) {
+                            Log::warning('UpdateTrackingJob: track not found', [
+                                'track'    => $trackNumber,
+                                'order_id' => $order->id,
+                            ]);
+                        } else {
+                            $this->applyBelpostStatus($order, $row, $sms);
+                        }
+                    } catch (\Throwable $e) {
+                        $hadError = true;
+                        Log::error('UpdateTrackingJob: Belpost order error', [
+                            'order_id' => $order->id,
+                            'error'    => $e->getMessage(),
+                        ]);
+                    } finally {
+                        $service->incrementProgress($this->tenantId, $hadError);
+                    }
+
+                    if ($service->isCancelRequested($this->tenantId)) {
+                        break 2;
+                    }
+                }
+            }
+        } finally {
+            DB::table('belpost_tracking_drafts')->where('tenant_id', $this->tenantId)->delete();
         }
     }
 
