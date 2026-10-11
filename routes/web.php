@@ -6,6 +6,7 @@ use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
+use App\Http\Controllers\FeedbackController;
 use App\Http\Controllers\SupportController;
 use App\Http\Controllers\BelpostController;
 use App\Http\Controllers\CourierController;
@@ -44,6 +45,12 @@ Route::middleware(['auth', 'tenant'])->group(function () {
     Route::post('/support', [SupportController::class, 'store'])
         ->name('support.store')
         ->middleware('throttle:support');
+
+    Route::post('/feedback/later', [FeedbackController::class, 'later'])
+        ->name('feedback.later');
+    Route::post('/feedback', [FeedbackController::class, 'store'])
+        ->name('feedback.store')
+        ->middleware('throttle:feedback');
 });
 
 // Root redirect

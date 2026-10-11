@@ -15,6 +15,8 @@ class EnsureEmailVerified
         'email.verify',
         'email.verify.resend',
         'logout',
+        'feedback.store',
+        'feedback.later',
     ];
 
     public function handle(Request $request, Closure $next)

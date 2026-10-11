@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Models\TenantSetting;
 use App\Models\Order;
+use App\Services\FeedbackPromptService;
 use App\Services\OnboardingService;
 use App\Services\TrackingRunService;
 use Illuminate\Http\Request;
@@ -49,6 +50,7 @@ class HandleInertiaRequests extends Middleware
                 : null,
             'sr_sync_failures' => fn () => $this->shareSrSyncFailures($user),
             'onboarding' => fn () => $this->shareOnboarding($user),
+            'feedback_prompt' => fn () => $this->shareFeedbackPrompt($user),
         ]);
     }
 
@@ -94,6 +96,15 @@ class HandleInertiaRequests extends Middleware
     protected function shareOnboarding($user): ?array
     {
         return app(OnboardingService::class)->forUser($user);
+    }
+
+    protected function shareFeedbackPrompt($user): ?string
+    {
+        if (!$user || !$user->isTenantUser() || $user->email_verified_at === null) {
+            return null;
+        }
+
+        return app(FeedbackPromptService::class)->resolvePromptForUser($user);
     }
 
     protected function shareSrSyncFailures($user): ?array

@@ -128,6 +128,7 @@
         <TrialBanner />
         <OnboardingChecklist />
         <OnboardingWelcomeModal />
+        <FeedbackPrompt />
 
         <!-- Auto tracking notice -->
         <div
@@ -232,6 +233,7 @@ import { apiFetch } from '@/utils/api'
 import TrialBanner from '@/Components/TrialBanner.vue'
 import OnboardingChecklist from '@/Components/OnboardingChecklist.vue'
 import OnboardingWelcomeModal from '@/Components/OnboardingWelcomeModal.vue'
+import FeedbackPrompt from '@/Components/FeedbackPrompt.vue'
 import MobileNav from '@/Components/MobileNav.vue'
 import NavDropdown from '@/Components/NavDropdown.vue'
 
