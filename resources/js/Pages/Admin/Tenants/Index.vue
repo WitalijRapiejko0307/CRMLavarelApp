@@ -62,12 +62,6 @@
                                         <option value="expired">expired</option>
                                         <option value="suspended">suspended</option>
                                     </select>
-                                    <p
-                                        v-if="statusDiffers(tenant)"
-                                        class="text-xs text-muted mt-1"
-                                    >
-                                        фактически: {{ tenant.subscription_status }}
-                                    </p>
                                     <div v-if="tenant.read_only" class="text-xs text-red-600 dark:text-red-400 mt-1">read-only</div>
                                 </td>
                                 <td class="py-3 pr-4 text-xs">
@@ -85,10 +79,23 @@
                                 <td class="py-3 pr-4">{{ tenant.users_count }}</td>
                                 <td class="py-3 pr-4">{{ tenant.orders_count }}</td>
                                 <td class="py-3 align-top">
-                                    <div class="flex flex-wrap gap-2">
+                                    <div class="relative inline-block">
                                         <button
                                             type="button"
-                                            class="btn-secondary text-xs"
+                                            class="btn-secondary text-xs px-3"
+                                            :disabled="forms[tenant.id].processing"
+                                            aria-label="Действия"
+                                            @click="toggleMenu(tenant.id)"
+                                        >
+                                            …
+                                        </button>
+                                    <div
+                                        v-if="menuOpen[tenant.id]"
+                                        class="absolute right-0 top-full z-20 mt-1 w-52 p-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg space-y-1 text-xs"
+                                    >
+                                        <button
+                                            type="button"
+                                            class="block w-full text-left px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
                                             :disabled="forms[tenant.id].processing"
                                             @click="activateTenant(tenant.id)"
                                         >
@@ -96,25 +103,12 @@
                                         </button>
                                         <button
                                             type="button"
-                                            class="btn-secondary text-xs"
+                                            class="block w-full text-left px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
                                             :disabled="forms[tenant.id].processing"
                                             @click="extendTrial(tenant.id)"
                                         >
                                             +14 дней trial
                                         </button>
-                                        <button
-                                            type="button"
-                                            class="btn-secondary text-xs"
-                                            :disabled="forms[tenant.id].processing"
-                                            @click="toggleMenu(tenant.id)"
-                                        >
-                                            Ещё
-                                        </button>
-                                    </div>
-                                    <div
-                                        v-if="menuOpen[tenant.id]"
-                                        class="mt-2 p-2 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 space-y-1 text-xs min-w-[12rem]"
-                                    >
                                         <button
                                             type="button"
                                             class="block w-full text-left px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
@@ -203,6 +197,7 @@
                                             </button>
                                         </div>
                                     </div>
+                                    </div>
                                 </td>
                             </tr>
                         </tbody>
@@ -232,12 +227,6 @@
                                 <option value="expired">expired</option>
                                 <option value="suspended">suspended</option>
                             </select>
-                            <p
-                                v-if="statusDiffers(tenant)"
-                                class="text-xs text-muted mt-1"
-                            >
-                                фактически: {{ tenant.subscription_status }}
-                            </p>
                         </div>
                         <div>
                             <label class="label">Trial до</label>
@@ -261,11 +250,24 @@
                         </div>
                     </dl>
 
-                    <div class="mt-3 space-y-2">
-                        <div class="flex flex-wrap gap-2">
+                    <div class="mt-3">
+                        <div class="relative inline-block">
                             <button
                                 type="button"
-                                class="btn-secondary text-xs touch-target"
+                                class="btn-secondary text-xs touch-target px-3"
+                                :disabled="forms[tenant.id].processing"
+                                aria-label="Действия"
+                                @click="toggleMenu(tenant.id)"
+                            >
+                                …
+                            </button>
+                        <div
+                            v-if="menuOpen[tenant.id]"
+                            class="absolute left-0 top-full z-20 mt-1 w-52 p-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg space-y-1 text-xs"
+                        >
+                            <button
+                                type="button"
+                                class="block w-full text-left px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 touch-target"
                                 :disabled="forms[tenant.id].processing"
                                 @click="activateTenant(tenant.id)"
                             >
@@ -273,25 +275,12 @@
                             </button>
                             <button
                                 type="button"
-                                class="btn-secondary text-xs touch-target"
+                                class="block w-full text-left px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 touch-target"
                                 :disabled="forms[tenant.id].processing"
                                 @click="extendTrial(tenant.id)"
                             >
                                 +14 дней trial
                             </button>
-                            <button
-                                type="button"
-                                class="btn-secondary text-xs touch-target"
-                                :disabled="forms[tenant.id].processing"
-                                @click="toggleMenu(tenant.id)"
-                            >
-                                Ещё
-                            </button>
-                        </div>
-                        <div
-                            v-if="menuOpen[tenant.id]"
-                            class="p-2 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 space-y-1 text-xs"
-                        >
                             <button
                                 type="button"
                                 class="block w-full text-left px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 touch-target"
@@ -380,6 +369,7 @@
                                 </button>
                             </div>
                         </div>
+                        </div>
                     </div>
                 </ListCard>
             </template>
@@ -433,16 +423,12 @@ const forms = reactive(Object.fromEntries(
     props.tenants.map((tenant) => [
         tenant.id,
         {
-            subscription_status: tenant.stored_status,
+            subscription_status: tenant.subscription_status,
             trial_ends_at: toLocalInput(tenant.trial_ends_at),
             processing: false,
         },
     ])
 ))
-
-function statusDiffers(tenant) {
-    return tenant.subscription_status !== forms[tenant.id].subscription_status
-}
 
 function leadsLabel(tenant) {
     const enabled = tenant.leads_enabled !== false
