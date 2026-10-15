@@ -125,6 +125,40 @@
             </div>
         </nav>
 
+        <div
+            v-if="deletionScheduledFor"
+            class="page-shell mt-4"
+        >
+            <div class="bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-100 rounded-md px-4 py-3 text-sm flex items-start justify-between gap-3">
+                <div class="flex items-start gap-2 min-w-0">
+                    <svg class="w-4 h-4 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                    </svg>
+                    <span>
+                        Компания будет удалена {{ formatDeletionDate(deletionScheduledFor) }}
+                    </span>
+                </div>
+                <div class="flex items-center gap-2 flex-shrink-0">
+                    <button
+                        v-if="isAdmin"
+                        type="button"
+                        class="btn-secondary btn-sm"
+                        :disabled="cancellingDeletion"
+                        @click="cancelScheduledDeletion"
+                    >
+                        {{ cancellingDeletion ? '…' : 'Отменить удаление' }}
+                    </button>
+                    <span
+                        class="text-amber-400/70 dark:text-amber-500/70 select-none"
+                        title="Уведомление нельзя скрыть"
+                        aria-hidden="true"
+                    >
+                        ✕
+                    </span>
+                </div>
+            </div>
+        </div>
+
         <TrialBanner />
         <OnboardingChecklist />
         <OnboardingWelcomeModal />
@@ -250,6 +284,8 @@ const isCallCenter      = computed(() => tenantType.value === 'call_center')
 const isStore           = computed(() => !isCallCenter.value)
 const currentRole       = computed(() => page.props.value.auth?.user?.role ?? '')
 const isAdmin           = computed(() => currentRole.value === 'admin')
+const deletionScheduledFor = computed(() => page.props.value.deletionScheduledFor ?? null)
+const cancellingDeletion = ref(false)
 const canViewFinances   = computed(() => isStore.value && ['admin', 'manager'].includes(currentRole.value))
 const canViewReports    = computed(() => isStore.value && ['admin', 'manager'].includes(currentRole.value))
 const canViewAnalytics  = computed(() => isCallCenter.value && ['admin', 'manager', 'operator'].includes(currentRole.value))
@@ -291,6 +327,19 @@ function formatNoticeDate(value) {
     return d.toLocaleString('ru-RU', {
         day: '2-digit', month: '2-digit', year: 'numeric',
         hour: '2-digit', minute: '2-digit',
+    })
+}
+
+function formatDeletionDate(value) {
+    return formatNoticeDate(value)
+}
+
+function cancelScheduledDeletion() {
+    if (cancellingDeletion.value) return
+    cancellingDeletion.value = true
+    Inertia.post('/settings/cancel-deletion', {}, {
+        preserveScroll: true,
+        onFinish: () => { cancellingDeletion.value = false },
     })
 }
 

@@ -29,6 +29,16 @@ class LoginController extends Controller
 
             $user = Auth::user()->loadMissing('tenant');
 
+            if ($user->isTenantUser() && $user->tenant?->isArchived()) {
+                Auth::logout();
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+
+                return back()->withErrors([
+                    'email' => 'Компания архивирована. Вход недоступен.',
+                ])->onlyInput('email');
+            }
+
             if ($user->isSuperAdmin()) {
                 return redirect()->intended('/admin/tenants');
             }

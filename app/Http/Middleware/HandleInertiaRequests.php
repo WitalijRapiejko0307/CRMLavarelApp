@@ -42,6 +42,9 @@ class HandleInertiaRequests extends Middleware
                 ? TenantSetting::get('shop_name', 'BaseCRM') ?: 'BaseCRM'
                 : 'BaseCRM',
             'tenant' => fn () => $this->shareTenant($user),
+            'deletionScheduledFor' => fn () => $user && $user->isTenantUser()
+                ? $user->tenant?->deletion_scheduled_for?->toIso8601String()
+                : null,
             'tracking_auto_notice' => fn () => auth()->check() && auth()->user()->isTenantUser()
                 ? app(TrackingRunService::class)->buildAutoNoticeForUser(auth()->user())
                 : null,
@@ -67,10 +70,11 @@ class HandleInertiaRequests extends Middleware
         }
 
         return [
-            'status'        => $tenant->effectiveStatus(),
-            'readOnly'      => $tenant->isReadOnly(),
-            'trialDaysLeft' => $tenant->trialDaysLeft(),
-            'trialEndsAt'   => $tenant->trial_ends_at?->toIso8601String(),
+            'status'                 => $tenant->effectiveStatus(),
+            'readOnly'               => $tenant->isReadOnly(),
+            'trialDaysLeft'          => $tenant->trialDaysLeft(),
+            'trialEndsAt'            => $tenant->trial_ends_at?->toIso8601String(),
+            'deletion_scheduled_for' => $tenant->deletion_scheduled_for?->toIso8601String(),
         ];
     }
 

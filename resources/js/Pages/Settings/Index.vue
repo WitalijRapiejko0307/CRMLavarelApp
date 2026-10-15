@@ -578,6 +578,54 @@
                     </button>
                 </div>
             </form>
+
+            <div
+                v-if="canManageCompanyDeletion"
+                class="card border-red-200 dark:border-red-800"
+            >
+                <h2 class="section-title mb-2 text-red-800 dark:text-red-200">
+                    Удалить компанию
+                </h2>
+                <p v-if="deletionScheduledFor" class="text-sm text-amber-800 dark:text-amber-200 mb-3">
+                    Удаление запланировано на {{ formatDeletionDate(deletionScheduledFor) }}.
+                </p>
+                <p class="text-sm text-muted mb-3">
+                    Компания и все данные будут безвозвратно удалены через 30 дней после подтверждения.
+                </p>
+                <template v-if="deletionScheduledFor">
+                    <button
+                        type="button"
+                        class="btn-secondary btn-sm"
+                        :disabled="deletionBusy"
+                        @click="cancelScheduledDeletion"
+                    >
+                        {{ deletionBusy ? 'Отмена…' : 'Отменить удаление' }}
+                    </button>
+                </template>
+                <template v-else>
+                    <label class="label mb-1">
+                        Введите название компании «{{ companyName }}» для подтверждения
+                    </label>
+                    <input
+                        v-model="deletionConfirmName"
+                        type="text"
+                        class="input w-full max-w-md"
+                        :disabled="deletionBusy || !companyName"
+                        autocomplete="off"
+                    />
+                    <button
+                        type="button"
+                        class="btn-secondary btn-sm mt-3 text-red-600 dark:text-red-400"
+                        :disabled="deletionBusy || deletionConfirmName !== companyName || !companyName"
+                        @click="scheduleCompanyDeletion"
+                    >
+                        {{ deletionBusy ? 'Отправка…' : 'Запланировать удаление' }}
+                    </button>
+                    <p v-if="!companyName" class="text-xs text-muted mt-2">
+                        Название компании недоступно в props страницы.
+                    </p>
+                </template>
+            </div>
         </div>
     </AppLayout>
 </template>
@@ -609,6 +657,13 @@ const props = defineProps({
 })
 
 const page = usePage()
+const companyName = computed(() => page.props.value.tenant?.name ?? '')
+const deletionScheduledFor = computed(() => page.props.value.deletionScheduledFor ?? null)
+const canManageCompanyDeletion = computed(() =>
+    props.canEditSettings || page.props.value.auth?.user?.role === 'admin'
+)
+const deletionConfirmName = ref('')
+const deletionBusy = ref(false)
 const tenantType = computed(() => page.props.value.tenant?.type ?? 'store')
 const isStore = computed(() => tenantType.value === 'store')
 const isCallCenter = computed(() => tenantType.value === 'call_center')
@@ -665,6 +720,31 @@ function formatConnectionDate(value) {
     return new Date(value).toLocaleString('ru-RU', {
         day: '2-digit', month: '2-digit', year: 'numeric',
         hour: '2-digit', minute: '2-digit',
+    })
+}
+
+function formatDeletionDate(value) {
+    return formatConnectionDate(value)
+}
+
+function scheduleCompanyDeletion() {
+    if (deletionBusy.value || deletionConfirmName.value !== companyName.value) return
+    deletionBusy.value = true
+    Inertia.post('/settings/schedule-deletion', {
+        confirm_name: deletionConfirmName.value,
+    }, {
+        preserveScroll: true,
+        onFinish: () => { deletionBusy.value = false },
+        onSuccess: () => { deletionConfirmName.value = '' },
+    })
+}
+
+function cancelScheduledDeletion() {
+    if (deletionBusy.value) return
+    deletionBusy.value = true
+    Inertia.post('/settings/cancel-deletion', {}, {
+        preserveScroll: true,
+        onFinish: () => { deletionBusy.value = false },
     })
 }
 

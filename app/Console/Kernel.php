@@ -2,6 +2,7 @@
 
 namespace App\Console;
 
+use App\Console\Commands\PurgeScheduledTenants;
 use App\Console\Commands\SumOrdersCommand;
 use App\Jobs\SyncSalesRenderJob;
 use App\Models\Tenant;
@@ -65,6 +66,11 @@ class Kernel extends ConsoleKernel
             ->dailyAt('00:05')
             ->withoutOverlapping()
             ->name('sum-orders');
+
+        $schedule->command(PurgeScheduledTenants::class)
+            ->dailyAt('03:10')
+            ->withoutOverlapping()
+            ->name('purge-scheduled-tenants');
     }
 
     protected function commands(): void

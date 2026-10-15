@@ -67,6 +67,10 @@ class WebhookController extends Controller
 
         $tenant = \App\Models\Tenant::find($tenantId);
 
+        if (!$tenant || !$tenant->acceptsLeads()) {
+            return response()->json(['result' => 'error', 'message' => 'Leads are not accepted'], 403);
+        }
+
         $data = $request->validate([
             'name'          => ['required', 'string', 'max:255'],
             'phone'         => ['required', 'string', 'max:30'],

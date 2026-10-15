@@ -6,6 +6,24 @@
                     <div class="flex items-center gap-3 min-w-0">
                         <MobileNav title="BaseCRM Admin" theme="slate" :links="mobileLinks">
                             <template #actions>
+                                <div
+                                    class="px-4 py-3 border-b border-white/10"
+                                    role="group"
+                                    aria-label="Тема"
+                                >
+                                    <div class="flex rounded-md border border-slate-600 p-0.5 bg-slate-900/50">
+                                        <button
+                                            v-for="option in themeOptions"
+                                            :key="option.value"
+                                            type="button"
+                                            class="touch-target flex-1 px-2 py-2 text-sm font-medium rounded transition-colors text-slate-300 hover:text-white"
+                                            :class="preference === option.value && 'bg-white/15 text-white'"
+                                            @click="selectTheme(option.value)"
+                                        >
+                                            {{ option.label }}
+                                        </button>
+                                    </div>
+                                </div>
                                 <form @submit.prevent="logout">
                                     <button
                                         type="submit"
@@ -25,11 +43,29 @@
                         </Link>
                     </div>
 
-                    <form class="hidden md:block" @submit.prevent="logout">
-                        <button type="submit" class="text-slate-300 hover:text-white text-sm">
-                            Выйти
-                        </button>
-                    </form>
+                    <div class="hidden md:flex items-center gap-4 shrink-0">
+                        <div
+                            class="inline-flex rounded-md border border-slate-600 p-0.5 bg-slate-900/50"
+                            role="group"
+                            aria-label="Тема"
+                        >
+                            <button
+                                v-for="option in themeOptions"
+                                :key="option.value"
+                                type="button"
+                                class="px-2.5 py-1 text-sm font-medium rounded transition-colors text-slate-300 hover:text-white whitespace-nowrap"
+                                :class="preference === option.value && 'bg-white/15 text-white'"
+                                @click="selectTheme(option.value)"
+                            >
+                                {{ option.label }}
+                            </button>
+                        </div>
+                        <form @submit.prevent="logout">
+                            <button type="submit" class="text-slate-300 hover:text-white text-sm">
+                                Выйти
+                            </button>
+                        </form>
+                    </div>
                 </div>
             </div>
         </nav>
@@ -57,8 +93,20 @@ import { computed } from 'vue'
 import { Link, usePage } from '@inertiajs/inertia-vue3'
 import { Inertia } from '@inertiajs/inertia'
 import MobileNav from '@/Components/MobileNav.vue'
+import { useTheme } from '@/composables/useTheme'
 
 const page = usePage()
+const { preference, setTheme } = useTheme()
+
+const themeOptions = [
+    { value: 'light', label: 'Светлая' },
+    { value: 'dark', label: 'Тёмная' },
+    { value: 'system', label: 'Как в системе' },
+]
+
+function selectTheme(value) {
+    setTheme(value)
+}
 
 const flash = computed(() => ({
     message: page.props.value.flash?.message,

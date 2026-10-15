@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\Order;
 use App\Models\Tenant;
+use App\Models\TenantSetting;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -90,5 +92,115 @@ class AdminTenantTest extends TestCase
         $tenant->refresh();
         $this->assertSame(Tenant::STATUS_TRIAL, $tenant->subscription_status);
         $this->assertTrue($tenant->trial_ends_at->greaterThan(now()->addDays(10)));
+    }
+
+    public function test_tenants_index_lists_admin_email_per_tenant(): void
+    {
+        $tenantA = Tenant::create([
+            'name'                => 'Alpha Co',
+            'created_at'          => now(),
+            'subscription_status' => Tenant::STATUS_ACTIVE,
+            'subscribed_at'       => now(),
+        ]);
+        $tenantB = Tenant::create([
+            'name'                => 'Beta Co',
+            'created_at'          => now(),
+            'subscription_status' => Tenant::STATUS_ACTIVE,
+            'subscribed_at'       => now(),
+        ]);
+
+        User::create([
+            'tenant_id' => $tenantA->id,
+            'name'      => 'Admin A',
+            'email'     => 'alpha-admin@example.com',
+            'password'  => Hash::make('password'),
+            'role'      => 'admin',
+        ]);
+        User::create([
+            'tenant_id' => $tenantB->id,
+            'name'      => 'Admin B',
+            'email'     => 'beta-admin@example.com',
+            'password'  => Hash::make('password'),
+            'role'      => 'admin',
+        ]);
+
+        $response = $this->actingAs($this->superAdmin())->get('/admin/tenants');
+
+        $response->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/Tenants/Index')
+                ->has('tenants', 2)
+                ->where('tenants', function ($tenants) {
+                    $emails = collect($tenants)->pluck('admin_email')->sort()->values()->all();
+
+                    return $emails === ['alpha-admin@example.com', 'beta-admin@example.com'];
+                })
+            );
+    }
+
+    public function test_disabling_leads_blocks_webhook_order_creation(): void
+    {
+        $tenant = Tenant::create([
+            'name'                => 'Leads Off Co',
+            'created_at'          => now(),
+            'subscription_status' => Tenant::STATUS_ACTIVE,
+            'subscribed_at'       => now(),
+            'leads_enabled'       => true,
+        ]);
+
+        $secret = 'leads-off-secret';
+
+        TenantSetting::withoutGlobalScopes()->create([
+            'tenant_id' => $tenant->id,
+            'key'       => 'webhook_secret',
+            'value'     => $secret,
+        ]);
+
+        $this->actingAs($this->superAdmin())
+            ->post("/admin/tenants/{$tenant->id}/leads-enabled", ['enabled' => false])
+            ->assertRedirect();
+
+        $response = $this->postJson('/api/webhook/lead', [
+            'name'  => 'Иванов Иван',
+            'phone' => '291234567',
+        ], [
+            'X-Webhook-Token' => $secret,
+        ]);
+
+        $response->assertForbidden()
+            ->assertJson([
+                'result'  => 'error',
+                'message' => 'Leads are not accepted',
+            ]);
+
+        $this->assertSame(0, Order::withoutGlobalScopes()->where('tenant_id', $tenant->id)->count());
+    }
+
+    public function test_archived_tenant_user_cannot_log_in(): void
+    {
+        $tenant = Tenant::create([
+            'name'                => 'Archived Co',
+            'created_at'          => now(),
+            'subscription_status' => Tenant::STATUS_ACTIVE,
+            'subscribed_at'       => now(),
+            'archived_at'         => now(),
+        ]);
+
+        $admin = User::create([
+            'tenant_id' => $tenant->id,
+            'name'      => 'Admin',
+            'email'     => 'archived-admin@example.com',
+            'password'  => Hash::make('password'),
+            'role'      => 'admin',
+        ]);
+
+        $response = $this->post('/login', [
+            'email'    => $admin->email,
+            'password' => 'password',
+        ]);
+
+        $response->assertRedirect('/login');
+        $response->assertSessionHasErrors('email');
+        $this->assertGuest();
     }
 }

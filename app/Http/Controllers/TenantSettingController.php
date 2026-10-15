@@ -14,6 +14,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -537,6 +538,56 @@ class TenantSettingController extends Controller
         }
 
         return response()->json(['success' => true, 'secret' => $secret]);
+    }
+
+    /**
+     * POST /settings/schedule-deletion
+     */
+    public function scheduleDeletion(): RedirectResponse
+    {
+        Gate::authorize('admin');
+
+        $user = Auth::user();
+        $tenant = $user->tenant;
+
+        if (!$tenant) {
+            abort(404);
+        }
+
+        $tenant->scheduleDeletion((int) $user->id);
+        $tenant->refresh();
+
+        try {
+            $date = $tenant->deletion_scheduled_for?->timezone(config('app.timezone'))->format('d.m.Y');
+            $body = "Вы запланировали удаление компании «{$tenant->name}». "
+                . "Данные будут безвозвратно удалены {$date}.";
+
+            Mail::raw($body, function ($message) use ($user): void {
+                $message->to($user->email)->subject('Запланировано удаление компании');
+            });
+        } catch (\Throwable) {
+            // still saved
+        }
+
+        return back()->with('message', 'Удаление компании запланировано.');
+    }
+
+    /**
+     * POST /settings/cancel-deletion
+     */
+    public function cancelDeletion(): RedirectResponse
+    {
+        Gate::authorize('admin');
+
+        $tenant = Auth::user()->tenant;
+
+        if (!$tenant) {
+            abort(404);
+        }
+
+        $tenant->cancelDeletion();
+
+        return back()->with('message', 'Запланированное удаление отменено.');
     }
 
     /**

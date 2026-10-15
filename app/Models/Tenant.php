@@ -22,14 +22,23 @@ class Tenant extends Model
         'subscription_status',
         'trial_ends_at',
         'subscribed_at',
+        'leads_enabled',
+        'archived_at',
+        'deletion_requested_by',
+        'deletion_requested_at',
+        'deletion_scheduled_for',
     ];
 
     public $timestamps = false;
 
     protected $casts = [
-        'created_at'    => 'datetime',
-        'trial_ends_at' => 'datetime',
-        'subscribed_at' => 'datetime',
+        'created_at'              => 'datetime',
+        'trial_ends_at'           => 'datetime',
+        'subscribed_at'           => 'datetime',
+        'leads_enabled'           => 'boolean',
+        'archived_at'             => 'datetime',
+        'deletion_requested_at'   => 'datetime',
+        'deletion_scheduled_for'  => 'datetime',
     ];
 
     public function users(): HasMany
@@ -134,5 +143,55 @@ class Tenant extends Model
             'subscription_status' => self::STATUS_TRIAL,
             'trial_ends_at'       => $base->copy()->addDays($days),
         ]);
+    }
+
+    public function acceptsLeads(): bool
+    {
+        if (!$this->leads_enabled || $this->archived_at !== null) {
+            return false;
+        }
+
+        $status = $this->effectiveStatus();
+
+        return $status === self::STATUS_TRIAL || $status === self::STATUS_ACTIVE;
+    }
+
+    public function isArchived(): bool
+    {
+        return $this->archived_at !== null;
+    }
+
+    public function scheduleDeletion(int $userId): void
+    {
+        $this->update([
+            'deletion_requested_by'  => $userId,
+            'deletion_requested_at'  => now(),
+            'deletion_scheduled_for' => now()->addDays(30),
+        ]);
+    }
+
+    public function cancelDeletion(): void
+    {
+        $this->update([
+            'deletion_requested_by'  => null,
+            'deletion_requested_at'  => null,
+            'deletion_scheduled_for' => null,
+        ]);
+    }
+
+    public function archive(): void
+    {
+        $updates = ['leads_enabled' => false];
+
+        if ($this->archived_at === null) {
+            $updates['archived_at'] = now();
+        }
+
+        $this->update($updates);
+    }
+
+    public function unarchive(): void
+    {
+        $this->update(['archived_at' => null]);
     }
 }

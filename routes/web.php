@@ -145,6 +145,8 @@ Route::prefix('settings')->name('settings.')->group(function () {
     Route::post('/telegram/test', [TenantSettingController::class, 'testTelegram'])->name('telegram.test');
     Route::post('/digest/send-now', [TenantSettingController::class, 'sendDigestNow'])->name('digest.sendNow');
     Route::post('/reveal-webhook-secret', [TenantSettingController::class, 'revealWebhookSecret'])->name('revealWebhookSecret');
+    Route::post('/schedule-deletion', [TenantSettingController::class, 'scheduleDeletion'])->name('scheduleDeletion')->withoutMiddleware('tenant.writable');
+    Route::post('/cancel-deletion', [TenantSettingController::class, 'cancelDeletion'])->name('cancelDeletion')->withoutMiddleware('tenant.writable');
     Route::post('/regenerate-connection-code', [ConnectionController::class, 'regenerateConnectionCode'])->name('regenerateConnectionCode');
 });
 
@@ -182,4 +184,9 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     Route::patch('/tenants/{tenant}', [AdminTenantController::class, 'update'])->name('tenants.update');
     Route::post('/tenants/{tenant}/activate', [AdminTenantController::class, 'activate'])->name('tenants.activate');
     Route::post('/tenants/{tenant}/extend-trial', [AdminTenantController::class, 'extendTrial'])->name('tenants.extendTrial');
+    Route::post('/tenants/{tenant}/leads-enabled', [AdminTenantController::class, 'setLeadsEnabled'])->name('tenants.leadsEnabled');
+    Route::post('/tenants/{tenant}/archive', [AdminTenantController::class, 'archive'])->name('tenants.archive');
+    Route::post('/tenants/{tenant}/unarchive', [AdminTenantController::class, 'unarchive'])->name('tenants.unarchive');
+    Route::post('/tenants/{tenant}/cancel-deletion', [AdminTenantController::class, 'cancelDeletion'])->name('tenants.cancelDeletion');
+    Route::delete('/tenants/{tenant}', [AdminTenantController::class, 'destroy'])->name('tenants.destroy');
 });
