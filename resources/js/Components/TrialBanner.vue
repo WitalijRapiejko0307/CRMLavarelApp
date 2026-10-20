@@ -5,32 +5,75 @@
     >
         <div
             :class="[
-                'rounded-md px-4 py-3 text-sm border',
+                'rounded-md px-4 py-3 text-sm border flex flex-wrap items-center justify-between gap-2',
                 bannerClass,
             ]"
         >
-            {{ message }}
+            <span>{{ message }}</span>
+            <button
+                v-if="showDismiss"
+                type="button"
+                class="shrink-0 underline underline-offset-2 hover:no-underline"
+                @click="dismissBanner"
+            >
+                Скрыть
+            </button>
         </div>
     </div>
 </template>
 
 <script setup>
 import { computed } from 'vue'
+import { Inertia } from '@inertiajs/inertia'
 import { useSubscription } from '@/composables/useSubscription'
 
-const { readOnly, trialDaysLeft, isTrial } = useSubscription()
+const {
+    readOnly,
+    accessDaysLeft,
+    accessEndsAt,
+    isTrial,
+    bannerDismissed,
+} = useSubscription()
 
-const visible = computed(() => readOnly.value || (isTrial.value && trialDaysLeft.value !== null))
+function formatAccessDate(iso) {
+    if (!iso) return ''
+    const date = new Date(iso)
+    return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+const visible = computed(() => {
+    if (readOnly.value) {
+        return true
+    }
+
+    const days = accessDaysLeft.value
+    if (days === null) {
+        return false
+    }
+
+    if (days > 3) {
+        return false
+    }
+
+    if (bannerDismissed.value) {
+        return false
+    }
+
+    return true
+})
 
 const message = computed(() => {
     if (readOnly.value) {
-        return 'Пробный период закончился. Доступен только просмотр.'
+        return 'Доступен только просмотр.'
     }
 
-    const days = trialDaysLeft.value ?? 0
-    const suffix = days === 1 ? 'день' : days >= 2 && days <= 4 ? 'дня' : 'дней'
+    const date = formatAccessDate(accessEndsAt.value)
 
-    return `Осталось ${days} ${suffix} пробного периода.`
+    if (isTrial.value) {
+        return `Пробный период закончится ${date}.`
+    }
+
+    return `Подписка закончится ${date}.`
 })
 
 const bannerClass = computed(() => {
@@ -38,10 +81,12 @@ const bannerClass = computed(() => {
         return 'bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-800 text-red-800 dark:text-red-200'
     }
 
-    if ((trialDaysLeft.value ?? 0) <= 3) {
-        return 'bg-amber-50 dark:bg-amber-900/30 border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-100'
-    }
-
-    return 'bg-slate-50 dark:bg-slate-900/30 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200'
+    return 'bg-amber-50 dark:bg-amber-900/30 border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-100'
 })
+
+const showDismiss = computed(() => !readOnly.value)
+
+function dismissBanner() {
+    Inertia.post('/subscription/dismiss-banner')
+}
 </script>

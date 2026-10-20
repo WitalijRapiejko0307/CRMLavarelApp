@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Tenant;
 use App\Models\TenantSetting;
 use App\Models\Order;
 use App\Services\FeedbackPromptService;
@@ -69,12 +70,30 @@ class HandleInertiaRequests extends Middleware
             return null;
         }
 
+        $accessEndsAt = $tenant->accessEndsAt();
+
+        $subscriptionStartsAt = null;
+        if ($tenant->subscription_status === Tenant::STATUS_TRIAL
+            && $tenant->subscription_prepaid_at !== null
+            && $tenant->subscribed_at !== null) {
+            $subscriptionStartsAt = $tenant->subscribed_at->toIso8601String();
+        }
+
+        $bannerDismissed = false;
+        if ($user->subscription_banner_dismissed_for !== null && $accessEndsAt !== null) {
+            $bannerDismissed = $user->subscription_banner_dismissed_for->equalTo($accessEndsAt);
+        }
+
         return [
             'status'                 => $tenant->effectiveStatus(),
             'readOnly'               => $tenant->isReadOnly(),
             'trialDaysLeft'          => $tenant->trialDaysLeft(),
             'trialEndsAt'            => $tenant->trial_ends_at?->toIso8601String(),
             'deletion_scheduled_for' => $tenant->deletion_scheduled_for?->toIso8601String(),
+            'accessEndsAt'           => $accessEndsAt?->toIso8601String(),
+            'accessDaysLeft'         => $tenant->accessDaysLeft(),
+            'subscriptionStartsAt'   => $subscriptionStartsAt,
+            'bannerDismissed'        => $bannerDismissed,
         ];
     }
 

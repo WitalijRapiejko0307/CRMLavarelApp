@@ -19,6 +19,7 @@ use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\OrderFeedController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\SubscriptionBannerController;
 use App\Http\Controllers\TenantSettingController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
@@ -135,6 +136,9 @@ Route::prefix('onboarding')->name('onboarding.')->middleware(['auth', 'tenant'])
     Route::post('/welcome-seen', [OnboardingController::class, 'welcomeSeen'])->name('welcomeSeen');
 });
 
+Route::post('/subscription/dismiss-banner', [SubscriptionBannerController::class, 'dismiss'])
+    ->name('subscription.dismissBanner');
+
 // Settings (Phase 5)
 Route::prefix('settings')->name('settings.')->group(function () {
     Route::get('/', [TenantSettingController::class, 'index'])->name('index');
@@ -183,6 +187,7 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     Route::get('/tenants', [AdminTenantController::class, 'index'])->name('tenants.index');
     Route::patch('/tenants/{tenant}', [AdminTenantController::class, 'update'])->name('tenants.update');
     Route::post('/tenants/{tenant}/activate', [AdminTenantController::class, 'activate'])->name('tenants.activate');
+    Route::post('/tenants/{tenant}/extend-subscription', [AdminTenantController::class, 'extendSubscription'])->name('tenants.extendSubscription');
     Route::post('/tenants/{tenant}/extend-trial', [AdminTenantController::class, 'extendTrial'])->name('tenants.extendTrial');
     Route::post('/tenants/{tenant}/leads-enabled', [AdminTenantController::class, 'setLeadsEnabled'])->name('tenants.leadsEnabled');
     Route::post('/tenants/{tenant}/archive', [AdminTenantController::class, 'archive'])->name('tenants.archive');

@@ -3,6 +3,7 @@
 namespace App\Console;
 
 use App\Console\Commands\PurgeScheduledTenants;
+use App\Console\Commands\SubscriptionEndingReminder;
 use App\Console\Commands\SumOrdersCommand;
 use App\Jobs\SyncSalesRenderJob;
 use App\Models\Tenant;
@@ -71,6 +72,12 @@ class Kernel extends ConsoleKernel
             ->dailyAt('03:10')
             ->withoutOverlapping()
             ->name('purge-scheduled-tenants');
+
+        $schedule->command(SubscriptionEndingReminder::class)
+            ->dailyAt('08:00')
+            ->timezone('Europe/Minsk')
+            ->name('subscription-ending-reminder')
+            ->withoutOverlapping();
     }
 
     protected function commands(): void

@@ -105,6 +105,14 @@
                                             type="button"
                                             class="block w-full text-left px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
                                             :disabled="forms[tenant.id].processing"
+                                            @click="extendSubscription(tenant.id)"
+                                        >
+                                            Продлить месяц
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="block w-full text-left px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
+                                            :disabled="forms[tenant.id].processing"
                                             @click="extendTrial(tenant.id)"
                                         >
                                             +14 дней trial
@@ -272,6 +280,14 @@
                                 @click="activateTenant(tenant.id)"
                             >
                                 Активировать
+                            </button>
+                            <button
+                                type="button"
+                                class="block w-full text-left px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 touch-target"
+                                :disabled="forms[tenant.id].processing"
+                                @click="extendSubscription(tenant.id)"
+                            >
+                                Продлить месяц
                             </button>
                             <button
                                 type="button"
@@ -480,6 +496,10 @@ function saveTenant(id) {
 
 function activateTenant(id) {
     withProcessing(id, (opts) => Inertia.post(`/admin/tenants/${id}/activate`, {}, opts))
+}
+
+function extendSubscription(id) {
+    withProcessing(id, (opts) => Inertia.post(`/admin/tenants/${id}/extend-subscription`, {}, opts))
 }
 
 function extendTrial(id) {

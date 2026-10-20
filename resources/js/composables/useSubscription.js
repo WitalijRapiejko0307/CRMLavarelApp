@@ -10,6 +10,10 @@ export function useSubscription() {
     const status = computed(() => subscription.value?.status ?? null)
     const isTrial = computed(() => status.value === 'trial')
     const isExpired = computed(() => status.value === 'expired' || readOnly.value)
+    const accessEndsAt = computed(() => subscription.value?.accessEndsAt ?? null)
+    const accessDaysLeft = computed(() => subscription.value?.accessDaysLeft ?? null)
+    const subscriptionStartsAt = computed(() => subscription.value?.subscriptionStartsAt ?? null)
+    const bannerDismissed = computed(() => subscription.value?.bannerDismissed === true)
 
     return {
         subscription,
@@ -18,5 +22,9 @@ export function useSubscription() {
         status,
         isTrial,
         isExpired,
+        accessEndsAt,
+        accessDaysLeft,
+        subscriptionStartsAt,
+        bannerDismissed,
     }
 }

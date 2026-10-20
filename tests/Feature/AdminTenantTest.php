@@ -72,7 +72,49 @@ class AdminTenantTest extends TestCase
         $response->assertRedirect();
 
         $tenant->refresh();
+        $this->assertSame(Tenant::STATUS_TRIAL, $tenant->subscription_status);
+        $this->assertTrue($tenant->subscription_ends_at->greaterThan($tenant->trial_ends_at));
+        $expectedEnd = $tenant->trial_ends_at->copy()->addMonth();
+        $this->assertTrue($tenant->subscription_ends_at->diffInSeconds($expectedEnd) < 2);
+    }
+
+    public function test_super_admin_can_extend_subscription(): void
+    {
+        $endsAt = now()->addDays(10);
+
+        $tenant = Tenant::create([
+            'name'                  => 'Active Co',
+            'created_at'            => now(),
+            'subscription_status'   => Tenant::STATUS_ACTIVE,
+            'subscribed_at'         => now()->subMonth(),
+            'subscription_ends_at'  => $endsAt,
+        ]);
+
+        $response = $this->actingAs($this->superAdmin())
+            ->post("/admin/tenants/{$tenant->id}/extend-subscription");
+
+        $response->assertRedirect();
+
+        $tenant->refresh();
         $this->assertSame(Tenant::STATUS_ACTIVE, $tenant->subscription_status);
+        $expectedEnd = $endsAt->copy()->addMonth();
+        $this->assertTrue($tenant->subscription_ends_at->diffInSeconds($expectedEnd) < 2);
+    }
+
+    public function test_tenant_admin_cannot_extend_subscription(): void
+    {
+        $tenant = Tenant::create([
+            'name'                  => 'Active Co',
+            'created_at'            => now(),
+            'subscription_status'   => Tenant::STATUS_ACTIVE,
+            'subscribed_at'         => now(),
+            'subscription_ends_at'  => now()->addMonth(),
+        ]);
+
+        $response = $this->actingAs($this->tenantAdmin())
+            ->post("/admin/tenants/{$tenant->id}/extend-subscription");
+
+        $response->assertForbidden();
     }
 
     public function test_super_admin_can_extend_trial(): void

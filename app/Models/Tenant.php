@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -22,6 +23,8 @@ class Tenant extends Model
         'subscription_status',
         'trial_ends_at',
         'subscribed_at',
+        'subscription_ends_at',
+        'subscription_prepaid_at',
         'leads_enabled',
         'archived_at',
         'deletion_requested_by',
@@ -35,6 +38,8 @@ class Tenant extends Model
         'created_at'              => 'datetime',
         'trial_ends_at'           => 'datetime',
         'subscribed_at'           => 'datetime',
+        'subscription_ends_at'    => 'datetime',
+        'subscription_prepaid_at' => 'datetime',
         'leads_enabled'           => 'boolean',
         'archived_at'             => 'datetime',
         'deletion_requested_at'   => 'datetime',
@@ -87,11 +92,50 @@ class Tenant extends Model
         return $this->settings()->where('key', $key)->value('value');
     }
 
+    public function accessEndsAt(): ?Carbon
+    {
+        if ($this->subscription_status === self::STATUS_TRIAL && $this->trial_ends_at) {
+            return $this->trial_ends_at;
+        }
+
+        if ($this->subscription_ends_at) {
+            return $this->subscription_ends_at;
+        }
+
+        return null;
+    }
+
+    public function promotePrepaidTrial(): void
+    {
+        if ($this->subscription_status !== self::STATUS_TRIAL) {
+            return;
+        }
+
+        if ($this->subscription_prepaid_at === null || $this->trial_ends_at === null) {
+            return;
+        }
+
+        if (now()->lt($this->trial_ends_at)) {
+            return;
+        }
+
+        $this->update(['subscription_status' => self::STATUS_ACTIVE]);
+    }
+
     public function effectiveStatus(): string
     {
+        $this->promotePrepaidTrial();
+
         if ($this->subscription_status === self::STATUS_TRIAL
             && $this->trial_ends_at
-            && now()->gte($this->trial_ends_at)) {
+            && now()->gte($this->trial_ends_at)
+            && $this->subscription_prepaid_at === null) {
+            return self::STATUS_EXPIRED;
+        }
+
+        if ($this->subscription_status === self::STATUS_ACTIVE
+            && $this->subscription_ends_at
+            && now()->gte($this->subscription_ends_at)) {
             return self::STATUS_EXPIRED;
         }
 
@@ -124,13 +168,59 @@ class Tenant extends Model
         return max(0, (int) $days);
     }
 
+    public function accessDaysLeft(): ?int
+    {
+        $endsAt = $this->accessEndsAt();
+
+        if ($endsAt === null) {
+            return null;
+        }
+
+        $days = now()->startOfDay()->diffInDays($endsAt->startOfDay(), false);
+
+        return max(0, (int) $days);
+    }
+
     public function activate(): void
     {
+        if ($this->subscription_status === self::STATUS_TRIAL
+            && $this->trial_ends_at
+            && $this->trial_ends_at->isFuture()) {
+            $this->update([
+                'subscription_prepaid_at' => now(),
+                'subscribed_at'         => $this->trial_ends_at,
+                'subscription_ends_at'  => $this->trial_ends_at->copy()->addMonth(),
+            ]);
+
+            return;
+        }
+
         $this->update([
-            'subscription_status' => self::STATUS_ACTIVE,
-            'subscribed_at'       => now(),
-            'trial_ends_at'       => null,
+            'subscription_status'   => self::STATUS_ACTIVE,
+            'subscription_prepaid_at' => now(),
+            'subscribed_at'         => now(),
+            'subscription_ends_at'  => now()->addMonth(),
+            'trial_ends_at'         => null,
         ]);
+    }
+
+    public function extendSubscription(): void
+    {
+        $base = ($this->subscription_ends_at && $this->subscription_ends_at->isFuture())
+            ? $this->subscription_ends_at
+            : now();
+
+        $updates = [
+            'subscription_ends_at'    => $base->copy()->addMonth(),
+            'subscription_status'     => self::STATUS_ACTIVE,
+            'subscription_prepaid_at' => now(),
+        ];
+
+        if ($this->subscribed_at === null) {
+            $updates['subscribed_at'] = $base;
+        }
+
+        $this->update($updates);
     }
 
     public function extendTrial(int $days): void

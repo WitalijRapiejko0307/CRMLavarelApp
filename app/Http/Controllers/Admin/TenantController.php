@@ -40,6 +40,7 @@ class TenantController extends Controller
                 'subscription_status'     => $tenant->effectiveStatus(),
                 'stored_status'           => $tenant->subscription_status,
                 'trial_ends_at'           => $tenant->trial_ends_at?->toIso8601String(),
+                'subscription_ends_at'    => $tenant->subscription_ends_at?->toIso8601String(),
                 'subscribed_at'           => $tenant->subscribed_at?->toIso8601String(),
                 'read_only'               => $tenant->isReadOnly(),
                 'leads_enabled'           => (bool) $tenant->leads_enabled,
@@ -80,6 +81,15 @@ class TenantController extends Controller
         $tenant->activate();
 
         return back()->with('message', 'Тенант активирован.');
+    }
+
+    public function extendSubscription(Tenant $tenant): RedirectResponse
+    {
+        Gate::authorize('manage-tenants');
+
+        $tenant->extendSubscription();
+
+        return back()->with('message', 'Подписка продлена на месяц.');
     }
 
     public function extendTrial(Request $request, Tenant $tenant): RedirectResponse

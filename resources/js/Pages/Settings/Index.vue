@@ -20,6 +20,17 @@
 
         <div class="max-w-3xl mx-auto space-y-6">
 
+            <div
+                v-if="showSubscriptionAccess"
+                class="rounded-md border border-gray-200 dark:border-gray-700 px-4 py-3 text-sm text-gray-800 dark:text-gray-200"
+            >
+                <p v-if="accessEndsAt">{{ accessUntilLabel }}</p>
+                <p v-else>Срок подписки не ограничен</p>
+                <p v-if="subscriptionStartsAt" class="text-muted mt-1">
+                    {{ subscriptionStartsLabel }}
+                </p>
+            </div>
+
             <!-- Appearance -->
             <div class="card">
                 <h2 class="section-title mb-4 pb-3 border-b border-gray-100 dark:border-gray-700">
@@ -641,7 +652,7 @@ import { useSubscription } from '@/composables/useSubscription'
 import { useOnboarding } from '@/composables/useOnboarding'
 import { apiFetch } from '@/utils/api'
 
-const { readOnly } = useSubscription()
+const { readOnly, accessEndsAt, subscriptionStartsAt } = useSubscription()
 const { dismissed, canSkipOptional, visible, currentStep } = useOnboarding()
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -657,6 +668,24 @@ const props = defineProps({
 })
 
 const page = usePage()
+const userRole = computed(() => page.props.value.auth?.user?.role ?? '')
+const showSubscriptionAccess = computed(() => userRole.value === 'admin' || userRole.value === 'manager')
+
+function formatSubscriptionDate(iso) {
+    if (!iso) return ''
+    return new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+const accessUntilLabel = computed(() => {
+    const date = formatSubscriptionDate(accessEndsAt.value)
+    return date ? `Доступ до ${date}` : ''
+})
+
+const subscriptionStartsLabel = computed(() => {
+    const date = formatSubscriptionDate(subscriptionStartsAt.value)
+    return date ? `Подписка начнётся ${date}` : ''
+})
+
 const companyName = computed(() => page.props.value.tenant?.name ?? '')
 const deletionScheduledFor = computed(() => page.props.value.deletionScheduledFor ?? null)
 const canManageCompanyDeletion = computed(() =>

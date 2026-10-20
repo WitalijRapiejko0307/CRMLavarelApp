@@ -24,6 +24,7 @@ class User extends Authenticatable
         'onboarding_dismissed_at',
         'onboarding_skip_optional_at',
         'onboarding_welcome_seen_at',
+        'subscription_banner_dismissed_for',
     ];
 
     protected $hidden = [
@@ -37,6 +38,7 @@ class User extends Authenticatable
         'onboarding_dismissed_at'      => 'datetime',
         'onboarding_skip_optional_at'  => 'datetime',
         'onboarding_welcome_seen_at'   => 'datetime',
+        'subscription_banner_dismissed_for' => 'datetime',
     ];
 
     public function tenant()
