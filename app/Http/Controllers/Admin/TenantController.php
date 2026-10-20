@@ -41,6 +41,9 @@ class TenantController extends Controller
                 'stored_status'           => $tenant->subscription_status,
                 'trial_ends_at'           => $tenant->trial_ends_at?->toIso8601String(),
                 'subscription_ends_at'    => $tenant->subscription_ends_at?->toIso8601String(),
+                'access_until'            => ($tenant->subscription_status === Tenant::STATUS_TRIAL
+                    ? $tenant->trial_ends_at
+                    : $tenant->subscription_ends_at)?->toIso8601String(),
                 'subscribed_at'           => $tenant->subscribed_at?->toIso8601String(),
                 'read_only'               => $tenant->isReadOnly(),
                 'leads_enabled'           => (bool) $tenant->leads_enabled,
@@ -63,13 +66,20 @@ class TenantController extends Controller
 
         $data = $request->validate([
             'subscription_status' => ['required', 'in:trial,active,expired,suspended'],
-            'trial_ends_at'       => ['nullable', 'date'],
+            'access_until'        => ['nullable', 'date'],
         ]);
 
-        $tenant->update([
+        $updates = [
             'subscription_status' => $data['subscription_status'],
-            'trial_ends_at'       => $data['trial_ends_at'] ?? null,
-        ]);
+        ];
+
+        if ($data['subscription_status'] === Tenant::STATUS_TRIAL) {
+            $updates['trial_ends_at'] = $data['access_until'] ?? null;
+        } elseif ($data['subscription_status'] === Tenant::STATUS_ACTIVE) {
+            $updates['subscription_ends_at'] = $data['access_until'] ?? null;
+        }
+
+        $tenant->update($updates);
 
         return back()->with('message', 'Подписка обновлена.');
     }

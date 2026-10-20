@@ -43,6 +43,69 @@ class AdminTenantTest extends TestCase
         ]);
     }
 
+    public function test_super_admin_sets_access_until_on_trial_and_active(): void
+    {
+        $trial = Tenant::create([
+            'name'                => 'Trial Co',
+            'created_at'          => now(),
+            'subscription_status' => Tenant::STATUS_TRIAL,
+            'trial_ends_at'       => now()->addDays(2),
+        ]);
+        $active = Tenant::create([
+            'name'                  => 'Active Co',
+            'created_at'            => now(),
+            'subscription_status'   => Tenant::STATUS_ACTIVE,
+            'subscription_ends_at'  => now()->addDays(10),
+            'subscribed_at'         => now(),
+        ]);
+        $admin = $this->superAdmin();
+        $trialUntil = now()->addDays(5)->format('Y-m-d H:i:s');
+        $activeUntil = now()->addDays(20)->format('Y-m-d H:i:s');
+
+        $this->actingAs($admin)
+            ->patch("/admin/tenants/{$trial->id}", [
+                'subscription_status' => Tenant::STATUS_TRIAL,
+                'access_until'        => $trialUntil,
+            ])
+            ->assertRedirect();
+
+        $this->actingAs($admin)
+            ->patch("/admin/tenants/{$active->id}", [
+                'subscription_status' => Tenant::STATUS_ACTIVE,
+                'access_until'        => $activeUntil,
+            ])
+            ->assertRedirect();
+
+        $trial->refresh();
+        $active->refresh();
+        $this->assertSame($trialUntil, $trial->trial_ends_at->format('Y-m-d H:i:s'));
+        $this->assertNull($trial->subscription_ends_at);
+        $this->assertSame($activeUntil, $active->subscription_ends_at->format('Y-m-d H:i:s'));
+    }
+
+    public function test_expired_status_update_does_not_change_access_dates(): void
+    {
+        $ends = now()->addDays(4);
+        $tenant = Tenant::create([
+            'name'                  => 'Ending Co',
+            'created_at'            => now(),
+            'subscription_status'   => Tenant::STATUS_ACTIVE,
+            'subscription_ends_at'  => $ends,
+            'subscribed_at'         => now(),
+        ]);
+
+        $this->actingAs($this->superAdmin())
+            ->patch("/admin/tenants/{$tenant->id}", [
+                'subscription_status' => Tenant::STATUS_EXPIRED,
+                'access_until'        => now()->addYear()->format('Y-m-d H:i:s'),
+            ])
+            ->assertRedirect();
+
+        $tenant->refresh();
+        $this->assertSame(Tenant::STATUS_EXPIRED, $tenant->subscription_status);
+        $this->assertTrue($tenant->subscription_ends_at->diffInSeconds($ends) < 2);
+    }
+
     public function test_super_admin_can_view_tenants_panel(): void
     {
         $response = $this->actingAs($this->superAdmin())->get('/admin/tenants');

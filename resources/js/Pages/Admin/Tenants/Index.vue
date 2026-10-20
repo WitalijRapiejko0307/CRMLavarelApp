@@ -37,7 +37,7 @@
                                 <th class="py-3 pr-4">Компания</th>
                                 <th class="py-3 pr-4">Статус</th>
                                 <th class="py-3 pr-4">Заявки</th>
-                                <th class="py-3 pr-4">Trial до</th>
+                                <th class="py-3 pr-4">Активен до</th>
                                 <th class="py-3 pr-4">Admin</th>
                                 <th class="py-3 pr-4">Пользователи</th>
                                 <th class="py-3 pr-4">Заказы</th>
@@ -69,9 +69,10 @@
                                 </td>
                                 <td class="py-3 pr-4">
                                     <input
-                                        v-model="forms[tenant.id].trial_ends_at"
+                                        v-model="forms[tenant.id].access_until"
                                         type="datetime-local"
                                         class="w-full max-w-[220px]"
+                                        :disabled="isAccessDateLocked(tenant.id)"
                                         @change="saveTenant(tenant.id)"
                                     />
                                 </td>
@@ -237,11 +238,12 @@
                             </select>
                         </div>
                         <div>
-                            <label class="label">Trial до</label>
+                            <label class="label">Активен до</label>
                             <input
-                                v-model="forms[tenant.id].trial_ends_at"
+                                v-model="forms[tenant.id].access_until"
                                 type="datetime-local"
                                 class="w-full mt-1"
+                                :disabled="isAccessDateLocked(tenant.id)"
                                 @change="saveTenant(tenant.id)"
                             />
                         </div>
@@ -440,7 +442,7 @@ const forms = reactive(Object.fromEntries(
         tenant.id,
         {
             subscription_status: tenant.subscription_status,
-            trial_ends_at: toLocalInput(tenant.trial_ends_at),
+            access_until: toLocalInput(tenant.access_until),
             processing: false,
         },
     ])
@@ -485,12 +487,20 @@ function withProcessing(id, fn) {
     })
 }
 
+function isAccessDateLocked(id) {
+    const status = forms[id].subscription_status
+    return status === 'expired' || status === 'suspended'
+}
+
 function saveTenant(id) {
+    const payload = {
+        subscription_status: forms[id].subscription_status,
+    }
+    if (!isAccessDateLocked(id)) {
+        payload.access_until = forms[id].access_until || null
+    }
     withProcessing(id, (opts) => {
-        Inertia.patch(`/admin/tenants/${id}`, {
-            subscription_status: forms[id].subscription_status,
-            trial_ends_at: forms[id].trial_ends_at || null,
-        }, opts)
+        Inertia.patch(`/admin/tenants/${id}`, payload, opts)
     })
 }
 
