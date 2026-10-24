@@ -144,6 +144,7 @@ Route::prefix('settings')->name('settings.')->group(function () {
     Route::get('/', [TenantSettingController::class, 'index'])->name('index');
     Route::patch('/theme', [TenantSettingController::class, 'updateTheme'])->name('theme');
     Route::post('/', [TenantSettingController::class, 'update'])->name('update');
+    Route::post('/order-columns', [TenantSettingController::class, 'updateOrderColumns'])->name('orderColumns');
     Route::post('/generate-webhook-secret', [TenantSettingController::class, 'generateWebhookSecret'])->name('generateWebhookSecret');
     Route::post('/europochta/refresh-stores', [TenantSettingController::class, 'refreshEuropochtaStores'])->name('europochta.refreshStores');
     Route::post('/telegram/test', [TenantSettingController::class, 'testTelegram'])->name('telegram.test');

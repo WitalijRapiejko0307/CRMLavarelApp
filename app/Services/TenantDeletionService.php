@@ -42,6 +42,7 @@ class TenantDeletionService
             $this->deleteByTenantId('mail_batches', $tenantId);
             $this->deleteByTenantId('products', $tenantId);
             $this->deleteByTenantId('tenant_settings', $tenantId);
+            $this->deleteByTenantId('tenant_order_columns', $tenantId);
             $this->deleteByTenantId('users', $tenantId);
 
             DB::table('tenants')->where('id', $tenantId)->delete();

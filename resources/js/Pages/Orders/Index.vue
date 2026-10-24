@@ -416,6 +416,7 @@ const props = defineProps({
     connectedStores:     { type: Array, default: () => [] },
     orderHandlers:       { type: Object, default: () => ({}) },
     roundRobinEnabled:   { type: Boolean, default: false },
+    orderListColumns:    { type: Array, default: () => [] },
 })
 
 const { readOnly } = useSubscription()
@@ -935,8 +936,80 @@ function formatGoods(goods, quantities) {
     return `${goods[0]} +${goods.length - 1}`
 }
 
+// --- Tenant extra list columns (store only) ---
+const ORDER_LIST_COLUMN_LABELS = {
+    city: 'Город',
+    street: 'Улица',
+    comment: 'Комментарий',
+    source: 'Источник',
+    prices: 'Цена',
+    order_total: 'Сумма',
+    upsell: 'Upsell',
+    cross_sell: 'Cross-sell',
+    poste_restante: 'До востребования',
+}
+
+const BASE_ORDER_LIST_FIELDS = new Set(['city'])
+
+function formatPricesShort(prices) {
+    if (!prices || prices.length === 0) return '—'
+    return prices.map(p => {
+        const n = Number(p)
+        return Number.isFinite(n) ? n.toFixed(2) : '—'
+    }).join(', ')
+}
+
+function formatOrderTotal(value) {
+    if (value === null || value === undefined || value === '') return '—'
+    const n = Number(value)
+    if (!Number.isFinite(n)) return '—'
+    return n.toFixed(2)
+}
+
+function orderListColumnCell(field, row) {
+    const muted = 'text-gray-600 dark:text-gray-400'
+    switch (field) {
+        case 'prices':
+            return h('span', { class: muted + ' text-xs whitespace-nowrap' }, formatPricesShort(row.prices))
+        case 'order_total':
+            return h('span', { class: muted + ' whitespace-nowrap font-mono text-xs' }, formatOrderTotal(row.order_total))
+        case 'poste_restante':
+            if (row.poste_restante) {
+                return h('span', {
+                    class: 'inline-flex items-center text-xs font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 rounded-full',
+                }, 'Да')
+            }
+            return h('span', { class: 'text-gray-400 dark:text-gray-500' }, '—')
+        case 'comment':
+        case 'upsell':
+        case 'cross_sell':
+        case 'source':
+        case 'street':
+        case 'city':
+            return h('span', { class: muted + ' truncate max-w-xs block' }, row[field] || '—')
+        default:
+            return h('span', { class: muted }, row[field] ?? '—')
+    }
+}
+
 // --- TanStack Table ---
 const columnHelper = createColumnHelper()
+
+function appendTenantOrderListColumns(cols) {
+    if (props.isCallCenter || !props.orderListColumns?.length) return
+
+    const seen = new Set(BASE_ORDER_LIST_FIELDS)
+    for (const field of props.orderListColumns) {
+        if (seen.has(field)) continue
+        seen.add(field)
+        const label = ORDER_LIST_COLUMN_LABELS[field] ?? field
+        cols.push(columnHelper.display({
+            id: `tenant_col_${field}`,
+            header: label,
+            cell: info => orderListColumnCell(field, info.row.original),
+        }))
+    }
+}
 
 const columns = computed(() => {
     void selectedIds.value.size
@@ -1096,6 +1169,8 @@ const columns = computed(() => {
             }),
         )
     }
+
+    appendTenantOrderListColumns(cols)
 
     cols.push(columnHelper.display({
         id: 'actions',

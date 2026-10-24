@@ -87,6 +87,27 @@ class OrderStatusesTest extends TestCase
         $this->assertContains('Подтвержден', Order::NON_DELETABLE_STATUSES);
     }
 
+    public function test_courier_handoff_status_is_present_and_not_tracking(): void
+    {
+        $statuses = Order::STATUSES;
+
+        $this->assertContains('Передан курьеру', $statuses);
+        $this->assertNotContains('Передан курьеру', Order::TRACKING_STATUSES);
+        $this->assertNotContains('Передан курьеру', Order::CALL_CENTER_STATUSES);
+        $this->assertContains('Передан курьеру', Order::NON_DELETABLE_STATUSES);
+        $this->assertContains('Передан курьеру', Order::BULK_CONFIRM_STATUSES);
+
+        $shipped = array_search('Отправлено', $statuses, true);
+        $handoff = array_search('Передан курьеру', $statuses, true);
+        $atOffice = array_search('В отделении', $statuses, true);
+
+        $this->assertNotFalse($shipped);
+        $this->assertNotFalse($handoff);
+        $this->assertNotFalse($atOffice);
+        $this->assertGreaterThan($shipped, $handoff);
+        $this->assertLessThan($atOffice, $handoff);
+    }
+
     public function test_call_statuses_follow_perzvonit_before_zakazat(): void
     {
         $statuses = Order::STATUSES;

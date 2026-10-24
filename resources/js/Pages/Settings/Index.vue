@@ -56,6 +56,75 @@
                 </div>
             </div>
 
+            <!-- Store: extra columns on orders list -->
+            <div v-if="canViewSettings && isStore" class="card">
+                <h2 class="section-title mb-4 pb-3 border-b border-gray-100 dark:border-gray-700">
+                    Колонки в списке заказов
+                </h2>
+                <p class="text-sm text-muted mb-4">
+                    Дополнительные поля из карточки заказа. Порядок сверху вниз — слева направо в таблице.
+                </p>
+                <div v-if="orderColumnOptions.length" class="space-y-4">
+                    <div class="flex flex-wrap gap-x-4 gap-y-2">
+                        <label
+                            v-for="opt in orderColumnOptions"
+                            :key="opt.key"
+                            class="flex items-center gap-2 text-sm cursor-pointer"
+                        >
+                            <input
+                                type="checkbox"
+                                class="rounded border-gray-300 dark:border-gray-600"
+                                :checked="orderColumnsSelected.includes(opt.key)"
+                                :disabled="!canEditSettings || readOnly"
+                                @change="toggleOrderColumn(opt.key)"
+                            />
+                            <span class="text-gray-700 dark:text-gray-300">{{ opt.label }}</span>
+                        </label>
+                    </div>
+                    <div v-if="orderColumnsSelected.length" class="border border-gray-100 dark:border-gray-700 rounded-md divide-y divide-gray-100 dark:divide-gray-700">
+                        <div
+                            v-for="(key, index) in orderColumnsSelected"
+                            :key="key"
+                            class="flex items-center justify-between gap-2 px-3 py-2 text-sm"
+                        >
+                            <span class="text-gray-800 dark:text-gray-200">
+                                {{ orderColumnLabel(key) }}
+                            </span>
+                            <div v-if="canEditSettings && !readOnly" class="flex gap-1 shrink-0">
+                                <button
+                                    type="button"
+                                    class="btn-secondary btn-sm px-2"
+                                    :disabled="index === 0 || savingOrderColumns"
+                                    title="Выше"
+                                    @click="moveOrderColumn(index, -1)"
+                                >
+                                    ↑
+                                </button>
+                                <button
+                                    type="button"
+                                    class="btn-secondary btn-sm px-2"
+                                    :disabled="index === orderColumnsSelected.length - 1 || savingOrderColumns"
+                                    title="Ниже"
+                                    @click="moveOrderColumn(index, 1)"
+                                >
+                                    ↓
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-if="canEditSettings" class="flex items-center gap-3">
+                        <button
+                            type="button"
+                            class="btn-primary btn-sm"
+                            :disabled="readOnly || savingOrderColumns"
+                            @click="saveOrderColumns"
+                        >
+                            {{ savingOrderColumns ? 'Сохранение…' : 'Сохранить колонки' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Store: connect to call center -->
             <div v-if="canViewSettings && isStore" class="card">
                 <button
@@ -665,6 +734,8 @@ const props = defineProps({
     theme:             { type: String, default: 'system' },
     connectionData:    { type: Object, default: () => ({}) },
     webhook_url:       { type: String, default: '' },
+    orderListColumns:  { type: Array, default: () => [] },
+    orderColumnOptions:{ type: Array, default: () => [] },
 })
 
 const page = usePage()
@@ -702,6 +773,43 @@ const pendingConnections = computed(() => props.connectionData?.pending_connecti
 const activeConnections = computed(() => props.connectionData?.active_connections ?? [])
 const activeConnection = computed(() => props.connectionData?.active_connection ?? null)
 const pendingConnection = computed(() => props.connectionData?.pending_connection ?? null)
+
+const orderColumnsSelected = ref([...(props.orderListColumns ?? [])])
+const savingOrderColumns = ref(false)
+
+function orderColumnLabel(key) {
+    const opt = props.orderColumnOptions.find(o => o.key === key)
+    return opt?.label ?? key
+}
+
+function toggleOrderColumn(key) {
+    if (!props.canEditSettings || readOnly.value) return
+    const idx = orderColumnsSelected.value.indexOf(key)
+    if (idx === -1) {
+        orderColumnsSelected.value = [...orderColumnsSelected.value, key]
+    } else {
+        orderColumnsSelected.value = orderColumnsSelected.value.filter(k => k !== key)
+    }
+}
+
+function moveOrderColumn(index, delta) {
+    if (!props.canEditSettings || readOnly.value) return
+    const next = index + delta
+    if (next < 0 || next >= orderColumnsSelected.value.length) return
+    const list = [...orderColumnsSelected.value]
+    const [item] = list.splice(index, 1)
+    list.splice(next, 0, item)
+    orderColumnsSelected.value = list
+}
+
+function saveOrderColumns() {
+    if (!props.canEditSettings || readOnly.value || savingOrderColumns.value) return
+    savingOrderColumns.value = true
+    Inertia.post('/settings/order-columns', { fields: orderColumnsSelected.value }, {
+        preserveState: true,
+        onFinish: () => { savingOrderColumns.value = false },
+    })
+}
 
 const connectionCodeInput = ref('')
 const includeExistingActive = ref(false)

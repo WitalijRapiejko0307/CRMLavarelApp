@@ -32,6 +32,7 @@ class Order extends Model
         'Оформлен',
         'Передан на почту',
         'Отправлено',
+        'Передан курьеру',
         'В отделении',
         'Возврат в пути',
         'Забрать деньги',
@@ -128,6 +129,7 @@ class Order extends Model
         'Оформлен',
         'Передан на почту',
         'Отправлено',
+        'Передан курьеру',
         'В отделении',
         'Возврат в пути',
         'Забрать деньги',
@@ -143,9 +145,16 @@ class Order extends Model
     /** Statuses that require confirmation before bulk update (side effects in OrderObserver). */
     public const BULK_CONFIRM_STATUSES = [
         'Отправлено',
+        'Передан курьеру',
         'Возврат',
         'Завершен',
     ];
+
+    /** Statuses before goods leave the warehouse (call workflow + mail prep). */
+    public static function preShipmentStatuses(): array
+    {
+        return array_merge(self::ACTIVE_STATUSES, ['Оформлен', 'Передан на почту']);
+    }
 
     public const FUNNEL_EXCLUDE_REASONS = [
         'duplicate' => 'дубль',
@@ -285,6 +294,24 @@ class Order extends Model
     {
         $goods = $this->goods ?? [];
         return count($goods) > 0 ? $goods[0] : '—';
+    }
+
+    /**
+     * Sum of line quantity × price (for order list column).
+     */
+    public function computedOrderTotal(): float
+    {
+        $quantities = $this->quantities ?? [];
+        $prices     = $this->prices ?? [];
+        $count      = max(count($quantities), count($prices));
+        $total      = 0.0;
+
+        for ($i = 0; $i < $count; $i++) {
+            $qty = (float) ($quantities[$i] ?? 1);
+            $total += $qty * (float) ($prices[$i] ?? 0);
+        }
+
+        return round($total, 2);
     }
 
     /**

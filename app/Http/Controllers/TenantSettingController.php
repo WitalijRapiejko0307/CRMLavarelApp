@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Exceptions\TelegramException;
 use App\Jobs\SendDailyDigestJob;
 use App\Models\TenantSetting;
+use App\Support\TenantOrderListColumns;
 use App\Services\ConnectionService;
 use App\Services\EvropostStoreSearchService;
 use App\Services\SmsService;
@@ -242,6 +243,12 @@ class TenantSettingController extends Controller
             'theme'            => Auth::user()->theme ?? 'system',
             'connectionData'   => $connectionData,
             'webhook_url'      => $canView ? static::webhookUrl() : null,
+            'orderListColumns' => $canView && $tenant->isStore()
+                ? TenantOrderListColumns::fieldsForTenant($tenantId)
+                : [],
+            'orderColumnOptions' => $canView && $tenant->isStore()
+                ? TenantOrderListColumns::optionsForUi()
+                : [],
         ]);
     }
 
@@ -356,6 +363,32 @@ class TenantSettingController extends Controller
         }
 
         return back()->with('message', 'Настройки сохранены.');
+    }
+
+    /**
+     * POST /settings/order-columns
+     * Store admin: extra columns on the orders list.
+     */
+    public function updateOrderColumns(Request $request): RedirectResponse
+    {
+        Gate::authorize('manage-settings');
+
+        $tenant = Auth::user()->tenant;
+        if (!$tenant || !$tenant->isStore()) {
+            abort(404);
+        }
+
+        $validated = $request->validate([
+            'fields'   => ['present', 'array'],
+            'fields.*' => TenantOrderListColumns::fieldValidationRules(),
+        ]);
+
+        TenantOrderListColumns::saveForTenant(
+            (int) Auth::user()->tenant_id,
+            $validated['fields'] ?? [],
+        );
+
+        return back()->with('message', 'Колонки списка заказов сохранены.');
     }
 
     /**

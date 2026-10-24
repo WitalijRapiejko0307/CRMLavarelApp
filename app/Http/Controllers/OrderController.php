@@ -18,6 +18,7 @@ use App\Support\CallCenterOrderQuery;
 use App\Support\CsvOrderLineParser;
 use App\Support\OrderIndexSort;
 use App\Support\OrderSegment;
+use App\Support\TenantOrderListColumns;
 use App\Support\CsvOrderReader;
 use App\Support\PhoneNormalizer;
 use App\Support\ProductLinkResolver;
@@ -353,10 +354,25 @@ class OrderController extends Controller
         [$sort, $dir] = OrderIndexSort::resolve($request->input('sort'), $request->input('dir'));
         OrderIndexSort::apply($query, $sort, $dir);
 
+        $orderListColumns = $tenant->isCallCenter()
+            ? []
+            : TenantOrderListColumns::fieldsForTenant((int) $tenant->id);
+
         $orders = $query
             ->with('mailBatch:id,batch_id')
             ->paginate(50)
             ->withQueryString();
+
+        if (
+            !$tenant->isCallCenter()
+            && in_array('order_total', $orderListColumns, true)
+        ) {
+            $orders->through(function (Order $order) {
+                $order->setAttribute('order_total', $order->computedOrderTotal());
+
+                return $order;
+            });
+        }
 
         $orderHandlers = $tenant->isCallCenter()
             ? $this->orderHandlers->handlersForOrders(collect($orders->items())->pluck('id'))
@@ -387,6 +403,7 @@ class OrderController extends Controller
             'orderHandlers'   => $orderHandlers,
             'roundRobinEnabled' => $tenant->isCallCenter()
                 && CallCenterOrderQuery::roundRobinEnabled($tenant->id),
+            'orderListColumns' => $orderListColumns,
         ]);
     }
 
