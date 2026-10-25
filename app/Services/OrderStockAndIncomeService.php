@@ -37,36 +37,6 @@ class OrderStockAndIncomeService
         $this->handleIncome($order, $fromStatus, $toStatus, $eventAt);
     }
 
-    public function aggregateSoldAmountForBelpostComplete(Order $order): void
-    {
-        if (!in_array($order->delivery_type, ['belpost', 'europochta'], true)) {
-            return;
-        }
-
-        $goods      = $order->goods ?? [];
-        $quantities = $order->quantities ?? [];
-        $prices     = $order->prices ?? [];
-
-        foreach ($goods as $index => $goodName) {
-            $qty    = (int) ($quantities[$index] ?? 1);
-            $price  = (float) ($prices[$index] ?? 0);
-            $amount = round($qty * $price, 2);
-
-            $product = Product::withoutGlobalScopes()
-                ->where('tenant_id', $order->tenant_id)
-                ->where('name', $goodName)
-                ->first();
-
-            if (!$product) {
-                Log::warning('OrderStockAndIncomeService: product not found for sold_amount', ['name' => $goodName]);
-                continue;
-            }
-
-            $product->sold_amount = round($product->sold_amount + $amount, 2);
-            $product->save();
-        }
-    }
-
     private function handleIncome(Order $order, ?string $fromStatus, string $toStatus, Carbon $eventAt): void
     {
         if ($this->isMoneyStatus($toStatus) && !$this->isMoneyStatus($fromStatus)) {
@@ -175,8 +145,7 @@ class OrderStockAndIncomeService
             $deductQty = $qty - $currentNet;
             $this->recordMovement($order, $product->id, $deductQty, OrderStockMovement::DIRECTION_OUT, $reason);
 
-            $product->stock       = max(0, $product->stock - $deductQty);
-            $product->sold_count += $deductQty;
+            $product->stock = max(0, $product->stock - $deductQty);
             $product->save();
 
             $netByProduct[$product->id] = $currentNet + $deductQty;
@@ -199,8 +168,7 @@ class OrderStockAndIncomeService
 
             $this->recordMovement($order, $productId, $currentNet, OrderStockMovement::DIRECTION_IN, $reason);
 
-            $product->stock       = max(0, $product->stock + $currentNet);
-            $product->sold_count  = max(0, $product->sold_count - $currentNet);
+            $product->stock = max(0, $product->stock + $currentNet);
             $product->save();
         }
     }
@@ -275,11 +243,49 @@ class OrderStockAndIncomeService
             'description' => $order->id . ' ' . $order->full_name,
             'date'        => $eventAt->toDateString(),
         ]);
+
+        $this->adjustProductSales($order, 1);
     }
 
     private function deleteAutomaticIncome(Order $order): void
     {
-        Income::withoutGlobalScopes()->where('order_id', $order->id)->delete();
+        $deleted = Income::withoutGlobalScopes()->where('order_id', $order->id)->delete();
+        if ($deleted > 0) {
+            $this->adjustProductSales($order, -1);
+        }
+    }
+
+    /**
+     * Sold count and revenue follow automatic income: once on first money status, reversed when that row is removed.
+     */
+    private function adjustProductSales(Order $order, int $sign): void
+    {
+        $goods      = $order->goods ?? [];
+        $quantities = $order->quantities ?? [];
+        $prices     = $order->prices ?? [];
+
+        foreach ($goods as $index => $goodName) {
+            if ($goodName === null || $goodName === '') {
+                continue;
+            }
+
+            $qty   = (int) ($quantities[$index] ?? 1);
+            $price = (float) ($prices[$index] ?? 0);
+
+            $product = Product::withoutGlobalScopes()
+                ->where('tenant_id', $order->tenant_id)
+                ->where('name', $goodName)
+                ->first();
+
+            if (!$product) {
+                Log::warning('OrderStockAndIncomeService: product not found for sold stats', ['name' => $goodName]);
+                continue;
+            }
+
+            $product->sold_count  = max(0, $product->sold_count + ($sign * $qty));
+            $product->sold_amount = max(0, round($product->sold_amount + ($sign * $qty * $price), 2));
+            $product->save();
+        }
     }
 
     private function orderTotal(Order $order): float

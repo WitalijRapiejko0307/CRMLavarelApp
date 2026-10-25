@@ -46,9 +46,5 @@ class OrderObserver
         }
 
         $this->stockAndIncome->handleStatusChange($order, $fromStatus, $toStatus, $eventAt);
-
-        if ($toStatus === 'Завершен' && in_array($order->delivery_type, ['belpost', 'europochta'], true)) {
-            $this->stockAndIncome->aggregateSoldAmountForBelpostComplete($order);
-        }
     }
 }

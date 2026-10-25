@@ -17,3 +17,5 @@ yarn-error.log
 /.idea
 /.vscode
 gas/belpost-tracking-proxy/.clasp.json
+
+PULL.md

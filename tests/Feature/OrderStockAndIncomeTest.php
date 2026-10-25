@@ -56,6 +56,9 @@ class OrderStockAndIncomeTest extends TestCase
         $income = Income::withoutGlobalScopes()->where('order_id', $order->id)->first();
         $this->assertNotNull($income);
         $this->assertSame(31.0, $income->amount);
+        $product = Product::withoutGlobalScopes()->where('name', 'Крем')->where('tenant_id', $order->tenant_id)->first();
+        $this->assertSame(2, $product->sold_count);
+        $this->assertSame(31.0, $product->sold_amount);
         $this->assertSame('заказ', $income->source);
         $this->assertSame($order->id . ' ' . $order->full_name, $income->description);
     }
@@ -106,6 +109,8 @@ class OrderStockAndIncomeTest extends TestCase
 
         $order->update(['status' => 'Отправлено']);
         $this->assertSame(8, $product->fresh()->stock);
+        $this->assertSame(0, $product->fresh()->sold_count);
+        $this->assertSame(0.0, (float) $product->fresh()->sold_amount);
 
         $order->update(['status' => 'В отделении']);
         $this->assertSame(8, $product->fresh()->stock);
@@ -133,6 +138,8 @@ class OrderStockAndIncomeTest extends TestCase
         $order->update(['status' => 'Завершен']);
         $this->assertNotNull(Income::withoutGlobalScopes()->where('order_id', $order->id)->first());
         $this->assertSame(8, $product->fresh()->stock);
+        $this->assertSame(2, $product->fresh()->sold_count);
+        $this->assertSame(31.0, (float) $product->fresh()->sold_amount);
     }
 
     public function test_courier_complete_to_handoff_removes_income_keeps_stock(): void
@@ -145,6 +152,8 @@ class OrderStockAndIncomeTest extends TestCase
 
         $this->assertNull(Income::withoutGlobalScopes()->where('order_id', $order->id)->first());
         $this->assertSame(8, $product->fresh()->stock);
+        $this->assertSame(0, $product->fresh()->sold_count);
+        $this->assertSame(0.0, (float) $product->fresh()->sold_amount);
     }
 
     public function test_postal_jump_to_zavrshen_deducts_once(): void
