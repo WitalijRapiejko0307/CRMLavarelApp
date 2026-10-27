@@ -14,7 +14,9 @@ class LoginController extends Controller
 {
     public function showLoginForm(): Response
     {
-        return Inertia::render('Auth/Login');
+        return Inertia::render('Auth/Login', [
+            'trialDays' => (int) config('subscription.trial_days'),
+        ]);
     }
 
     public function login(Request $request)

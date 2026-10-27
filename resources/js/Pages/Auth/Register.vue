@@ -7,6 +7,7 @@
             </div>
 
             <div class="bg-white dark:bg-gray-800 rounded-xl shadow-md dark:shadow-none dark:border dark:border-gray-700 p-8">
+                <AuthTrialNotice :trial-days="trialDays" />
                 <h2 class="text-xl font-semibold text-gray-800 dark:text-gray-100 mb-6">Создать аккаунт</h2>
 
                 <form @submit.prevent="submit" class="space-y-5">
@@ -123,6 +124,11 @@
 
 <script setup>
 import { Link, useForm } from '@inertiajs/inertia-vue3'
+import AuthTrialNotice from '@/Components/AuthTrialNotice.vue'
+
+defineProps({
+    trialDays: { type: Number, required: true },
+})
 
 const form = useForm({
     company_name: '',

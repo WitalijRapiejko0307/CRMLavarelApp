@@ -18,7 +18,9 @@ class RegisterController extends Controller
 {
     public function showRegistrationForm(): Response
     {
-        return Inertia::render('Auth/Register');
+        return Inertia::render('Auth/Register', [
+            'trialDays' => (int) config('subscription.trial_days'),
+        ]);
     }
 
     public function register(Request $request)
