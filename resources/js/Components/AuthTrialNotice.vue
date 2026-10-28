@@ -1,5 +1,5 @@
 <template>
-    <p class="mb-6 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-sm text-indigo-800 dark:border-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-200">
+    <p class="-mx-8 -mt-8 mb-6 rounded-t-xl bg-indigo-50 px-8 py-3 text-center text-sm font-medium uppercase tracking-wide text-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-200">
         {{ trialDays }} {{ daysWord }} без оплаты. Карта не нужна.
     </p>
 </template>

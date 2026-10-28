@@ -107,7 +107,7 @@ class OrderDestroyTest extends TestCase
     {
         $user = $this->createActiveTenantUser('admin');
 
-        foreach (['Посчитан', 'Позвонить'] as $status) {
+        foreach (['Завершен', 'Позвонить'] as $status) {
             $order = Order::create([
                 'tenant_id' => $user->tenant_id,
                 'full_name' => 'Иванов Иван Иванович',

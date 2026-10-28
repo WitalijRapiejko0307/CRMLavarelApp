@@ -284,6 +284,8 @@ flowchart LR
 - [x] `ProductController` — CRUD `/products`
 - [x] Статусы `Завершен` / `Посчитан` добавлены в `Order::STATUSES`
 
+**Примечание (2026-10-28):** в текущем Laravel-приложении статус `Посчитан` и команда `crm:sum-orders` сняты; учёт выкупа и `sumOrder` — только на `Завершен`. См. [`docs/hosting/remove-poschitan-status.md`](../../docs/hosting/remove-poschitan-status.md).
+
 ### Фаза 5 — Финансы, CSV, multi-tenant (2 нед.) ✅
 
 - [x] Таблицы expenses, income

@@ -63,21 +63,12 @@ class OrderStockAndIncomeTest extends TestCase
         $this->assertSame($order->id . ' ' . $order->full_name, $income->description);
     }
 
-    public function test_no_second_income_on_poschitan(): void
+    public function test_no_second_income_on_repeated_zavrshen(): void
     {
         [, , $order] = $this->seedOrder();
 
         $order->update(['status' => 'Завершен']);
-        $order->update(['status' => 'Посчитан']);
-
-        $this->assertSame(1, Income::withoutGlobalScopes()->where('order_id', $order->id)->count());
-    }
-
-    public function test_direct_poschitan_creates_one_income(): void
-    {
-        [, , $order] = $this->seedOrder();
-
-        $order->update(['status' => 'Посчитан']);
+        $order->update(['status' => 'Завершен']);
 
         $this->assertSame(1, Income::withoutGlobalScopes()->where('order_id', $order->id)->count());
     }
@@ -163,7 +154,7 @@ class OrderStockAndIncomeTest extends TestCase
         $order->update(['status' => 'Завершен']);
         $this->assertSame(8, $product->fresh()->stock);
 
-        $order->update(['status' => 'Посчитан']);
+        $order->update(['status' => 'Завершен']);
         $this->assertSame(8, $product->fresh()->stock);
     }
 

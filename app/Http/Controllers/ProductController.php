@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Order;
 use App\Models\Product;
 use App\Models\TenantSetting;
 use App\Support\UrlNormalizer;
@@ -29,18 +28,10 @@ class ProductController extends Controller
     {
         $products = Product::orderBy('name')->get();
 
-        // sumOrder stats: count of "Посчитан" orders per delivery type
-        $counted = Order::whereIn('status', ['Посчитан'])
-            ->selectRaw('delivery_type, COUNT(*) as count')
-            ->groupBy('delivery_type')
-            ->pluck('count', 'delivery_type')
-            ->toArray();
-
         $srEnabled = TenantSetting::get('sr_enabled', '') === '1';
 
         return Inertia::render('Products/Index', [
             'products'  => $products,
-            'counted'   => $counted,
             'srEnabled' => $srEnabled,
         ]);
     }

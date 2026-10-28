@@ -321,8 +321,8 @@
 
         <!-- ── Create product modal ── -->
         <div v-if="createModal" class="modal-backdrop" @click.self="createModal = false">
-            <div class="modal-box">
-                <h2 class="section-title mb-4">Добавить товар</h2>
+            <div class="modal-box modal-box--scroll">
+                <h2 class="section-title mb-4 modal-sticky-top">Добавить товар</h2>
                 <div class="space-y-3">
                     <div>
                         <label class="label">Название</label>
@@ -346,6 +346,14 @@
                         <label class="label">ID SalesRender</label>
                         <input v-model.number="createForm.sr_item_id" type="number" min="1" class="input" placeholder="Оставьте пустым если не нужно" />
                     </div>
+                    <button
+                        type="button"
+                        class="text-sm text-indigo-600 dark:text-indigo-400 hover:underline"
+                        @click="showCreateExtra = !showCreateExtra"
+                    >
+                        {{ showCreateExtra ? '− Скрыть дополнительные поля' : '+ Дополнительно (апсейл, кроссейл, заметка)' }}
+                    </button>
+                    <div v-show="showCreateExtra" class="space-y-3">
                     <div>
                         <label class="label">Апсейл</label>
                         <input v-model="createForm.upsell_name" class="input" placeholder="Название" />
@@ -374,9 +382,10 @@
                         <label class="label">Заметка оператору</label>
                         <textarea v-model="createForm.manager_note" rows="2" class="input resize-none" />
                     </div>
+                    </div>
                     <p v-if="createError" class="text-xs text-red-600">{{ createError }}</p>
                 </div>
-                <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3 mt-5">
+                <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3 mt-5 modal-sticky-bottom">
                     <button class="btn-secondary justify-center" @click="createModal = false">Отмена</button>
                     <button class="btn-primary justify-center" :disabled="saving" @click="createProduct">
                         {{ saving ? 'Сохраняю…' : 'Добавить' }}
@@ -433,7 +442,6 @@ const { readOnly } = useSubscription()
 // ── Props ─────────────────────────────────────────────────────────────────────
 const props = defineProps({
     products:  { type: Array,   default: () => [] },
-    counted:   { type: Object,  default: () => ({}) },
     srEnabled: { type: Boolean, default: false },
 })
 
@@ -445,6 +453,7 @@ const saving      = ref(false)
 
 // Create modal
 const createModal = ref(false)
+const showCreateExtra = ref(false)
 const createForm  = ref(emptyProductForm())
 const createError = ref('')
 
@@ -542,6 +551,7 @@ async function saveEdit(product) {
 function openCreateModal(presetName = '') {
     createForm.value  = emptyProductForm(typeof presetName === 'string' ? presetName : '')
     createError.value = ''
+    showCreateExtra.value = false
     createModal.value = true
 }
 
@@ -635,5 +645,18 @@ function formatAmount(value) {
 }
 .btn-xs {
     @apply text-xs px-2 py-1;
+}
+.modal-backdrop {
+    @apply overflow-y-auto;
+}
+.modal-box--scroll {
+    @apply overflow-y-auto;
+    max-height: calc(100vh - 2rem);
+}
+.modal-sticky-top {
+    @apply sticky top-0 bg-white dark:bg-gray-800 z-10 pb-2 -mt-1;
+}
+.modal-sticky-bottom {
+    @apply sticky bottom-0 bg-white dark:bg-gray-800 pt-3 -mb-1;
 }
 </style>

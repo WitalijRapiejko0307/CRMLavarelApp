@@ -4,7 +4,6 @@ namespace App\Console;
 
 use App\Console\Commands\PurgeScheduledTenants;
 use App\Console\Commands\SubscriptionEndingReminder;
-use App\Console\Commands\SumOrdersCommand;
 use App\Jobs\SyncSalesRenderJob;
 use App\Models\Tenant;
 use App\Services\DailyDigestScheduler;
@@ -61,12 +60,6 @@ class Kernel extends ConsoleKernel
         $schedule->call(function () {
             app(DailyDigestScheduler::class)->dispatchDue();
         })->everyMinute()->name('dispatch-daily-digest')->withoutOverlapping();
-
-        // Phase 4: aggregate revenue from completed orders daily at midnight.
-        $schedule->command(SumOrdersCommand::class)
-            ->dailyAt('00:05')
-            ->withoutOverlapping()
-            ->name('sum-orders');
 
         $schedule->call(function () {
             \Illuminate\Support\Facades\DB::table('belpost_label_logs')

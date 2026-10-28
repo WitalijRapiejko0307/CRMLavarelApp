@@ -16,7 +16,7 @@ class DailyDigestService
     public const TIMEZONE = 'Europe/Minsk';
 
     private const ACCEPTED_STATUSES = ['Подтвержден', 'Отправить'];
-    private const SALES_STATUSES = ['Завершен', 'Посчитан'];
+    private const SALES_STATUSES = ['Завершен'];
     private const PRODUCT_LIMIT = 15;
 
     /**

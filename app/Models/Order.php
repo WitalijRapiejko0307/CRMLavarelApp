@@ -15,7 +15,7 @@ class Order extends Model
      *
      * New lead    → Позвонить → Перезвонить → Недозвон* / Сомнения / Отдал заявку → Заказать → Отправить
      * Belpost/EP  → Оформлен → (Передан на почту) → Отправлено → В отделении → Возврат в пути → Забрать деньги
-     * Revenue     → Завершен (operator confirms money received) → Посчитан (sumOrder processed)
+     * Revenue     → Завершен (operator confirms money received)
      * Closed      → Возврат | Отказ | Отказ(Ошибка) | Дубль
      */
     public const STATUSES = [
@@ -37,7 +37,6 @@ class Order extends Model
         'Возврат в пути',
         'Забрать деньги',
         'Завершен',
-        'Посчитан',
         'Возврат',
         'Отказ',
         'Отказ(Ошибка)',
@@ -125,7 +124,6 @@ class Order extends Model
     /** Statuses that must not be deleted (revenue final, active tracking, active call-center). */
     public const NON_DELETABLE_STATUSES = [
         'Завершен',
-        'Посчитан',
         'Оформлен',
         'Передан на почту',
         'Отправлено',

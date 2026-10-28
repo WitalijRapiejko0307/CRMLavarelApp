@@ -165,8 +165,8 @@ class ReportsAccessTest extends TestCase
             'status'    => 'Завершен',
         ]);
         $this->createOrder($user->tenant_id, [
-            'full_name' => 'Посчитан Выкуп Тест',
-            'status'    => 'Посчитан',
+            'full_name' => 'Завершен Выкуп Второй Тест',
+            'status'    => 'Завершен',
         ]);
 
         $response = $this->actingAs($user)->get('/reports');
@@ -424,7 +424,7 @@ class ReportsAccessTest extends TestCase
         ]);
         $this->createOrder($other->id, [
             'full_name'    => 'Чужой Выкуп',
-            'status'       => 'Посчитан',
+            'status'       => 'Завершен',
             'utm_campaign' => 'foreign-campaign',
         ]);
         $this->createOrder($other->id, [

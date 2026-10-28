@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Log;
 
 class OrderStockAndIncomeService
 {
-    private const MONEY_STATUSES = ['Завершен', 'Посчитан'];
+    private const MONEY_STATUSES = ['Завершен'];
 
     /** Goods may already have left the warehouse (not money-received). */
     private const GOODS_LEFT_STATUSES = [

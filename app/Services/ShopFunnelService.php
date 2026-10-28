@@ -28,7 +28,6 @@ class ShopFunnelService
     /** Purchased never includes «Забрать деньги». */
     private const PURCHASED_STATUSES = [
         'Завершен',
-        'Посчитан',
     ];
 
     private const LIVE_SLUGS = [
