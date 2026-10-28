@@ -84,8 +84,6 @@ Route::prefix('belpost')->name('belpost.')->middleware('tenant.type:store')->gro
     Route::post('/batches/{batch}/download-blanks', [BelpostController::class, 'downloadBlanks'])->name('batches.downloadBlanks');
     Route::post('/batches/{batch}/download-partial-receipt-opis', [BelpostController::class, 'downloadPartialReceiptOpis'])->name('batches.downloadPartialReceiptOpis');
     Route::get('/batches/{batch}/labels.pdf', [BelpostController::class, 'downloadBlanks'])->name('batches.labelsPdf');
-    Route::post('/batches/{batch}/retry-download', [BelpostController::class, 'retryDownload'])->name('batches.retryDownload');
-    Route::get('/batches/{batch}/pdf', [BelpostController::class, 'downloadPdf'])->name('batches.pdf');
 });
 
 // Europochta (Phase 4)
@@ -176,7 +174,6 @@ Route::prefix('users')->name('users.')->group(function () {
 Route::prefix('api')->name('api.')->middleware(['auth', 'tenant', 'tenant.writable'])->group(function () {
     Route::get('/address/search', [AddressController::class, 'search'])->name('address.search')->withoutMiddleware('tenant.writable');
     Route::get('/europochta/stores/search', [EvropostStoreController::class, 'search'])->name('europochta.stores.search')->withoutMiddleware('tenant.writable');
-    Route::get('/belpost/batches/{batch}/status', [BelpostController::class, 'batchStatus'])->name('belpost.batchStatus')->withoutMiddleware('tenant.writable');
     Route::get('/orders/tracking-status', [OrderController::class, 'trackingStatus'])->name('orders.trackingStatus')->withoutMiddleware('tenant.writable');
     Route::get('/orders/feed', [OrderFeedController::class, 'index'])->name('orders.feed')->withoutMiddleware('tenant.writable');
     Route::post('/tracking/auto-notice/dismiss', [OrderController::class, 'dismissTrackingNotice'])->name('tracking.dismissNotice');

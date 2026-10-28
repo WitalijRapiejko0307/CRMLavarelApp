@@ -26,6 +26,12 @@ return [
             'level'  => env('LOG_LEVEL', 'debug'),
             'days'   => 7,
         ],
+        'belpost_labels' => [
+            'driver' => 'daily',
+            'path'   => storage_path('logs/belpost-labels.log'),
+            'level'  => 'info',
+            'days'   => 14,
+        ],
         'null' => [
             'driver'  => 'monolog',
             'handler' => NullHandler::class,

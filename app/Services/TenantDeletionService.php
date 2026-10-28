@@ -39,6 +39,7 @@ class TenantDeletionService
             $this->deleteByTenantId('orders', $tenantId);
             $this->deleteByTenantId('belpost_tracking_drafts', $tenantId);
             $this->deleteByTenantId('expenses', $tenantId);
+            $this->deleteByTenantId('belpost_label_logs', $tenantId);
             $this->deleteByTenantId('mail_batches', $tenantId);
             $this->deleteByTenantId('products', $tenantId);
             $this->deleteByTenantId('tenant_settings', $tenantId);

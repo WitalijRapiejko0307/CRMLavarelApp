@@ -68,6 +68,12 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping()
             ->name('sum-orders');
 
+        $schedule->call(function () {
+            \Illuminate\Support\Facades\DB::table('belpost_label_logs')
+                ->where('created_at', '<', now()->subDays(90))
+                ->delete();
+        })->dailyAt('03:20')->name('purge-belpost-label-logs')->withoutOverlapping();
+
         $schedule->command(PurgeScheduledTenants::class)
             ->dailyAt('03:10')
             ->withoutOverlapping()

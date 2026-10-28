@@ -352,4 +352,35 @@ class BelpostLabelDownloadTest extends TestCase
             (float) $m[4] - (float) $m[2],
         ];
     }
+
+    public function test_download_blanks_writes_success_and_error_logs(): void
+    {
+        $user  = $this->createStoreAdmin();
+        $batch = $this->createDraftBatch($user);
+
+        // no sender, no tracked orders -> sender_missing
+        $this->actingAs($user)
+            ->postJson("/belpost/batches/{$batch->id}/download-blanks", ['label_size' => '150x100'])
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'sender_missing');
+
+        $this->seedSender($user);
+
+        $this->actingAs($user)
+            ->postJson("/belpost/batches/{$batch->id}/download-blanks", ['label_size' => '150x100'])
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'no_tracked_orders');
+
+        $this->createBatchOrder($user, $batch, ['track_number' => 'PC333333333BY']);
+        Http::fake();
+
+        $this->actingAs($user)
+            ->post("/belpost/batches/{$batch->id}/download-blanks", ['label_size' => '150x100'])
+            ->assertOk();
+
+        $rows = \App\Models\BelpostLabelLog::withoutGlobalScopes()->orderBy('id')->get();
+        $this->assertSame(['sender_missing', 'no_tracked_orders', null], $rows->pluck('error_code')->all());
+        $this->assertSame(['error', 'error', 'success'], $rows->pluck('result')->all());
+        $this->assertSame(1, $rows->last()->orders_count);
+    }
 }

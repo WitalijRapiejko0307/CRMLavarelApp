@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\BelpostLabelException;
 use App\Models\MailBatch;
 use App\Models\Order;
 use App\Models\Product;
@@ -28,7 +29,7 @@ class BelpostLabelService
 
         $orders = $this->trackedOrders($batch);
         if ($orders->isEmpty()) {
-            throw new RuntimeException('сначала оформите бланки');
+            throw new BelpostLabelException(BelpostLabelException::NO_TRACKED_ORDERS, 'сначала оформите бланки');
         }
 
         $batch->update(['label_size' => $labelSize]);
@@ -37,9 +38,15 @@ class BelpostLabelService
             set_time_limit(120);
         }
 
-        $labels = $this->labelsForOrders($batch, $orders, $labelSize);
-        $layout = LabelSheetLayout::forLabelSize($labelSize);
-        $binary = $this->renderPdf($labels, $layout);
+        try {
+            $labels = $this->labelsForOrders($batch, $orders, $labelSize);
+            $layout = LabelSheetLayout::forLabelSize($labelSize);
+            $binary = $this->renderPdf($labels, $layout);
+        } catch (BelpostLabelException $e) {
+            throw $e;
+        } catch (Throwable $e) {
+            throw new BelpostLabelException(BelpostLabelException::PDF_RENDER_FAILED, 'Не удалось собрать PDF: ' . $e->getMessage(), $e);
+        }
 
         return [
             'binary'   => $binary,
@@ -130,7 +137,7 @@ class BelpostLabelService
     {
         $name = trim((string) TenantSetting::get('belpost_sender_name', ''));
         if ($name === '') {
-            throw new RuntimeException('заполните отправителя в Настройках');
+            throw new BelpostLabelException(BelpostLabelException::SENDER_MISSING, 'заполните отправителя в Настройках');
         }
     }
 

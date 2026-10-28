@@ -12,16 +12,11 @@ class MailBatch extends Model
     /**
      * Lifecycle statuses for a batch.
      * draft       → items being added
-     * committed   → batch formed on Belpost (belpost_committed=true); PDF may be any state
-     * downloading → DownloadBelpostPdfJob dispatched
-     * ready       → PDF downloaded and available
-     * failed      → unrecoverable PDF download error
+     * committed   → batch formed on Belpost (belpost_committed=true)
+     * Blanks are generated in CRM on demand (BelpostLabelService), not stored.
      */
     public const STATUS_DRAFT       = 'draft';
     public const STATUS_COMMITTED   = 'committed';
-    public const STATUS_DOWNLOADING = 'downloading';
-    public const STATUS_READY       = 'ready';
-    public const STATUS_FAILED      = 'failed';
 
     public const LABEL_SIZES = ['210x150', '150x100', '120x80'];
 
@@ -121,9 +116,6 @@ class MailBatch extends Model
         'label_size',
         'belpost_committed',
         'status',
-        'id_to_download',
-        'pdf_path',
-        'error_message',
     ];
 
     protected $casts = [
@@ -155,17 +147,6 @@ class MailBatch extends Model
 
     public function canProcessItems(): bool
     {
-        return !$this->belpost_committed && $this->status !== self::STATUS_DOWNLOADING;
-    }
-
-    public function isPdfInProgress(): bool
-    {
-        return in_array($this->status, [self::STATUS_DOWNLOADING, self::STATUS_COMMITTED], true)
-            && !$this->isPdfReady();
-    }
-
-    public function isPdfReady(): bool
-    {
-        return $this->status === self::STATUS_READY && $this->pdf_path;
+        return !$this->belpost_committed;
     }
 }

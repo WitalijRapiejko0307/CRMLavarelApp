@@ -413,7 +413,7 @@
                                 </button>
                                 <button
                                     class="btn-secondary"
-                                    :disabled="committing || activeBatch.belpost_committed || activeBatch.status === 'downloading' || activeBatchOrders.length === 0 || readOnly"
+                                    :disabled="committing || activeBatch.belpost_committed || activeBatchOrders.length === 0 || readOnly"
                                     @click="commitBatch"
                                 >
                                     {{ committing ? 'Формирую…' : 'Сформировать партию' }}
@@ -452,7 +452,7 @@ import { useSubscription } from '@/composables/useSubscription'
 import { useOnboarding } from '@/composables/useOnboarding'
 import { Inertia } from '@inertiajs/inertia'
 import { Link } from '@inertiajs/inertia-vue3'
-import { apiFetch } from '@/utils/api'
+import { apiFetch, apiDownload } from '@/utils/api'
 
 const { readOnly } = useSubscription()
 const { belpostReady, currentStep } = useOnboarding()
@@ -674,15 +674,15 @@ async function retrySingle(order) {
     await processOne(order, null)
 }
 
-function csrfToken() {
-    const meta = document.querySelector('meta[name="csrf-token"]')
-    return meta ? meta.getAttribute('content') : ''
-}
-
-function filenameFromDisposition(header, fallback) {
-    if (!header) return fallback
-    const match = header.match(/filename="?([^";]+)"?/i)
-    return match ? match[1] : fallback
+function saveBlob(blob, filename) {
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
 }
 
 async function downloadBlanks() {
@@ -693,47 +693,20 @@ async function downloadBlanks() {
     downloadError.value     = ''
 
     try {
-        const resp = await fetch(`/belpost/batches/${activeBatch.value.id}/download-blanks`, {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: {
-                'Content-Type': 'application/json',
-                Accept: 'application/pdf, application/json',
-                'X-Requested-With': 'XMLHttpRequest',
-                'X-CSRF-TOKEN': csrfToken(),
-            },
-            body: JSON.stringify({ label_size: selectedLabelSize.value }),
-        })
-        const contentType = resp.headers.get('Content-Type') || ''
-
-        if (!resp.ok || contentType.indexOf('application/pdf') === -1) {
-            let message = 'Ошибка'
-            try {
-                const data = await resp.json()
-                message = data.message ?? message
-            } catch {
-                // not JSON
-            }
-            downloadError.value = message
-            return
-        }
-
-        const blob = await resp.blob()
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = filenameFromDisposition(
-            resp.headers.get('Content-Disposition'),
+        const res = await apiDownload(
+            `/belpost/batches/${activeBatch.value.id}/download-blanks`,
+            'POST',
+            { label_size: selectedLabelSize.value },
+            ['application/pdf'],
             `belpost-${activeBatch.value.batch_id}-labels.pdf`
         )
-        document.body.appendChild(a)
-        a.click()
-        a.remove()
-        URL.revokeObjectURL(url)
+        if (!res.ok) {
+            downloadError.value = res.message
+            return
+        }
+        saveBlob(res.blob, res.filename)
         activeBatch.value.label_size = selectedLabelSize.value
         syncBatchInList(activeBatch.value)
-    } catch (e) {
-        downloadError.value = e.message
     } finally {
         downloadingBlanks.value = false
     }
@@ -747,50 +720,18 @@ async function downloadPartialReceiptOpis() {
     opisDownloadError.value = ''
 
     try {
-        const resp = await fetch(
+        const res = await apiDownload(
             `/belpost/batches/${activeBatch.value.id}/download-partial-receipt-opis`,
-            {
-                method: 'POST',
-                credentials: 'same-origin',
-                headers: {
-                    Accept: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document, application/zip, application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRF-TOKEN': csrfToken(),
-                },
-            }
-        )
-        const contentType = resp.headers.get('Content-Type') || ''
-
-        if (
-            !resp.ok
-            || (contentType.indexOf('application/vnd.openxmlformats') === -1
-                && contentType.indexOf('application/zip') === -1)
-        ) {
-            let message = 'Ошибка'
-            try {
-                const data = await resp.json()
-                message = data.message ?? message
-            } catch {
-                // not JSON
-            }
-            opisDownloadError.value = message
-            return
-        }
-
-        const blob = await resp.blob()
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = filenameFromDisposition(
-            resp.headers.get('Content-Disposition'),
+            'POST',
+            {},
+            ['application/vnd.openxmlformats', 'application/zip'],
             `${activeBatch.value.batch_id}_Opis_vlozheniya.docx`
         )
-        document.body.appendChild(a)
-        a.click()
-        a.remove()
-        URL.revokeObjectURL(url)
-    } catch (e) {
-        opisDownloadError.value = e.message
+        if (!res.ok) {
+            opisDownloadError.value = res.message
+            return
+        }
+        saveBlob(res.blob, res.filename)
     } finally {
         downloadingOpis.value = false
     }
@@ -984,21 +925,15 @@ function commitBadgeLabel(batch) {
 
 function badgeClass(status) {
     return {
-        'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300':     status === 'draft',
-        'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200': status === 'committed',
-        'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200':     status === 'downloading',
-        'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200':   status === 'ready',
-        'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-200':       status === 'failed',
+        'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300':         status === 'draft',
+        'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200':     status === 'committed',
     }
 }
 
 function badgeLabel(status) {
     const labels = {
-        draft:       'Черновик',
-        committed:   'Ожидание PDF',
-        downloading: 'Загрузка',
-        ready:       'PDF готов',
-        failed:      'Ошибка',
+        draft:     'Черновик',
+        committed: 'Сформирована',
     }
     return labels[status] ?? status
 }

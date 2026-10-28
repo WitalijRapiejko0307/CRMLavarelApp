@@ -16,11 +16,6 @@ return [
             'visibility' => 'public',
             'throw'      => false,
         ],
-        'belpost' => [
-            'driver'     => 'local',
-            'root'       => storage_path('app/belpost/pdf'),
-            'visibility' => 'private',
-        ],
     ],
 
     'links' => [
