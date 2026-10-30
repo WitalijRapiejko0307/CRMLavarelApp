@@ -26,6 +26,7 @@ class BelpostTrackingProxyJobTest extends TestCase
         putenv('BELPOST_TRACKING_PROXY_URL');
         putenv('BELPOST_TRACKING_PROXY_SECRET');
         unset($_ENV['BELPOST_TRACKING_PROXY_URL'], $_ENV['BELPOST_TRACKING_PROXY_SECRET']);
+        config(['belpost.tracking_proxy_url' => '', 'belpost.tracking_proxy_secret' => '']);
 
         parent::tearDown();
     }
@@ -36,6 +37,7 @@ class BelpostTrackingProxyJobTest extends TestCase
         putenv('BELPOST_TRACKING_PROXY_SECRET=' . $secret);
         $_ENV['BELPOST_TRACKING_PROXY_URL'] = $url;
         $_ENV['BELPOST_TRACKING_PROXY_SECRET'] = $secret;
+        config(['belpost.tracking_proxy_url' => $url, 'belpost.tracking_proxy_secret' => $secret]);
     }
 
     private function createTenantWithBelpostToken(): Tenant
@@ -327,7 +329,7 @@ class BelpostTrackingProxyJobTest extends TestCase
         $this->assertSame(0, $progress['errors']);
     }
 
-    public function test_null_map_event_falls_back_to_direct_search(): void
+    public function test_null_map_event_skips_direct_search_and_status(): void
     {
         $this->setProxyEnv();
 
@@ -340,31 +342,25 @@ class BelpostTrackingProxyJobTest extends TestCase
             'full_name'     => 'Клиент',
             'status'        => 'Оформлен',
             'delivery_type' => 'belpost',
-            'track_number'  => 'BY-NULL-EVENT',
+            'track_number'  => 'BY-NOT-ACCEPTED',
         ]);
 
         Http::fake([
             self::PROXY_URL => $this->proxyResponder([
-                ['track' => 'BY-NULL-EVENT', 'event' => null, 'createdAt' => null],
-            ], [
-                [
-                    'track'        => 'BY-NULL-EVENT',
-                    'found'        => true,
-                    'event'        => 'Вручено',
-                    'createdAt'    => '2026-10-08 10:00:00',
-                    'targetStatus' => null,
-                ],
+                ['track' => 'BY-NOT-ACCEPTED', 'event' => null, 'createdAt' => null],
             ]),
         ]);
 
         (new UpdateTrackingJob($tenant->id, 'manual'))->handle($service);
 
-        Http::assertSent(function ($request) {
+        Http::assertNotSent(function ($request) {
             return array_key_exists('items', $request->data());
         });
 
+        $this->assertSame(1, $this->countProxyRequests());
+
         $order->refresh();
-        $this->assertSame('Забрать деньги', $order->status);
+        $this->assertSame('Оформлен', $order->status);
 
         $progress = $service->getProgress($tenant->id);
         $this->assertSame(1, $progress['checked']);

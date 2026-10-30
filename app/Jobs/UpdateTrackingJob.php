@@ -204,9 +204,12 @@ class UpdateTrackingJob implements ShouldQueue
                         'createdAt' => $draft->event_at,
                     ];
 
-                    // Empty map event: the list API may omit last_event even when the cabinet
-                    // shows a real status, so resolve it through steps[] via direct search.
-                    if (!empty($draft->event) && !BelpostTrackingService::needsBelpostStepsLookup($mapEntry, (string) $order->status)) {
+                    if (empty($draft->event)) {
+                        $service->incrementProgress($this->tenantId);
+                        continue;
+                    }
+
+                    if (!BelpostTrackingService::needsBelpostStepsLookup($mapEntry, (string) $order->status)) {
                         $hadError = false;
 
                         try {

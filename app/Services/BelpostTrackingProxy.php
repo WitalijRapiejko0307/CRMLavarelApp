@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Log;
  */
 class BelpostTrackingProxy
 {
-    public const BATCH_SIZE = 15;
+    public const BATCH_SIZE = 40;
 
     private const HTTP_TIMEOUT_SECONDS = 120;
 
@@ -37,7 +37,7 @@ class BelpostTrackingProxy
         }
 
         $result = $this->postProxy($url, [
-            'secret'    => (string) env('BELPOST_TRACKING_PROXY_SECRET', ''),
+            'secret'    => (string) config('belpost.tracking_proxy_secret', ''),
             'authToken' => $authToken,
         ], 'fetchMap');
 
@@ -80,7 +80,7 @@ class BelpostTrackingProxy
         }
 
         $result = $this->postProxy($url, [
-            'secret'    => (string) env('BELPOST_TRACKING_PROXY_SECRET', ''),
+            'secret'    => (string) config('belpost.tracking_proxy_secret', ''),
             'authToken' => $authToken,
             'items'     => $items,
         ], 'directSearchBatch');
@@ -202,6 +202,6 @@ class BelpostTrackingProxy
 
     private function proxyUrl(): string
     {
-        return trim((string) env('BELPOST_TRACKING_PROXY_URL', ''));
+        return trim((string) config('belpost.tracking_proxy_url', ''));
     }
 }
