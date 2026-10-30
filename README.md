@@ -53,34 +53,22 @@ php artisan route:cache
 php artisan view:cache
 ```
 
-### Cron и очередь (обязательно для PDF Белпочты)
+### Cron и очередь
 
-Без cron PDF после commit остаётся в статусе `committed` («Ожидание скачивания PDF…»), даже если бланки уже готовы в ЛК Белпочты. Job `DownloadBelpostPdfJob` обрабатывается через `schedule:run` → `queue:work --stop-when-empty`.
+Бланки Белпочты собираются в CRM при скачивании и не требуют очереди. Cron нужен для фоновых задач (трекинг, письма, очистка логов):
 
-**Чеклист prod:**
-
-1. В `.env`: `QUEUE_CONNECTION=database`
-2. Crontab:
 ```
 * * * * * cd /home/user/crm && php artisan schedule:run >> /dev/null 2>&1
 ```
-3. Таблица `jobs` существует (`php artisan queue:table && php artisan migrate`, если ещё нет)
-4. После commit появляется запись в `jobs` и в логах `DownloadBelpostPdfJob`
 
-**Диагностика застрявшей партии** (`status=committed` + pending job = проблема очереди, не Белпочты):
+В `.env`: `QUEUE_CONNECTION=database`, таблица `jobs` должна существовать.
+
+**Диагностика ошибок бланков:** таблица `belpost_label_logs` (результат, код, длительность) и `storage/logs/belpost-labels-*.log`.
 
 ```sql
-SELECT id, batch_id, status, id_to_download, error_message FROM mail_batches WHERE id = ?;
-
-SELECT id, queue, attempts, available_at FROM jobs
-WHERE payload LIKE '%DownloadBelpostPdfJob%';
+SELECT created_at, mail_batch_id, kind, result, error_code, error_message, duration_ms
+FROM belpost_label_logs WHERE tenant_id = ? ORDER BY id DESC LIMIT 50;
 ```
-
-```bash
-grep DownloadBelpostPdfJob storage/logs/laravel.log
-```
-
-**Что делать сейчас в UI:** на странице партии нажать «Повторить скачивание» (если статус не меняется > 1 мин).
 
 ### Webhook
 

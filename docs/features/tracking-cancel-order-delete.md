@@ -121,7 +121,7 @@ if ($service->isCancelRequested($this->tenantId)) { break; }
 ```php
 public const NON_DELETABLE_STATUSES = [
     // Revenue final
-    'Завершен', 'Посчитан',
+    'Завершен',
     // Tracking / delivery active
     'Оформлен', 'Передан на почту', 'Отправлено', 'В отделении', 'Забрать деньги',
     // Call-center active
@@ -197,7 +197,7 @@ function canDeleteOrder(order) {
 
 - Admin удаляет заказ в `Отказ` → redirect `/orders`, заказ удалён
 - Operator → 403
-- Admin + статус `Посчитан` / `Позвонить` → 422
+- Admin + статус `Завершен` / `Позвонить` → 422
 - Read-only tenant → 403
 
 **Новый [`TrackingCancelTest.php`](../tests/Feature/TrackingCancelTest.php)**

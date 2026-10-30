@@ -250,7 +250,7 @@ Tenant::whereIn('subscription_status', ['trial', 'active'])
     ->filter(fn ($t) => !$t->isReadOnly())
 ```
 
-Применить для: morning tracking, SalesRender dispatch, `SumOrdersCommand`.
+Применить для: morning tracking, SalesRender dispatch.
 
 ---
 

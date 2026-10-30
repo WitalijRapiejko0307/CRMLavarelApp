@@ -327,7 +327,7 @@ class BelpostTrackingProxyJobTest extends TestCase
         $this->assertSame(0, $progress['errors']);
     }
 
-    public function test_null_map_event_skips_direct_search_and_status(): void
+    public function test_null_map_event_falls_back_to_direct_search(): void
     {
         $this->setProxyEnv();
 
@@ -340,29 +340,31 @@ class BelpostTrackingProxyJobTest extends TestCase
             'full_name'     => 'Клиент',
             'status'        => 'Оформлен',
             'delivery_type' => 'belpost',
-            'track_number'  => 'BY-NOT-ACCEPTED',
+            'track_number'  => 'BY-NULL-EVENT',
         ]);
 
         Http::fake([
             self::PROXY_URL => $this->proxyResponder([
+                ['track' => 'BY-NULL-EVENT', 'event' => null, 'createdAt' => null],
+            ], [
                 [
-                    'track'     => 'BY-NOT-ACCEPTED',
-                    'event'     => null,
-                    'createdAt' => null,
+                    'track'        => 'BY-NULL-EVENT',
+                    'found'        => true,
+                    'event'        => 'Вручено',
+                    'createdAt'    => '2026-10-08 10:00:00',
+                    'targetStatus' => null,
                 ],
             ]),
         ]);
 
         (new UpdateTrackingJob($tenant->id, 'manual'))->handle($service);
 
-        Http::assertNotSent(function ($request) {
+        Http::assertSent(function ($request) {
             return array_key_exists('items', $request->data());
         });
 
-        $this->assertSame(1, $this->countProxyRequests());
-
         $order->refresh();
-        $this->assertSame('Оформлен', $order->status);
+        $this->assertSame('Забрать деньги', $order->status);
 
         $progress = $service->getProgress($tenant->id);
         $this->assertSame(1, $progress['checked']);

@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Log;
  */
 class BelpostTrackingProxy
 {
-    public const BATCH_SIZE = 40;
+    public const BATCH_SIZE = 15;
 
     private const HTTP_TIMEOUT_SECONDS = 120;
 

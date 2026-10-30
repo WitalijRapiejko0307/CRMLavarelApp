@@ -169,7 +169,7 @@ Order::withoutGlobalScope(TenantScope::class)
 - Store: `tenant_id === user.tenant_id`
 - Call center: `call_center_tenant_id === user.tenant_id` + active connection
 - CC может менять только поля фазы обзвона: `status`, `full_name`, `phone`, адрес, `goods`/`quantities`/`prices`, `delivery_type`, `source`, `sms_log`
-- CC **не может**: удалять заказы, менять статусы почты (`Оформлен`…`Посчитан`), `track_number`, `belpost_address_id`, `mail_batch_id`
+- CC **не может**: удалять заказы, менять статусы почты (`Оформлен`…`Завершен`), `track_number`, `belpost_address_id`, `mail_batch_id`
 - Список разрешённых CC-статусов — подмножество `Order::STATUSES` до `Заказать`/`Отправить` включительно + закрывающие (`Отказ`, `Отказ(Ошибка)`, `Дубль`, `Недозвон*`)
 
 **Audit:** в `OrderController::update/updateStatus` — писать `last_updated_by_user_id`; в [`OrderStatusHistory`](../app/Models/OrderStatusHistory.php) опционально добавить `user_id` (миграция).
