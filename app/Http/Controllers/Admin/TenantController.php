@@ -50,6 +50,7 @@ class TenantController extends Controller
                 'archived_at'             => $tenant->archived_at?->toIso8601String(),
                 'deletion_scheduled_for'  => $tenant->deletion_scheduled_for?->toIso8601String(),
                 'admin_email'             => $tenant->users->first()?->email,
+                'acquisition'             => $tenant->acquisition,
                 'users_count'             => $tenant->users_count,
                 'orders_count'            => $tenant->orders_count,
             ]);

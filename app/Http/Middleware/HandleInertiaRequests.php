@@ -38,6 +38,7 @@ class HandleInertiaRequests extends Middleware
             'flash' => [
                 'message' => fn () => $request->session()->get('message'),
                 'error'   => fn () => $request->session()->get('error'),
+                'registered_event_id' => fn () => $request->session()->get('registered_event_id'),
             ],
             'shop_name' => fn () => auth()->check() && auth()->user()->isTenantUser()
                 ? TenantSetting::get('shop_name', 'BaseCRM') ?: 'BaseCRM'

@@ -38,6 +38,7 @@
                                 <th class="py-3 pr-4">Статус</th>
                                 <th class="py-3 pr-4">Заявки</th>
                                 <th class="py-3 pr-4">Активен до</th>
+                                <th class="py-3 pr-4">Источник</th>
                                 <th class="py-3 pr-4">Admin</th>
                                 <th class="py-3 pr-4">Пользователи</th>
                                 <th class="py-3 pr-4">Заказы</th>
@@ -75,6 +76,13 @@
                                         :disabled="isAccessDateLocked(tenant.id)"
                                         @change="saveTenant(tenant.id)"
                                     />
+                                </td>
+                                <td class="py-3 pr-4 text-xs">
+                                    <template v-if="tenant.acquisition">
+                                        {{ tenant.acquisition.utm_source || (tenant.acquisition.fbclid ? 'meta' : tenant.acquisition.ttclid ? 'tiktok' : '—') }}
+                                        <span v-if="tenant.acquisition.utm_campaign" class="text-muted block">{{ tenant.acquisition.utm_campaign }}<template v-if="tenant.acquisition.utm_content"> / {{ tenant.acquisition.utm_content }}</template></span>
+                                    </template>
+                                    <template v-else>—</template>
                                 </td>
                                 <td class="py-3 pr-4">{{ tenant.admin_email || '—' }}</td>
                                 <td class="py-3 pr-4">{{ tenant.users_count }}</td>

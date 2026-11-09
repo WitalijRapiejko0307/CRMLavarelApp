@@ -137,7 +137,20 @@ const form = useForm({
     email:        '',
     password:     '',
     password_confirmation: '',
+    acquisition: {},
 })
+
+// UTM и click id рекламы приходят в адресе с crm-gs.online; храним, пока человек заполняет форму
+const AD_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'fbclid', 'ttclid']
+try {
+    const stored = JSON.parse(localStorage.getItem('ad_params') || '{}')
+    const query = new URLSearchParams(window.location.search)
+    AD_KEYS.forEach(key => {
+        if (query.get(key)) stored[key] = query.get(key)
+    })
+    localStorage.setItem('ad_params', JSON.stringify(stored))
+    form.acquisition = stored
+} catch (e) {}
 
 function submit() {
     form.post('/register', {

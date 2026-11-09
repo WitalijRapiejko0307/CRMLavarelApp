@@ -31,10 +31,18 @@ class RegisterController extends Controller
             'name'         => ['required', 'string', 'max:255'],
             'email'        => ['required', 'email', 'max:255', 'unique:users,email'],
             'password'     => ['required', 'string', 'min:8', 'confirmed'],
+            'acquisition'  => ['nullable', 'array'],
+            'acquisition.*' => ['nullable', 'string', 'max:255'],
         ]);
+
+        $acquisition = collect($data['acquisition'] ?? [])
+            ->only(['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'fbclid', 'ttclid'])
+            ->filter()
+            ->all();
 
         $user = DB::transaction(function () use ($data) {
             $tenant = Tenant::create([
+                'acquisition'         => $acquisition ?: null,
                 'name'                => $data['company_name'],
                 'type'                => $data['tenant_type'],
                 'created_at'          => now(),
@@ -56,6 +64,7 @@ class RegisterController extends Controller
         });
 
         Auth::login($user);
+        $request->session()->flash('registered_event_id', 'reg-' . $user->id);
         $request->session()->regenerate();
 
         try {
@@ -65,9 +74,10 @@ class RegisterController extends Controller
 
             return redirect()
                 ->route('email.verify.show')
+                ->with('registered_event_id', 'reg-' . $user->id)
                 ->with('error', 'Аккаунт создан, но письмо с кодом не ушло. Нажмите «Отправить код ещё раз».');
         }
 
-        return redirect()->route('email.verify.show');
+        return redirect()->route('email.verify.show')->with('registered_event_id', 'reg-' . $user->id);
     }
 }
