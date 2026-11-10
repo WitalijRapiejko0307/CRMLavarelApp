@@ -45,7 +45,8 @@ class EmailVerificationController extends Controller
 
         $fallback = app(OnboardingService::class)->loginFallbackHref($user->fresh());
 
-        return redirect($fallback);
+        // Событие рекламы отправляем только после подтверждения почты, чтобы не считать фейковые адреса
+        return redirect($fallback)->with('registered_event_id', 'reg-' . $user->id);
     }
 
     public function resend(Request $request, EmailVerificationCodeService $service)

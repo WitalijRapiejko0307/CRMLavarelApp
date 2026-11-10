@@ -40,7 +40,7 @@ class RegisterController extends Controller
             ->filter()
             ->all();
 
-        $user = DB::transaction(function () use ($data) {
+        $user = DB::transaction(function () use ($data, $acquisition) {
             $tenant = Tenant::create([
                 'acquisition'         => $acquisition ?: null,
                 'name'                => $data['company_name'],
@@ -64,7 +64,6 @@ class RegisterController extends Controller
         });
 
         Auth::login($user);
-        $request->session()->flash('registered_event_id', 'reg-' . $user->id);
         $request->session()->regenerate();
 
         try {
@@ -74,10 +73,9 @@ class RegisterController extends Controller
 
             return redirect()
                 ->route('email.verify.show')
-                ->with('registered_event_id', 'reg-' . $user->id)
                 ->with('error', 'Аккаунт создан, но письмо с кодом не ушло. Нажмите «Отправить код ещё раз».');
         }
 
-        return redirect()->route('email.verify.show')->with('registered_event_id', 'reg-' . $user->id);
+        return redirect()->route('email.verify.show');
     }
 }
