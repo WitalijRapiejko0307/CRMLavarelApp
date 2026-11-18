@@ -199,3 +199,7 @@ flowchart LR
 | goods-ux-products | Products/Index.vue: автооткрытие create modal по suggest_name query |
 | goods-ux-create | Create.vue: orphan option + FIO hint (консистентность) |
 | docs | Обновить README и migration-plan: options=цена, формат телефона |
+
+## Дополнение: поле `comment`
+
+Webhook принимает необязательное `comment` (до 2000 символов) и сохраняет его в `orders.comment`; при отправке в SalesRender оно передаётся как `stringFields: comment`. Подробности: [docs/hosting/webhook-lead-comment.md](../../../docs/hosting/webhook-lead-comment.md).

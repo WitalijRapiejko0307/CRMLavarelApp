@@ -35,7 +35,7 @@ class WebhookController extends Controller
      *   X-Webhook-Token: <webhook_secret from tenant_settings>
      *
      * Body (JSON):
-     *   name, phone, offer, options (price in BYN), source
+     *   name, phone, offer, options (price in BYN), comment (optional, max 2000), source
      *   optional UTM: utm_source, utm_medium, utm_campaign
      *     or nested utm.source, utm.medium, utm.campaign
      */
@@ -76,6 +76,7 @@ class WebhookController extends Controller
             'phone'         => ['required', 'string', 'max:30'],
             'offer'         => ['nullable', 'string', 'max:255'],
             'options'       => ['nullable', 'numeric', 'min:0'],
+            'comment'       => ['nullable', 'string', 'max:2000'],
             'source'        => ['nullable', 'string', 'max:50'],
             'utm_source'    => ['nullable', 'string', 'max:255'],
             'utm_medium'    => ['nullable', 'string', 'max:255'],
@@ -93,6 +94,9 @@ class WebhookController extends Controller
         $utmSource   = $utmOrNull($data['utm_source'] ?? ($utm['source'] ?? null));
         $utmMedium   = $utmOrNull($data['utm_medium'] ?? ($utm['medium'] ?? null));
         $utmCampaign = $utmOrNull($data['utm_campaign'] ?? ($utm['campaign'] ?? null));
+
+        $comment = trim((string) ($data['comment'] ?? ''));
+        $comment = $comment === '' ? null : $comment;
 
         $phone = PhoneNormalizer::normalize($data['phone']);
 
@@ -120,6 +124,7 @@ class WebhookController extends Controller
             'goods'         => $data['offer'] ? [$data['offer']] : [],
             'quantities'    => [1],
             'prices'        => $data['offer'] ? [(float) ($data['options'] ?? 0)] : [],
+            'comment'       => $comment,
             'status'        => 'Позвонить',
             'source'        => $data['source'] ?? 'site',
             'utm_source'    => $utmSource,

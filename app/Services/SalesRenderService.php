@@ -63,6 +63,15 @@ class SalesRenderService
         // Price in kopecks (as in GAS: price * 100)
         $price = isset($prices[0]) ? (int) round((float) $prices[0] * 100) : 0;
 
+        // Comment goes to SR as a string field (same as GAS). json_encode gives a
+        // valid quoted GraphQL string, incl. escaped quotes and newlines.
+        $comment       = trim((string) ($order->comment ?? ''));
+        $commentFields = $comment === ''
+            ? ''
+            : ',
+                                stringFields: [{ field: "comment", value: '
+                . json_encode($comment, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ' }]';
+
         $mutation = sprintf(
             'mutation {
                 orderMutation {
@@ -78,7 +87,7 @@ class SalesRenderService
                                 phoneFields: {
                                     field: "phone",
                                     value: "%s"
-                                }
+                                }%s
                             },
                             cart: {
                                 items: [
@@ -97,6 +106,7 @@ class SalesRenderService
             addslashes($this->projectId),
             addslashes((string) $order->full_name),
             addslashes($phone),
+            $commentFields,
             $srItemId,
             $price
         );

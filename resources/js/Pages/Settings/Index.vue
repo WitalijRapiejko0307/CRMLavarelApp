@@ -1040,6 +1040,7 @@ const webhookExample = computed(() => {
         "    'offer'   => $offer ?? '',",
         "    'phone'   => $phone ?? '',",
         "    'options' => $options ?? 0,",
+        "    'comment' => $comment ?? '', // необязательно, до 2000 символов",
         "    'source'  => 'site',",
         '];',
         '',
