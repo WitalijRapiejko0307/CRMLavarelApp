@@ -19,6 +19,14 @@
 
         <FormAlert v-if="formAlert" :message="formAlert" class="mb-4" />
 
+        <CustomerLookupNotice
+            :info="lookup.info.value"
+            :delivery-types="deliveryTypes"
+            :applied="appliedFields"
+            class="mb-4"
+            @apply="applyLookup"
+        />
+
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <!-- Left: Main info -->
             <div class="lg:col-span-2 space-y-6">
@@ -360,6 +368,9 @@ import { statusColorClass } from '@/utils/orderStatusColors'
 import AddressInlinePicker from '@/Components/AddressInlinePicker.vue'
 import EvropostOfficePicker from '@/Components/EvropostOfficePicker.vue'
 import FormAlert from '@/Components/FormAlert.vue'
+import CustomerLookupNotice from '@/Components/CustomerLookupNotice.vue'
+import { useCustomerLookup } from '@/composables/useCustomerLookup'
+import { applyCustomerToForm } from '@/utils/customerPrefill'
 import { useSubscription } from '@/composables/useSubscription'
 import { isInCatalog as checkInCatalog } from '@/utils/phone'
 import {
@@ -411,6 +422,41 @@ const form = useForm({
     quantities: [],
     prices:     [],
 })
+
+// Customer base: search by phone, auto-fill empty fields (never goods / prices / comment).
+const appliedFields = ref([])
+const lookup = useCustomerLookup(() => form.phone, {
+    onFound: (data) => applyFromInfo(data, true),
+})
+
+function applyFromInfo(data, auto = false) {
+    const filled = applyCustomerToForm(form, data.customer, { deliveryType: data.customer.delivery_type })
+    // Delivery type: only switch it while the operator has not chosen anything yet.
+    if (data.customer.delivery_type
+        && form.delivery_type === 'belpost'
+        && !form.belpost_address_id
+        && !form.europochta_store_id
+        && filled.length) {
+        form.delivery_type = data.customer.delivery_type
+        // The delivery_type watcher clears picker ids on switch, so restore them afterwards.
+        setTimeout(() => {
+            if (data.customer.belpost_address_id && filled.includes('belpost_address_id')) {
+                form.belpost_address_id = data.customer.belpost_address_id
+            }
+            if (data.customer.europochta_store_id && filled.includes('europochta_store_id')) {
+                form.europochta_store_id = data.customer.europochta_store_id
+                form.ops_id = form.ops_id || ''
+            }
+        }, 0)
+        filled.push('delivery_type')
+    }
+    if (filled.length) appliedFields.value = filled
+    return filled
+}
+
+function applyLookup() {
+    if (lookup.info.value?.customer) applyFromInfo(lookup.info.value)
+}
 
 const useEvropostPicker = computed(() =>
     form.delivery_type === 'europochta' && props.ep_api_version === 'new'

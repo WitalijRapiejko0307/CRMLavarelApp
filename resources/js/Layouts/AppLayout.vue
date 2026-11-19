@@ -64,6 +64,13 @@
                             Склад
                         </Link>
                         <Link
+                            v-if="isStore"
+                            href="/customers"
+                            :class="navLinkClass('/customers')"
+                        >
+                            Клиенты
+                        </Link>
+                        <Link
                             v-if="canViewAnalytics"
                             href="/analytics"
                             :class="navLinkClass('/analytics')"
@@ -300,6 +307,7 @@ const mobileLinks = computed(() => {
             { href: '/europochta', label: 'Европочта', active: isActive('/europochta') },
             { href: '/courier', label: 'Курьер', active: isActive('/courier') },
             { href: '/products', label: 'Склад', active: isActive('/products') },
+            { href: '/customers', label: 'Клиенты', active: isActive('/customers') },
         )
     }
     if (canViewAnalytics.value) {

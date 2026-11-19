@@ -222,6 +222,11 @@ class Order extends Model
         'belpost_mailing_item_id',
         'belpost_partial_receipt_complete',
         'mail_batch_id',
+        'customer_id',
+        'customer_lookup_at',
+        'customer_lookup_key',
+        'customer_prefill',
+        'customer_prefill_ack_at',
         'created_at',
     ];
 
@@ -232,6 +237,9 @@ class Order extends Model
         'funnel_exclude'    => 'boolean',
         'poste_restante'    => 'boolean',
         'belpost_partial_receipt_complete' => 'boolean',
+        'customer_prefill'  => 'array',
+        'customer_lookup_at' => 'datetime',
+        'customer_prefill_ack_at' => 'datetime',
         'status_changed_at' => 'datetime',
         'callback_at'       => 'datetime',
         'created_at'        => 'datetime',

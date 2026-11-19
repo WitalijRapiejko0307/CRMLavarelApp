@@ -48,6 +48,8 @@
 
         <FormAlert v-if="editing && formAlert" :message="formAlert" class="mb-4" />
 
+        <CustomerPrefillNotice :prefill="customerPrefill" :order-id="order.id" />
+
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <!-- Left: Main info -->
             <div class="lg:col-span-2 space-y-6">
@@ -125,25 +127,14 @@
                     </div>
                 </div>
 
-                <!-- Phone return history -->
-                <div v-if="phoneHistory.length" class="card">
-                    <h2 class="section-title mb-4">Возвраты по телефону</h2>
-                    <ul class="space-y-2 text-sm">
-                        <li
-                            v-for="row in phoneHistory"
-                            :key="row.id"
-                            class="flex items-center justify-between gap-3"
-                        >
-                            <a :href="`/orders/${row.id}`" class="text-indigo-600 hover:underline dark:text-indigo-400 truncate">
-                                #{{ row.id }} {{ row.full_name }}
-                            </a>
-                            <span class="flex items-center gap-2 text-xs text-muted">
-                                <OrderStatusBadge :status="row.status" />
-                                <span>{{ formatDate(row.created_at) }}</span>
-                            </span>
-                        </li>
-                    </ul>
-                </div>
+                <!-- Customer base: history warnings + lookup for a changed phone -->
+                <CustomerLookupNotice
+                    :info="lookup.info.value"
+                    :delivery-types="deliveryTypes"
+                    :applied="appliedFields"
+                    :can-apply="editing"
+                    @apply="applyLookup"
+                />
 
                 <!-- Notes -->
                 <div class="card">
@@ -704,6 +695,10 @@ import EvropostOfficePicker from '@/Components/EvropostOfficePicker.vue'
 import DeleteOrderModal from '@/Components/DeleteOrderModal.vue'
 import DuplicateFunnelModal from '@/Components/DuplicateFunnelModal.vue'
 import FormAlert from '@/Components/FormAlert.vue'
+import CustomerLookupNotice from '@/Components/CustomerLookupNotice.vue'
+import CustomerPrefillNotice from '@/Components/CustomerPrefillNotice.vue'
+import { useCustomerLookup } from '@/composables/useCustomerLookup'
+import { applyCustomerToForm } from '@/utils/customerPrefill'
 import { useSubscription } from '@/composables/useSubscription'
 import { formatPhone, isFullNameComplete, isInCatalog as checkInCatalog } from '@/utils/phone'
 import {
@@ -728,6 +723,9 @@ const props = defineProps({
     orderHandlers: { type: Array, default: () => [] },
     productLinks:  { type: Object, default: () => ({}) },
     phoneHistory:  { type: Array, default: () => [] },
+    customerInfo:  { type: Object, default: null },
+    customerPrefill: { type: Object, default: null },
+    customerLookupKey: { type: String, default: null },
     callScript:    { type: String, default: null },
     ep_api_version: { type: String, default: 'new' },
 })
@@ -785,6 +783,23 @@ const form = useForm({
     cross_sell:         props.order.cross_sell         ?? '',
     poste_restante:     props.order.poste_restante     ?? false,
 })
+
+// Customer base. The server sends the history for the current phone; a new search
+// happens only when the operator changes the phone to a number that was not looked up yet
+// (orders that were already looked up / auto-filled are never searched again).
+const appliedFields = ref([])
+const lookup = useCustomerLookup(() => form.phone, {
+    orderId: props.order.id,
+    skipKey: props.customerLookupKey,
+    initialInfo: props.customerInfo,
+})
+
+function applyLookup() {
+    const data = lookup.info.value
+    if (!data?.customer) return
+    const filled = applyCustomerToForm(form, data.customer, { deliveryType: props.order.delivery_type })
+    if (filled.length) appliedFields.value = filled
+}
 
 const useEvropostPicker = computed(() =>
     props.order.delivery_type === 'europochta' && props.ep_api_version === 'new'

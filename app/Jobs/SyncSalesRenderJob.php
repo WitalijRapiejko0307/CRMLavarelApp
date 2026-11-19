@@ -4,7 +4,9 @@ namespace App\Jobs;
 
 use App\Models\Order;
 use App\Models\TenantSetting;
+use App\Services\CustomerService;
 use App\Services\SalesRenderService;
+use App\Support\PhoneNormalizer;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -179,11 +181,12 @@ class SyncSalesRenderJob implements ShouldQueue
             return false;
         }
 
-        $srRaw           = (string) ($phoneFields[0]['value']['raw'] ?? '');
-        $normalizedSr    = preg_replace('/^\+?375/', '', $srRaw);
-        $normalizedOrder = preg_replace('/\D/', '', (string) $order->phone);
+        // Compare the last 9 digits: the order phone may be stored as 375XXXXXXXXX
+        // (webhook / forms normalize it) or as a bare 9-digit number (older data).
+        $srRaw = (string) ($phoneFields[0]['value']['raw'] ?? '');
+        $srKey = PhoneNormalizer::lastNineDigits($srRaw);
 
-        return $normalizedSr === $normalizedOrder;
+        return $srKey !== '' && $srKey === PhoneNormalizer::lastNineDigits((string) $order->phone);
     }
 
     /**
@@ -247,6 +250,16 @@ class SyncSalesRenderJob implements ShouldQueue
             $data['street']    = trim((string) ($addr['address_1'] ?? ''));
             $data['building']  = (string) ($addr['building']  ?? '');
             $data['apartment'] = (string) ($addr['apartment'] ?? '');
+
+            // SR has no housing / poste restante: drop the ones auto-filled from the
+            // customer base so the confirmed address is not a mix of two addresses.
+            $prefilled = $order->customer_prefill['fields'] ?? [];
+            if (in_array('housing', $prefilled, true)) {
+                $data['housing'] = null;
+            }
+            if (in_array('poste_restante', $prefilled, true)) {
+                $data['poste_restante'] = false;
+            }
         }
 
         $cart = $this->extractCart($srOrder);
@@ -260,6 +273,25 @@ class SyncSalesRenderJob implements ShouldQueue
 
         $order->update($data);
         $this->syncNoteFields($order, $srOrder);
+
+        // SalesRender data wins over the auto-fill from the customer base.
+        try {
+            $overwritten = array_values(array_intersect(
+                array_keys($data),
+                ['full_name', 'city', 'street', 'building', 'apartment']
+            ));
+            if ($overwritten !== []) {
+                if (isset($data['city'])) {
+                    $overwritten = array_merge($overwritten, ['housing', 'poste_restante']);
+                }
+                app(CustomerService::class)->markOverwritten($order, $overwritten);
+            }
+        } catch (\Throwable $e) {
+            Log::warning("SyncSalesRenderJob: prefill marker update skipped", [
+                'order_id' => $order->id,
+                'error'    => $e->getMessage(),
+            ]);
+        }
 
         Log::info("SyncSalesRenderJob: confirmed", [
             'order_id' => $order->id,

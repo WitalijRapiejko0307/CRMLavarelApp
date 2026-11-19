@@ -6,6 +6,7 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Models\TenantSetting;
 use App\Services\BlacklistService;
+use App\Services\CustomerService;
 use App\Services\OrderAssignmentService;
 use App\Services\SalesRenderService;
 use App\Support\PhoneNormalizer;
@@ -16,7 +17,8 @@ use Illuminate\Support\Facades\Log;
 class WebhookController extends Controller
 {
     public function __construct(
-        protected OrderAssignmentService $orderAssignment
+        protected OrderAssignmentService $orderAssignment,
+        protected CustomerService $customers
     ) {}
 
     /**
@@ -136,6 +138,14 @@ class WebhookController extends Controller
         Log::info('Webhook: order created', ['order_id' => $order->id, 'tenant_id' => $tenantId]);
 
         $this->orderAssignment->assignCallCenter($order);
+
+        // Auto-fill name / address / delivery from the store's customer base.
+        // Goods, prices and comment of the new lead are never touched.
+        try {
+            $this->customers->applyPrefill($order);
+        } catch (\Throwable $e) {
+            Log::warning('Webhook: customer prefill failed', ['order_id' => $order->id, 'error' => $e->getMessage()]);
+        }
 
         // ── 3. Optional: push to SalesRender ─────────────────────────────────
         $hasInternalCc = $this->orderAssignment->storeHasInternalCallCenter($tenantId);

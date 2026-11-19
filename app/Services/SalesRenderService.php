@@ -64,17 +64,8 @@ class SalesRenderService
         // Price in kopecks (as in GAS: price * 100)
         $price = isset($prices[0]) ? (int) round((float) $prices[0] * 100) : 0;
 
-        // Comment goes to SR as a string field (same as GAS). json_encode gives a
-        // valid quoted GraphQL string, incl. escaped quotes and newlines.
-        $comment       = trim((string) ($order->comment ?? ''));
-        $commentFields = $comment === ''
-            ? ''
-            : ',
-                                stringFields: [{ field: "comment", value: '
-                . json_encode($comment, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ' }]';
-
         // Source URL (landing page) → native SR order field `source.uri`.
-        // Optional like the comment: sent only when order.source is a valid URL.
+        // Optional: sent only when order.source is a valid URL.
         $source = trim((string) ($order->source ?? ''));
         // "www.test.com" / "test.com/page" without scheme → add https://; labels like "site" stay as is.
         if ($source !== '' && !preg_match('~\s~', $source) && preg_match('~^(https?://|[^/\s]+\.[^/\s]+)~i', $source)) {
@@ -101,7 +92,7 @@ class SalesRenderService
                                 phoneFields: {
                                     field: "phone",
                                     value: "%s"
-                                }%s
+                                }
                             },
                             cart: {
                                 items: [
@@ -121,7 +112,6 @@ class SalesRenderService
             $sourceFields,
             addslashes((string) $order->full_name),
             addslashes($phone),
-            $commentFields,
             $srItemId,
             $price
         );

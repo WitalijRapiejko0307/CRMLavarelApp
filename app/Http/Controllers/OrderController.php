@@ -10,6 +10,7 @@ use App\Models\TenantSetting;
 use App\Rules\BelarusPhone;
 use App\Rules\FullNameTwoParts;
 use App\Rules\HasAtLeastOneGood;
+use App\Services\CustomerService;
 use App\Services\OrderAssignmentService;
 use App\Services\OrderDuplicateService;
 use App\Services\OrderHandlerService;
@@ -37,6 +38,7 @@ class OrderController extends Controller
         protected OrderAssignmentService $orderAssignment,
         protected OrderHandlerService $orderHandlers,
         protected OrderDuplicateService $orderDuplicates,
+        protected CustomerService $customers,
     ) {
         $this->middleware(['auth', 'tenant', 'tenant.writable']);
     }
@@ -117,6 +119,7 @@ class OrderController extends Controller
 
         $order = Order::create($data);
         $this->orderAssignment->assignCallCenter($order);
+        $this->customers->registerLookup($order);
 
         return redirect()->route('orders.show', $order)
             ->with('message', 'Заказ создан.');
@@ -440,6 +443,11 @@ class OrderController extends Controller
             'orderHandlers'         => $this->orderHandlers->handlersForOrder($order->id),
             'productLinks'          => ProductLinkResolver::forOrder($order),
             'phoneHistory'          => $this->phoneReturnHistory($order),
+            'customerInfo'          => $this->customers->summary((int) $order->tenant_id, $order->phone, $order->id),
+            'customerPrefill'       => $order->customer_prefill
+                ? array_merge($order->customer_prefill, ['acknowledged' => $order->customer_prefill_ack_at !== null])
+                : null,
+            'customerLookupKey'     => $order->customer_lookup_key,
             'callScript'            => $this->isCallCenter() ? $this->renderCallScript($order) : null,
             'ep_api_version'        => $this->epApiVersion((int) $order->tenant_id),
         ]);
@@ -500,6 +508,12 @@ class OrderController extends Controller
         $data['last_updated_by_user_id'] = Auth::id();
 
         $order->update($data);
+
+        // Saving the form means the operator has seen the auto-filled data.
+        $this->customers->acknowledgePrefill($order);
+        if (array_key_exists('phone', $data)) {
+            $this->customers->registerLookup($order);
+        }
 
         return back()->with('message', 'Заказ обновлён.');
     }

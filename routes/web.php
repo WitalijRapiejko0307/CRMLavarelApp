@@ -10,6 +10,7 @@ use App\Http\Controllers\FeedbackController;
 use App\Http\Controllers\SupportController;
 use App\Http\Controllers\BelpostController;
 use App\Http\Controllers\CourierController;
+use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\ConnectionController;
 use App\Http\Controllers\EvropostController;
 use App\Http\Controllers\EvropostStoreController;
@@ -70,6 +71,7 @@ Route::prefix('orders')->name('orders.')->group(function () {
     Route::get('/{order}', [OrderController::class, 'show'])->name('show');
     Route::put('/{order}', [OrderController::class, 'update'])->name('update');
     Route::patch('/{order}/status', [OrderController::class, 'updateStatus'])->name('updateStatus');
+    Route::post('/{order}/customer-prefill/ack', [CustomerController::class, 'acknowledgePrefill'])->name('customerPrefill.ack');
     Route::patch('/{order}/delivery-type', [OrderController::class, 'updateDeliveryType'])->name('updateDeliveryType');
     Route::delete('/{order}', [OrderController::class, 'destroy'])->name('destroy');
 });
@@ -91,6 +93,12 @@ Route::prefix('europochta')->name('europochta.')->middleware('tenant.type:store'
     Route::get('/', [EvropostController::class, 'index'])->name('index');
     Route::post('/orders/{order}/register', [EvropostController::class, 'register'])->name('register');
     Route::post('/register-all', [EvropostController::class, 'registerAll'])->name('registerAll');
+});
+
+// Customer base (store only)
+Route::prefix('customers')->name('customers.')->middleware('tenant.type:store')->group(function () {
+    Route::get('/', [CustomerController::class, 'index'])->name('index');
+    Route::get('/{customer}', [CustomerController::class, 'show'])->name('show');
 });
 
 // Courier queue
@@ -173,6 +181,7 @@ Route::prefix('users')->name('users.')->group(function () {
 // Authenticated AJAX endpoints (session-based auth, inside web middleware group)
 Route::prefix('api')->name('api.')->middleware(['auth', 'tenant', 'tenant.writable'])->group(function () {
     Route::get('/address/search', [AddressController::class, 'search'])->name('address.search')->withoutMiddleware('tenant.writable');
+    Route::get('/customers/lookup', [CustomerController::class, 'lookup'])->name('customers.lookup')->withoutMiddleware('tenant.writable');
     Route::get('/europochta/stores/search', [EvropostStoreController::class, 'search'])->name('europochta.stores.search')->withoutMiddleware('tenant.writable');
     Route::get('/orders/tracking-status', [OrderController::class, 'trackingStatus'])->name('orders.trackingStatus')->withoutMiddleware('tenant.writable');
     Route::get('/orders/feed', [OrderFeedController::class, 'index'])->name('orders.feed')->withoutMiddleware('tenant.writable');
