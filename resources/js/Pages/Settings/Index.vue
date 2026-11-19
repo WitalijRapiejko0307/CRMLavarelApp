@@ -1067,7 +1067,7 @@ function isVisible(meta) {
 }
 
 function isToggleOn(key) {
-    return (form[key] === '1') || (form[key] === '' && currentValues.value[key] === '1')
+    return form[key] === '1'
 }
 
 function toggleSwitch(key) {

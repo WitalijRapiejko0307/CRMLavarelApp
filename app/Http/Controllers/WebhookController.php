@@ -77,7 +77,7 @@ class WebhookController extends Controller
             'offer'         => ['nullable', 'string', 'max:255'],
             'options'       => ['nullable', 'numeric', 'min:0'],
             'comment'       => ['nullable', 'string', 'max:2000'],
-            'source'        => ['nullable', 'string', 'max:50'],
+            'source'        => ['nullable', 'string', 'max:2000'],
             'utm_source'    => ['nullable', 'string', 'max:255'],
             'utm_medium'    => ['nullable', 'string', 'max:255'],
             'utm_campaign'  => ['nullable', 'string', 'max:255'],

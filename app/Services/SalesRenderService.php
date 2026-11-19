@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Order;
 use App\Support\PhoneNormalizer;
+use App\Support\UrlNormalizer;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -72,13 +73,26 @@ class SalesRenderService
                                 stringFields: [{ field: "comment", value: '
                 . json_encode($comment, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ' }]';
 
+        // Source URL (landing page) → native SR order field `source.uri`.
+        // Optional like the comment: sent only when order.source is a valid URL.
+        $source = trim((string) ($order->source ?? ''));
+        // "www.test.com" / "test.com/page" without scheme → add https://; labels like "site" stay as is.
+        if ($source !== '' && !preg_match('~\s~', $source) && preg_match('~^(https?://|[^/\s]+\.[^/\s]+)~i', $source)) {
+            $source = UrlNormalizer::normalize($source);
+        }
+        $sourceFields = ($source !== '' && filter_var($source, FILTER_VALIDATE_URL))
+            ? '
+                            source: { uri: '
+                . json_encode($source, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ' },'
+            : '';
+
         $mutation = sprintf(
             'mutation {
                 orderMutation {
                     addOrder(
                         input: {
                             projectId: "%s",
-                            statusId: 1,
+                            statusId: 1,%s
                             orderData: {
                                 humanNameFields: {
                                     field: "name",
@@ -104,6 +118,7 @@ class SalesRenderService
                 }
             }',
             addslashes($this->projectId),
+            $sourceFields,
             addslashes((string) $order->full_name),
             addslashes($phone),
             $commentFields,
