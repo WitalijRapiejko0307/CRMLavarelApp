@@ -15,6 +15,7 @@ class OrderStockMovement extends Model
         'tenant_id',
         'order_id',
         'product_id',
+        'variation_id',
         'qty',
         'direction',
         'reason',

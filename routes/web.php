@@ -117,6 +117,9 @@ Route::prefix('products')->name('products.')->middleware('tenant.type:store')->g
     Route::post('/', [ProductController::class, 'store'])->name('store');
     Route::put('/{product}', [ProductController::class, 'update'])->name('update');
     Route::delete('/{product}', [ProductController::class, 'destroy'])->name('destroy');
+    Route::post('/{product}/variations', [ProductController::class, 'storeVariation'])->name('variations.store');
+    Route::put('/{product}/variations/{variation}', [ProductController::class, 'updateVariation'])->name('variations.update');
+    Route::delete('/{product}/variations/{variation}', [ProductController::class, 'destroyVariation'])->name('variations.destroy');
 });
 
 // Call-center analytics

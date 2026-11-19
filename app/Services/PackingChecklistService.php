@@ -21,7 +21,7 @@ class PackingChecklistService
             $orders = $batch->orders()
                 ->orderBy('created_at')
                 ->orderBy('id')
-                ->get(['id', 'full_name', 'goods', 'quantities', 'prices']);
+                ->get(['id', 'full_name', 'goods', 'quantities', 'prices', 'variations']);
 
             return $this->rowsFromOrders($orders);
         }
@@ -42,7 +42,7 @@ class PackingChecklistService
             ->whereNull('track_number')
             ->orderBy('created_at')
             ->orderBy('id')
-            ->get(['id', 'full_name', 'goods', 'quantities', 'prices']);
+            ->get(['id', 'full_name', 'goods', 'quantities', 'prices', 'variations']);
 
         return $this->rowsFromOrders($orders);
     }
@@ -60,7 +60,7 @@ class PackingChecklistService
             ->where('delivery_type', 'courier')
             ->orderBy('created_at')
             ->orderBy('id')
-            ->get(['id', 'full_name', 'goods', 'quantities', 'prices']);
+            ->get(['id', 'full_name', 'goods', 'quantities', 'prices', 'variations']);
 
         return $this->rowsFromOrders($orders);
     }
@@ -120,8 +120,10 @@ class PackingChecklistService
 
             $price = isset($prices[$i]) ? (float) $prices[$i] : 0.0;
 
-            $items[]  = ['name' => $name, 'qty' => $qty];
-            $labels[] = $name . ' × ' . $qty;
+            $label = $this->goodLabelFor($order, $i, $name);
+
+            $items[]  = ['name' => $label, 'qty' => $qty];
+            $labels[] = $label . ' × ' . $qty;
             $sum     += $price * $qty;
         }
 
@@ -139,6 +141,20 @@ class PackingChecklistService
      * @param  mixed                           $default
      * @return mixed
      */
+    /**
+     * Product name with the variation appended when the order has one for this position.
+     */
+    private function goodLabelFor($order, int $i, string $name): string
+    {
+        if ($order instanceof \App\Models\Order) {
+            $label = trim($order->goodLabel($i));
+
+            return $label !== '' ? $label : $name;
+        }
+
+        return $name;
+    }
+
     private function orderField($order, string $key, $default = null)
     {
         if (is_array($order)) {

@@ -38,7 +38,7 @@ class PackingChecklistController extends Controller
             ->whereNull('track_number')
             ->orderBy('created_at')
             ->orderBy('id')
-            ->get(['id', 'full_name', 'goods', 'quantities', 'prices']);
+            ->get(['id', 'full_name', 'goods', 'quantities', 'prices', 'variations']);
 
         $rows = $this->service->rowsForBelpost($batch, $eligible);
 

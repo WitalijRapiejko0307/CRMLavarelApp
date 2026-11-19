@@ -3,8 +3,10 @@
 namespace App\Jobs;
 
 use App\Models\Order;
+use App\Models\Product;
 use App\Models\TenantSetting;
 use App\Services\CustomerService;
+use App\Services\ProductVariationService;
 use App\Services\SalesRenderService;
 use App\Support\PhoneNormalizer;
 use Illuminate\Bus\Queueable;
@@ -198,12 +200,13 @@ class SyncSalesRenderJob implements ShouldQueue
     {
         $changed = false;
 
-        $cart = $this->extractCart($srOrder);
+        $cart = $this->extractCart($order, $srOrder);
         if ($cart !== null && $this->isCartChanged($order, $cart)) {
             $order->update([
                 'goods'      => $cart['goods'],
                 'quantities' => $cart['quantities'],
                 'prices'     => $cart['prices'],
+                'variations' => $cart['variations'],
             ]);
             $changed = true;
         }
@@ -262,11 +265,12 @@ class SyncSalesRenderJob implements ShouldQueue
             }
         }
 
-        $cart = $this->extractCart($srOrder);
+        $cart = $this->extractCart($order, $srOrder);
         if ($cart !== null) {
             $data['goods']      = $cart['goods'];
             $data['quantities'] = $cart['quantities'];
             $data['prices']     = $cart['prices'];
+            $data['variations'] = $cart['variations'];
         }
 
         $data['status'] = 'Заказать';
@@ -341,7 +345,7 @@ class SyncSalesRenderJob implements ShouldQueue
     /**
      * @return array{goods: string[], quantities: int[], prices: float[]}|null
      */
-    private function extractCart(array $srOrder): ?array
+    private function extractCart(Order $order, array $srOrder): ?array
     {
         $items = $srOrder['cart']['items'] ?? [];
         if (empty($items)) {
@@ -351,17 +355,21 @@ class SyncSalesRenderJob implements ShouldQueue
         $goods      = [];
         $quantities = [];
         $prices     = [];
+        $variations = [];
 
         foreach ($items as $item) {
-            $goods[]      = (string) ($item['sku']['item']['name'] ?? '');
+            $name         = (string) ($item['sku']['item']['name'] ?? '');
+            $goods[]      = $name;
             $quantities[] = (int) ($item['quantity'] ?? 1);
             $prices[]     = (float) ($item['pricing']['unitPrice'] ?? 0);
+            $variations[] = $this->resolveVariation($order, $name, $item['sku']['variation'] ?? null);
         }
 
         return [
             'goods'      => $goods,
             'quantities' => $quantities,
             'prices'     => $prices,
+            'variations' => $this->normalizeVariations($variations),
         ];
     }
 
@@ -372,7 +380,68 @@ class SyncSalesRenderJob implements ShouldQueue
     {
         return $this->normalizeList($order->goods ?? []) !== $this->normalizeList($cart['goods'])
             || $this->normalizeNumericList($order->quantities ?? []) !== $this->normalizeNumericList($cart['quantities'])
-            || $this->normalizeNumericList($order->prices ?? []) !== $this->normalizeNumericList($cart['prices']);
+            || $this->normalizeNumericList($order->prices ?? []) !== $this->normalizeNumericList($cart['prices'])
+            || json_encode($this->normalizeVariations($order->variationsAligned())) !== json_encode($cart['variations']);
+    }
+
+    /**
+     * Map SR sku.variation to a catalog variation snapshot {number, name}, or null ("no variation").
+     * Unknown numbers other than 1 create a variation (named from SR `property`).
+     *
+     * @param  array{number?: mixed, property?: mixed}|null  $srVariation
+     * @return array{number: int, name: ?string}|null
+     */
+    private function resolveVariation(Order $order, string $goodName, ?array $srVariation): ?array
+    {
+        $number = isset($srVariation['number']) ? (int) $srVariation['number'] : null;
+        if ($goodName === '' || !$number) {
+            return null;
+        }
+
+        try {
+            $product = Product::withoutGlobalScopes()
+                ->where('tenant_id', $order->tenant_id)
+                ->where('name', $goodName)
+                ->first();
+            if (!$product) {
+                return null;
+            }
+
+            $variation = app(ProductVariationService::class)
+                ->resolve($product, $number, isset($srVariation['property']) ? (string) $srVariation['property'] : null);
+        } catch (\Throwable $e) {
+            Log::warning('SyncSalesRenderJob: variation resolve failed', [
+                'order_id' => $order->id,
+                'good'     => $goodName,
+                'error'    => $e->getMessage(),
+            ]);
+            return null;
+        }
+
+        return $variation ? ['number' => $variation->number, 'name' => $variation->name] : null;
+    }
+
+    /**
+     * null when no position has a variation, otherwise the list as is.
+     *
+     * @param  array<int, array|null>|null  $variations
+     */
+    private function normalizeVariations(?array $variations): ?array
+    {
+        if (!$variations) {
+            return null;
+        }
+
+        foreach ($variations as $v) {
+            if ($v !== null) {
+                return array_values(array_map(
+                    static fn ($v) => $v === null ? null : ['number' => (int) $v['number'], 'name' => $v['name'] ?? null],
+                    $variations
+                ));
+            }
+        }
+
+        return null;
     }
 
     /**

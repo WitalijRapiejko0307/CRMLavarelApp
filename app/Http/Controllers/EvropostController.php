@@ -33,7 +33,7 @@ class EvropostController extends Controller
             ->where('delivery_type', 'europochta')
             ->whereNull('track_number')
             ->orderBy('created_at')
-            ->get(['id', 'full_name', 'city', 'street', 'building', 'housing', 'apartment', 'phone', 'goods', 'quantities', 'prices', 'ops_id']);
+            ->get(['id', 'full_name', 'city', 'street', 'building', 'housing', 'apartment', 'phone', 'goods', 'quantities', 'prices', 'variations', 'ops_id']);
 
         return Inertia::render('Europochta/Create', [
             'eligibleOrders' => $eligibleOrders,

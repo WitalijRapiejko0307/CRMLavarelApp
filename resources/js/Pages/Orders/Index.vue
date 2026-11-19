@@ -328,7 +328,7 @@
                     </p>
 
                     <p class="mt-0.5 text-sm text-gray-700 dark:text-gray-300 truncate">
-                        Товары: {{ formatGoods(order.goods, order.quantities) }}
+                        Товары: {{ formatGoods(order.goods, order.quantities, order) }}
                     </p>
 
                     <p class="mt-1 text-xs text-gray-400 dark:text-gray-500 flex flex-wrap items-center gap-x-1">
@@ -380,6 +380,7 @@
 </template>
 
 <script setup>
+import { goodLabel } from '@/utils/goodLabel'
 import { ref, computed, h, onMounted, onUnmounted, watch } from 'vue'
 import { Inertia } from '@inertiajs/inertia'
 import { Link, usePage } from '@inertiajs/inertia-vue3'
@@ -930,10 +931,11 @@ function formatDate(value) {
     })
 }
 
-function formatGoods(goods, quantities) {
+function formatGoods(goods, quantities, order = null) {
     if (!goods || goods.length === 0) return '—'
-    if (goods.length === 1) return goods[0]
-    return `${goods[0]} +${goods.length - 1}`
+    const first = order ? goodLabel(order, 0) : goods[0]
+    if (goods.length === 1) return first
+    return `${first} +${goods.length - 1}`
 }
 
 // --- Tenant extra list columns (store only) ---
@@ -1100,7 +1102,7 @@ const columns = computed(() => {
             cell: info => {
                 const row = info.row.original
                 return h('span', { class: 'text-gray-700 dark:text-gray-300 truncate max-w-xs block' },
-                    formatGoods(row.goods, row.quantities)
+                    formatGoods(row.goods, row.quantities, row)
                 )
             },
         }),

@@ -1041,6 +1041,7 @@ const webhookExample = computed(() => {
         "    'phone'   => $phone ?? '',",
         "    'options' => $options ?? 0,",
         "    'comment' => $comment ?? '', // необязательно, до 2000 символов",
+        "    'variation' => $variation ?? null, // необязательно: номер вариации товара в колл-центре (целое число ≥ 1). Не передавайте, если у товара нет вариаций",
         "    'source'  => 'site',",
         '];',
         '',

@@ -158,6 +158,13 @@
                                             >
                                                 + Приход
                                             </button>
+                                            <button
+                                                class="btn-secondary btn-xs"
+                                                @click="openVariationsModal(product)"
+                                                title="Вариации товара"
+                                            >
+                                                Вариации<template v-if="product.variations?.length"> ({{ product.variations.length }})</template>
+                                            </button>
                                             <button class="btn-secondary btn-xs" @click="startEdit(product)">
                                                 Изменить
                                             </button>
@@ -256,6 +263,9 @@
                             <button class="btn-secondary btn-xs text-indigo-600 touch-target" @click="openIntakeModal(product)">
                                 + Приход
                             </button>
+                            <button class="btn-secondary btn-xs touch-target" @click="openVariationsModal(product)">
+                                Вариации<template v-if="product.variations?.length"> ({{ product.variations.length }})</template>
+                            </button>
                             <button class="btn-secondary btn-xs touch-target" @click="startEdit(product)">Изменить</button>
                             <button class="btn-secondary btn-xs text-red-500 touch-target" @click="confirmDelete(product)">Удалить</button>
                         </div>
@@ -337,10 +347,29 @@
                             <label class="label">Вес (г)</label>
                             <input v-model.number="createForm.weight" type="number" min="0" step="0.1" class="input" />
                         </div>
-                        <div>
+                        <div v-if="!createWithVariations">
                             <label class="label">Остаток (шт)</label>
                             <input v-model.number="createForm.stock" type="number" min="0" class="input" />
                         </div>
+                    </div>
+                    <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                        <input v-model="createWithVariations" type="checkbox" @change="onToggleCreateVariations" />
+                        У товара есть вариации (цвет, размер)
+                    </label>
+                    <div v-if="createWithVariations" class="space-y-2 rounded-md bg-gray-50 dark:bg-gray-800/60 p-3">
+                        <p class="text-xs text-muted">
+                            Номер вариации должен совпадать с номером в колл-центре. Вариация с номером 1 обязательна.
+                            Остаток товара будет равен сумме остатков вариаций.
+                        </p>
+                        <div v-for="(v, i) in createVariations" :key="i" class="flex items-center gap-2">
+                            <input v-model.number="v.number" type="number" min="1" class="input w-20 py-1" placeholder="№" />
+                            <input v-model="v.name" class="input flex-1 py-1" placeholder="Название (напр. Чёрный)" />
+                            <input v-model.number="v.stock" type="number" min="0" class="input w-24 py-1" placeholder="Остаток" />
+                            <button type="button" class="text-red-500 text-sm" :disabled="createVariations.length <= 1" @click="createVariations.splice(i, 1)">✕</button>
+                        </div>
+                        <button type="button" class="text-sm text-indigo-600 dark:text-indigo-400 hover:underline" @click="addCreateVariation">
+                            + Добавить вариацию
+                        </button>
                     </div>
                     <div v-if="srEnabled">
                         <label class="label">ID SalesRender</label>
@@ -390,6 +419,52 @@
                     <button class="btn-primary justify-center" :disabled="saving" @click="createProduct">
                         {{ saving ? 'Сохраняю…' : 'Добавить' }}
                     </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Variations modal ── -->
+        <div v-if="variationsModal" class="modal-backdrop" @click.self="variationsModal = false">
+            <div class="modal-box modal-box--scroll">
+                <h2 class="section-title mb-1">Вариации</h2>
+                <p class="text-sm text-muted mb-1">{{ variationsProduct?.name }}</p>
+                <p class="text-xs text-gray-400 dark:text-gray-500 mb-4">
+                    Остаток товара: <strong>{{ variationsProduct?.stock }}</strong>
+                    <template v-if="variationsProduct?.variations?.length"> (сумма по вариациям)</template>.
+                    Номер вариации должен совпадать с номером в колл-центре.
+                </p>
+
+                <div class="space-y-2">
+                    <div
+                        v-for="v in (variationsProduct?.variations ?? [])"
+                        :key="v.id"
+                        class="flex flex-wrap items-center gap-2 border-b border-gray-100 dark:border-gray-700 pb-2"
+                    >
+                        <span class="w-8 text-sm text-gray-500">№{{ v.number }}</span>
+                        <input v-model="variationNames[v.id]" class="input flex-1 min-w-[8rem] py-1" placeholder="Название" @change="saveVariationName(v)" />
+                        <span class="text-sm w-16 text-right" :class="v.stock < 10 ? 'text-red-600 font-semibold' : ''">{{ v.stock }} шт</span>
+                        <input v-model.number="variationDeltas[v.id]" type="number" class="input w-20 py-1" placeholder="+/−" />
+                        <button class="btn-secondary btn-xs" :disabled="!variationDeltas[v.id]" @click="applyVariationDelta(v)">Применить</button>
+                        <button v-if="v.number !== 1" class="text-red-500 text-sm" title="Удалить вариацию" @click="deleteVariation(v)">✕</button>
+                    </div>
+                </div>
+
+                <div class="mt-4 rounded-md bg-gray-50 dark:bg-gray-800/60 p-3 space-y-2">
+                    <p class="text-sm font-medium text-gray-700 dark:text-gray-300">Новая вариация</p>
+                    <div class="flex items-center gap-2">
+                        <input v-model.number="newVariation.number" type="number" min="1" class="input w-20 py-1" placeholder="№" />
+                        <input v-model="newVariation.name" class="input flex-1 py-1" placeholder="Название" />
+                        <input v-model.number="newVariation.stock" type="number" min="0" class="input w-24 py-1" placeholder="Остаток" />
+                    </div>
+                    <p v-if="!variationsProduct?.variations?.length" class="text-xs text-muted">
+                        Текущий остаток и продажи товара перейдут в вариацию 1. Если добавляете вариацию с номером 1, укажите только название.
+                    </p>
+                    <button class="btn-primary btn-xs" :disabled="saving" @click="addVariation">Добавить</button>
+                </div>
+                <p v-if="variationsError" class="text-xs text-red-600 mt-2">{{ variationsError }}</p>
+
+                <div class="flex justify-end mt-5">
+                    <button class="btn-secondary justify-center" @click="variationsModal = false">Закрыть</button>
                 </div>
             </div>
         </div>
@@ -456,6 +531,18 @@ const createModal = ref(false)
 const showCreateExtra = ref(false)
 const createForm  = ref(emptyProductForm())
 const createError = ref('')
+
+const createWithVariations = ref(false)
+const createVariations     = ref([])
+
+// Variations modal
+const variationsModal   = ref(false)
+const variationsProductId = ref(null)
+const variationsProduct = computed(() => productList.value.find(p => p.id === variationsProductId.value) ?? null)
+const variationNames    = ref({})
+const variationDeltas   = ref({})
+const newVariation      = ref({ number: null, name: '', stock: 0 })
+const variationsError   = ref('')
 
 // Intake modal
 const intakeModal   = ref(false)
@@ -552,7 +639,20 @@ function openCreateModal(presetName = '') {
     createForm.value  = emptyProductForm(typeof presetName === 'string' ? presetName : '')
     createError.value = ''
     showCreateExtra.value = false
+    createWithVariations.value = false
+    createVariations.value = []
     createModal.value = true
+}
+
+function onToggleCreateVariations() {
+    if (createWithVariations.value && createVariations.value.length === 0) {
+        createVariations.value = [{ number: 1, name: '', stock: 0 }]
+    }
+}
+
+function addCreateVariation() {
+    const max = createVariations.value.reduce((m, v) => Math.max(m, Number(v.number) || 0), 0)
+    createVariations.value.push({ number: max + 1, name: '', stock: 0 })
 }
 
 onMounted(() => {
@@ -568,10 +668,24 @@ async function createProduct() {
         createError.value = 'Введите название'
         return
     }
+    const payload = { ...createForm.value }
+    if (createWithVariations.value) {
+        const rows = createVariations.value
+        if (!rows.some(v => Number(v.number) === 1)) {
+            createError.value = 'Среди вариаций должна быть вариация с номером 1'
+            return
+        }
+        if (rows.some(v => !String(v.name ?? '').trim())) {
+            createError.value = 'Укажите название каждой вариации'
+            return
+        }
+        payload.variations = rows.map(v => ({ number: v.number, name: v.name, stock: v.stock || 0 }))
+        delete payload.stock
+    }
     saving.value      = true
     createError.value = ''
     try {
-        const resp = await apiFetch('/products', 'POST', createForm.value)
+        const resp = await apiFetch('/products', 'POST', payload)
         const data = await resp.json()
         if (data.success) {
             productList.value.unshift(data.product)
@@ -586,6 +700,10 @@ async function createProduct() {
 
 // ── Intake (приход товара) ────────────────────────────────────────────────────
 function openIntakeModal(product) {
+    if (product.variations?.length) {
+        openVariationsModal(product)
+        return
+    }
     intakeProduct.value = product
     intakeDelta.value   = null
     intakeError.value   = ''
@@ -613,6 +731,80 @@ async function saveIntake() {
     } finally {
         saving.value = false
     }
+}
+
+// ── Variations ────────────────────────────────────────────────────────────────
+function syncVariationInputs() {
+    const names = {}
+    for (const v of variationsProduct.value?.variations ?? []) {
+        names[v.id] = v.name ?? ''
+    }
+    variationNames.value = names
+    variationDeltas.value = {}
+}
+
+function openVariationsModal(product) {
+    variationsProductId.value = product.id
+    variationsError.value = ''
+    newVariation.value = {
+        number: product.variations?.length ? Math.max(...product.variations.map(v => v.number)) + 1 : 2,
+        name: '',
+        stock: 0,
+    }
+    syncVariationInputs()
+    variationsModal.value = true
+}
+
+async function variationRequest(url, method, body) {
+    variationsError.value = ''
+    saving.value = true
+    try {
+        const resp = await apiFetch(url, method, body)
+        const data = await resp.json()
+        if (data.success) {
+            updateInList(data.product)
+            syncVariationInputs()
+            return true
+        }
+        variationsError.value = data.message ?? 'Ошибка'
+        return false
+    } catch (e) {
+        variationsError.value = e?.response?.data?.message ?? 'Ошибка'
+        return false
+    } finally {
+        saving.value = false
+    }
+}
+
+async function addVariation() {
+    const v = newVariation.value
+    if (!v.number || !String(v.name ?? '').trim()) {
+        variationsError.value = 'Укажите номер и название'
+        return
+    }
+    const ok = await variationRequest(`/products/${variationsProductId.value}/variations`, 'POST', {
+        number: v.number, name: v.name, stock: v.stock || 0,
+    })
+    if (ok) {
+        newVariation.value = { number: Number(v.number) + 1, name: '', stock: 0 }
+    }
+}
+
+async function saveVariationName(v) {
+    const name = String(variationNames.value[v.id] ?? '').trim()
+    if (!name || name === v.name) return
+    await variationRequest(`/products/${variationsProductId.value}/variations/${v.id}`, 'PUT', { name })
+}
+
+async function applyVariationDelta(v) {
+    const delta = Number(variationDeltas.value[v.id])
+    if (!delta) return
+    await variationRequest(`/products/${variationsProductId.value}/variations/${v.id}`, 'PUT', { stock_delta: delta })
+}
+
+async function deleteVariation(v) {
+    if (!confirm(`Удалить вариацию №${v.number}?`)) return
+    await variationRequest(`/products/${variationsProductId.value}/variations/${v.id}`, 'DELETE')
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────────

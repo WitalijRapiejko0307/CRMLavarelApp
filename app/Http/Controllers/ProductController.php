@@ -2,12 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\OrderStockMovement;
 use App\Models\Product;
+use App\Models\ProductVariation;
+use App\Services\ProductVariationService;
 use App\Models\TenantSetting;
 use App\Support\UrlNormalizer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -26,7 +30,7 @@ class ProductController extends Controller
      */
     public function index(): Response
     {
-        $products = Product::orderBy('name')->get();
+        $products = Product::with('variations')->orderBy('name')->get();
 
         $srEnabled = TenantSetting::get('sr_enabled', '') === '1';
 
@@ -50,10 +54,24 @@ class ProductController extends Controller
         $data = $request->validate(array_merge([
             'name'       => ['required', 'string', 'max:255'],
             'page_url'   => ['nullable', 'url', 'max:500'],
-            'stock'      => ['required', 'integer', 'min:0'],
+            'stock'      => ['required_without:variations', 'nullable', 'integer', 'min:0'],
             'weight'     => ['required', 'numeric', 'min:0'],
             'sr_item_id' => ['nullable', 'integer', 'min:1'],
+            'variations'          => ['nullable', 'array'],
+            'variations.*.number' => ['required', 'integer', 'min:1', 'distinct'],
+            'variations.*.name'   => ['required', 'string', 'max:255'],
+            'variations.*.stock'  => ['required', 'integer', 'min:0'],
         ], static::offerFieldRules()));
+
+        $variations = array_values($data['variations'] ?? []);
+        unset($data['variations']);
+
+        if ($variations !== [] && !in_array(1, array_map(static fn ($v) => (int) $v['number'], $variations), true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Среди вариаций должна быть вариация с номером 1',
+            ], 422);
+        }
 
         $tenantId = Auth::user()->tenant_id;
 
@@ -64,9 +82,22 @@ class ProductController extends Controller
             ], 422);
         }
 
-        $product = Product::create(array_merge($data, ['tenant_id' => $tenantId]));
+        $product = DB::transaction(function () use ($data, $tenantId, $variations) {
+            $data['stock'] = $variations !== []
+                ? array_sum(array_column($variations, 'stock'))
+                : (int) $data['stock'];
 
-        return response()->json(['success' => true, 'product' => $product]);
+            $product = Product::create(array_merge($data, ['tenant_id' => $tenantId]));
+
+            $service = app(ProductVariationService::class);
+            foreach ($variations as $v) {
+                $service->create($product, (int) $v['number'], trim($v['name']), (int) $v['stock']);
+            }
+
+            return $product;
+        });
+
+        return response()->json(['success' => true, 'product' => $product->load('variations')]);
     }
 
     // ─── Update ───────────────────────────────────────────────────────────────
@@ -118,12 +149,119 @@ class ProductController extends Controller
 
         // Stock intake (приход товара): positive delta adds, negative subtracts
         if (isset($data['stock_delta'])) {
+            if (app(ProductVariationService::class)->isVariational($product)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'У товара есть вариации: остаток меняется по каждой вариации',
+                ], 422);
+            }
             $product->stock = max(0, $product->stock + (int)$data['stock_delta']);
         }
 
         $product->save();
 
-        return response()->json(['success' => true, 'product' => $product->fresh()]);
+        return response()->json(['success' => true, 'product' => $product->fresh('variations')]);
+    }
+
+    // ─── Variations ───────────────────────────────────────────────────────────
+
+    /**
+     * POST /products/{product}/variations
+     * First variation turns the product into a variational one: variation 1 inherits the
+     * current stock and sales.
+     */
+    public function storeVariation(Request $request, Product $product): JsonResponse
+    {
+        $data = $request->validate([
+            'number' => ['required', 'integer', 'min:1'],
+            'name'   => ['required', 'string', 'max:255'],
+            'stock'  => ['nullable', 'integer', 'min:0'],
+        ]);
+
+        $service = app(ProductVariationService::class);
+
+        if ($service->find($product, (int) $data['number'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Вариация с таким номером уже есть',
+            ], 422);
+        }
+
+        DB::transaction(function () use ($product, $data, $service) {
+            $locked = Product::lockForUpdate()->findOrFail($product->id);
+
+            if (!$service->isVariational($locked)) {
+                $service->makeVariational($locked);
+            }
+
+            if ((int) $data['number'] === 1) {
+                $base = $service->find($locked, 1);
+                $base->name = trim($data['name']);
+                $base->save();
+            } else {
+                $service->create($locked, (int) $data['number'], trim($data['name']), (int) ($data['stock'] ?? 0));
+            }
+
+            $service->recalcProductTotals($locked);
+        });
+
+        return response()->json(['success' => true, 'product' => $product->fresh('variations')]);
+    }
+
+    /**
+     * PUT /products/{product}/variations/{variation}
+     * name and/or stock_delta (приход / списание вручную).
+     */
+    public function updateVariation(Request $request, Product $product, ProductVariation $variation): JsonResponse
+    {
+        abort_if($variation->product_id !== $product->id, 404);
+
+        $data = $request->validate([
+            'name'        => ['sometimes', 'string', 'max:255'],
+            'stock_delta' => ['sometimes', 'integer'],
+        ]);
+
+        DB::transaction(function () use ($product, $variation, $data) {
+            $variation = ProductVariation::lockForUpdate()->findOrFail($variation->id);
+
+            if (isset($data['name'])) {
+                $variation->name = trim($data['name']);
+            }
+            if (isset($data['stock_delta'])) {
+                $variation->stock = max(0, $variation->stock + (int) $data['stock_delta']);
+            }
+            $variation->save();
+
+            app(ProductVariationService::class)->recalcProductTotals($product);
+        });
+
+        return response()->json(['success' => true, 'product' => $product->fresh('variations')]);
+    }
+
+    /**
+     * DELETE /products/{product}/variations/{variation}
+     * Only a variation with no stock, no sales and no stock movements, and never variation 1.
+     */
+    public function destroyVariation(Product $product, ProductVariation $variation): JsonResponse
+    {
+        abort_if($variation->product_id !== $product->id, 404);
+
+        $used = $variation->stock > 0
+            || $variation->sold_count > 0
+            || OrderStockMovement::withoutGlobalScopes()->where('variation_id', $variation->id)->exists();
+
+        if ($variation->number === 1 || $used) {
+            return response()->json([
+                'success' => false,
+                'message' => $variation->number === 1
+                    ? 'Вариацию 1 удалить нельзя'
+                    : 'Нельзя удалить вариацию с остатком, продажами или движениями',
+            ], 422);
+        }
+
+        $variation->delete();
+
+        return response()->json(['success' => true, 'product' => $product->fresh('variations')]);
     }
 
     // ─── Delete ───────────────────────────────────────────────────────────────

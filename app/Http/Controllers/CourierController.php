@@ -40,6 +40,7 @@ class CourierController extends Controller
                 'goods',
                 'quantities',
                 'prices',
+                'variations',
                 'comment',
                 'upsell',
                 'cross_sell',

@@ -239,6 +239,7 @@
                                 <select
                                     v-model="form.goods[i]"
                                     class="flex-1 min-w-0 truncate"
+                                    @change="onGoodChange(i, $event.target.value)"
                                     :class="{ 'border-red-400': fieldErrors.goods }"
                                 >
                                     <option value="">— выберите товар —</option>
@@ -273,6 +274,18 @@
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                                     </svg>
                                 </button>
+                            </div>
+                            <div v-if="variationsOf(form.goods[i]).length" class="flex items-center gap-2 text-sm">
+                                <span class="text-xs text-gray-500 dark:text-gray-400 shrink-0">Вариация</span>
+                                <select
+                                    :value="variationNumber(i)"
+                                    class="flex-1 min-w-0 truncate"
+                                    @change="setVariation(i, $event.target.value)"
+                                >
+                                    <option v-for="v in variationsOf(form.goods[i])" :key="v.id" :value="v.number">
+                                        №{{ v.number }} {{ v.name || '' }} · {{ v.stock }} шт
+                                    </option>
+                                </select>
                             </div>
                             <div
                                 v-if="form.goods[i] && !isInCatalog(form.goods[i])"
@@ -421,6 +434,7 @@ const form = useForm({
     goods:      [],
     quantities: [],
     prices:     [],
+    variations: [],
 })
 
 // Customer base: search by phone, auto-fill empty fields (never goods / prices / comment).
@@ -476,13 +490,32 @@ function addGood() {
     form.goods.push('')
     form.quantities.push(1)
     form.prices.push(0)
+    form.variations.push(null)
 }
 
 function removeGood(index) {
     form.goods.splice(index, 1)
     form.quantities.splice(index, 1)
     form.prices.splice(index, 1)
+    form.variations.splice(index, 1)
 }
+// ── Variations (parallel to goods[]; null = no variation / variation 1) ──────
+function variationsOf(name) {
+    return (props.products ?? []).find(p => p.name === name)?.variations ?? []
+}
+
+function variationNumber(i) {
+    return form.variations[i]?.number ?? 1
+}
+
+function setVariation(i, number) {
+    form.variations[i] = { number: Number(number) }
+}
+
+function onGoodChange(i, name) {
+    form.variations[i] = variationsOf(name).length ? { number: 1 } : null
+}
+
 
 function submit() {
     if (readOnly.value) return

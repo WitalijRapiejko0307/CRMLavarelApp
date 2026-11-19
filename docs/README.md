@@ -10,6 +10,7 @@
 |------|----------|
 | [migration-plan.md](./migration-plan.md) | Полный план миграции GAS → Laravel + Vue + MySQL: стек, архитектура, БД, webhook, фазы |
 | [features/manual-order-create.md](./features/manual-order-create.md) | Ручное создание заказа (Вариант B): маршруты, контроллер, Create.vue |
+| [features/product-variations.md](./features/product-variations.md) | Вариации товара: webhook `variation`, SalesRender, склад по вариациям |
 
 ## Ключевые решения
 

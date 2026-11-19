@@ -46,9 +46,11 @@ class SalesRenderService
      *
      * @param  Order      $order
      * @param  int|null   $srItemId  SalesRender product item ID (from tenant_settings.sr_default_item_id)
+     * @param  int|null   $variation SalesRender variation number; pass only for products with variations
+     *                               (null → variation 1). If SR rejects it, the order is re-sent with 1.
      * @return string|null  SalesRender order ID, or null on failure
      */
-    public function sendOrder(Order $order, ?int $srItemId = null): ?string
+    public function sendOrder(Order $order, ?int $srItemId = null, ?int $variation = null): ?string
     {
         if (!$srItemId) {
             Log::debug('SalesRenderService::sendOrder skipped — no sr_default_item_id', [
@@ -77,6 +79,27 @@ class SalesRenderService
                 . json_encode($source, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ' },'
             : '';
 
+        $attempts = ($variation !== null && $variation > 1) ? [$variation, 1] : [1];
+
+        foreach ($attempts as $attempt => $variationNumber) {
+            $id = $this->addOrder($order, $srItemId, $variationNumber, $sourceFields, $phone, $price);
+
+            if ($id !== null) {
+                if ($attempt > 0) {
+                    Log::warning('SalesRenderService::sendOrder: sent with variation 1 after SR rejected the requested one', [
+                        'order_id'  => $order->id,
+                        'requested' => $variation,
+                    ]);
+                }
+                return $id;
+            }
+        }
+
+        return null;
+    }
+
+    private function addOrder(Order $order, int $srItemId, int $variationNumber, string $sourceFields, string $phone, int $price): ?string
+    {
         $mutation = sprintf(
             'mutation {
                 orderMutation {
@@ -98,7 +121,7 @@ class SalesRenderService
                                 items: [
                                     {
                                         itemId: %d,
-                                        variation: 1,
+                                        variation: %d,
                                         quantity: 1,
                                         price: %d
                                     }
@@ -113,6 +136,7 @@ class SalesRenderService
             addslashes((string) $order->full_name),
             addslashes($phone),
             $srItemId,
+            $variationNumber,
             $price
         );
 
@@ -127,15 +151,17 @@ class SalesRenderService
         if (!$id) {
             $errors = $response['errors'] ?? [];
             Log::warning('SalesRenderService::sendOrder: no order ID', [
-                'order_id' => $order->id,
-                'errors'   => $errors,
+                'order_id'  => $order->id,
+                'variation' => $variationNumber,
+                'errors'    => $errors,
             ]);
             return null;
         }
 
         Log::info('SalesRenderService::sendOrder: created', [
-            'order_id' => $order->id,
-            'sr_id'    => $id,
+            'order_id'  => $order->id,
+            'sr_id'     => $id,
+            'variation' => $variationNumber,
         ]);
 
         return (string) $id;
@@ -171,7 +197,7 @@ class SalesRenderService
                             items {
                                 id quantity
                                 pricing { unitPrice }
-                                sku { item { id name } }
+                                sku { item { id name } variation { number property } }
                             }
                         }
                     }

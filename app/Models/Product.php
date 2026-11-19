@@ -40,6 +40,11 @@ class Product extends Model
         static::addGlobalScope(new TenantScope());
     }
 
+    public function variations()
+    {
+        return $this->hasMany(ProductVariation::class)->orderBy('number');
+    }
+
     public function tenant()
     {
         return $this->belongsTo(Tenant::class);

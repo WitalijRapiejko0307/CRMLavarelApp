@@ -8,6 +8,7 @@ use App\Models\TenantSetting;
 use App\Services\BlacklistService;
 use App\Services\CustomerService;
 use App\Services\OrderAssignmentService;
+use App\Services\ProductVariationService;
 use App\Services\SalesRenderService;
 use App\Support\PhoneNormalizer;
 use Illuminate\Http\JsonResponse;
@@ -38,6 +39,8 @@ class WebhookController extends Controller
      *
      * Body (JSON):
      *   name, phone, offer, options (price in BYN), comment (optional, max 2000), source
+     *   variation (optional): SalesRender variation number of the product (integer >= 1);
+     *     only used for products that have variations
      *   optional UTM: utm_source, utm_medium, utm_campaign
      *     or nested utm.source, utm.medium, utm.campaign
      */
@@ -79,6 +82,7 @@ class WebhookController extends Controller
             'offer'         => ['nullable', 'string', 'max:255'],
             'options'       => ['nullable', 'numeric', 'min:0'],
             'comment'       => ['nullable', 'string', 'max:2000'],
+            'variation'     => ['nullable', 'integer', 'min:1'],
             'source'        => ['nullable', 'string', 'max:2000'],
             'utm_source'    => ['nullable', 'string', 'max:255'],
             'utm_medium'    => ['nullable', 'string', 'max:255'],
@@ -118,6 +122,21 @@ class WebhookController extends Controller
             }
         }
 
+        // Product matched by offer name (sr_item_id and variations are resolved from it)
+        $product = $data['offer']
+            ? Product::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)
+                ->where('name', $data['offer'])
+                ->first()
+            : null;
+
+        // Variation applies only to products that have variations; number 1 without a
+        // matching variation means "no variation" (see ProductVariationService::resolve).
+        $variation = null;
+        if ($product && isset($data['variation'])) {
+            $variation = app(ProductVariationService::class)->resolve($product, (int) $data['variation']);
+        }
+
         // ── 2. Create order ───────────────────────────────────────────────────
         $order = Order::withoutGlobalScopes()->create([
             'tenant_id'     => $tenantId,
@@ -125,6 +144,9 @@ class WebhookController extends Controller
             'phone'         => $phone,
             'goods'         => $data['offer'] ? [$data['offer']] : [],
             'quantities'    => [1],
+            'variations'    => ($data['offer'] && $variation)
+                ? [['number' => $variation->number, 'name' => $variation->name]]
+                : null,
             'prices'        => $data['offer'] ? [(float) ($data['options'] ?? 0)] : [],
             'comment'       => $comment,
             'status'        => 'Позвонить',
@@ -154,18 +176,11 @@ class WebhookController extends Controller
         $companyId = TenantSetting::get('company_id_in_call_centre', '');
         $projectId = TenantSetting::get('project_id_in_call_centr', '');
 
-        // Resolve sr_item_id from the matched product (looked up by offer name)
-        $product  = $data['offer']
-            ? Product::withoutGlobalScopes()
-                ->where('tenant_id', $tenantId)
-                ->where('name', $data['offer'])
-                ->first()
-            : null;
         $srItemId = $product?->sr_item_id;
 
         if (!$hasInternalCc && $srEnabled && $apiToken && $companyId && $srItemId && $tenant && !$tenant->isReadOnly()) {
             $srService = new SalesRenderService($apiToken, $companyId, $projectId);
-            $srOrderId = $srService->sendOrder($order, $srItemId);
+            $srOrderId = $srService->sendOrder($order, $srItemId, $variation?->number);
 
             if ($srOrderId) {
                 $order->updateQuietly(['external_id' => $srOrderId]);

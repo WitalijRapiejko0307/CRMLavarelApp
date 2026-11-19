@@ -108,6 +108,7 @@ class Order extends Model
         'apartment',
         'goods',
         'quantities',
+        'variations',
         'prices',
         'delivery_type',
         'ops_id',
@@ -197,6 +198,7 @@ class Order extends Model
         'callback_at',
         'goods',
         'quantities',
+        'variations',
         'city',
         'street',
         'building',
@@ -233,6 +235,7 @@ class Order extends Model
     protected $casts = [
         'goods'             => 'array',
         'quantities'        => 'array',
+        'variations'        => 'array',
         'prices'            => 'array',
         'funnel_exclude'    => 'boolean',
         'poste_restante'    => 'boolean',
@@ -300,6 +303,55 @@ class Order extends Model
     {
         $goods = $this->goods ?? [];
         return count($goods) > 0 ? $goods[0] : '—';
+    }
+
+    /**
+     * variations[] when parallel to goods[], otherwise null.
+     *
+     * @return array<int, array|null>|null
+     */
+    public function variationsAligned(): ?array
+    {
+        $variations = $this->variations;
+
+        return (is_array($variations) && count($variations) === count($this->goods ?? [])) ? $variations : null;
+    }
+
+    /**
+     * Variation snapshot {number, name} of line $i, or null.
+     * variations[] is parallel to goods[]; on a length mismatch it is ignored.
+     *
+     * @return array{number: int, name: ?string}|null
+     */
+    public function variationAt(int $i): ?array
+    {
+        $goods = $this->goods ?? [];
+        $variations = $this->variations ?? [];
+
+        if (!is_array($variations) || count($variations) !== count($goods)) {
+            return null;
+        }
+
+        $v = $variations[$i] ?? null;
+
+        return is_array($v) && isset($v['number']) ? $v : null;
+    }
+
+    /**
+     * "Product (variation)" label for line $i.
+     */
+    public function goodLabel(int $i): string
+    {
+        $name = (string) (($this->goods ?? [])[$i] ?? '');
+        $v = $this->variationAt($i);
+
+        if ($v === null) {
+            return $name;
+        }
+
+        $vName = trim((string) ($v['name'] ?? ''));
+
+        return $name . ' (' . ($vName !== '' ? $vName : 'Вариация ' . $v['number']) . ')';
     }
 
     /**

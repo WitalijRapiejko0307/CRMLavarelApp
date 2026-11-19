@@ -47,7 +47,7 @@ class CourierSheetService
             $price = isset($prices[$i]) ? (float) $prices[$i] : 0.0;
 
             $items[] = [
-                'name'  => $name,
+                'name'  => trim($order->goodLabel((int) $i)) ?: $name,
                 'qty'   => $qty,
                 'price' => $price,
                 'sum'   => round($price * $qty, 2),

@@ -353,6 +353,12 @@
                                     <td class="py-2 text-gray-800 dark:text-gray-200">
                                         <span class="inline-flex items-center gap-2 flex-wrap">
                                             {{ good }}
+                                            <span
+                                                v-if="variationLabel(i)"
+                                                class="inline-flex items-center text-xs font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 rounded-full"
+                                            >
+                                                {{ variationLabel(i) }}
+                                            </span>
                                             <a
                                                 v-if="productLinks[good]"
                                                 :href="productLinks[good]"
@@ -399,6 +405,7 @@
                                 <select
                                     v-model="form.goods[i]"
                                     class="flex-1 min-w-0 truncate"
+                                    @change="onGoodChange(i, $event.target.value)"
                                     :class="{ 'border-red-400': fieldErrors.goods }"
                                 >
                                     <option value="">— выберите товар —</option>
@@ -430,6 +437,18 @@
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                                     </svg>
                                 </button>
+                            </div>
+                            <div v-if="variationsOf(form.goods[i]).length" class="flex items-center gap-2 text-sm">
+                                <span class="text-xs text-gray-500 dark:text-gray-400 shrink-0">Вариация</span>
+                                <select
+                                    :value="variationNumber(i)"
+                                    class="flex-1 min-w-0 truncate"
+                                    @change="setVariation(i, $event.target.value)"
+                                >
+                                    <option v-for="v in variationsOf(form.goods[i])" :key="v.id" :value="v.number">
+                                        №{{ v.number }} {{ v.name || '' }} · {{ v.stock }} шт
+                                    </option>
+                                </select>
                             </div>
                             <div
                                 v-if="form.goods[i] && !isInCatalog(form.goods[i]) && !isCallCenter"
@@ -774,6 +793,7 @@ const form = useForm({
     goods:              [...(props.order.goods         ?? [])],
     quantities:         [...(props.order.quantities    ?? [])],
     prices:             [...(props.order.prices        ?? [])],
+    variations:         initialVariations(),
     track_number:       props.order.track_number       ?? '',
     belpost_address_id: props.order.belpost_address_id ?? '',
     ops_id:             props.order.ops_id             ?? '',
@@ -862,13 +882,49 @@ function addGood() {
     form.goods.push('')
     form.quantities.push(1)
     form.prices.push(0)
+    form.variations.push(null)
 }
 
 function removeGood(index) {
     form.goods.splice(index, 1)
     form.quantities.splice(index, 1)
     form.prices.splice(index, 1)
+    form.variations.splice(index, 1)
 }
+// ── Variations (parallel to goods[]; null = no variation / variation 1) ──────
+function variationsOf(name) {
+    return (props.products ?? []).find(p => p.name === name)?.variations ?? []
+}
+
+function variationNumber(i) {
+    return form.variations[i]?.number ?? 1
+}
+
+function setVariation(i, number) {
+    form.variations[i] = { number: Number(number) }
+}
+
+function onGoodChange(i, name) {
+    form.variations[i] = variationsOf(name).length ? { number: 1 } : null
+}
+
+function alignedOrderVariations() {
+    const goods = props.order.goods ?? []
+    const v = props.order.variations
+    return Array.isArray(v) && v.length === goods.length ? v : null
+}
+
+function initialVariations() {
+    const aligned = alignedOrderVariations()
+    return (props.order.goods ?? []).map((_, i) => (aligned?.[i] ? { number: aligned[i].number } : null))
+}
+
+function variationLabel(i) {
+    const v = alignedOrderVariations()?.[i]
+    if (!v) return ''
+    return (v.name && String(v.name).trim()) || `Вариация ${v.number}`
+}
+
 
 // --- Status change ---
 const newStatus    = ref(props.order.status)
@@ -973,6 +1029,7 @@ function currentGoodsState() {
             goods:      [...form.goods],
             quantities: [...form.quantities],
             prices:     [...form.prices],
+            variations: [...form.variations],
             upsell:     form.upsell,
             cross_sell: form.cross_sell,
         }
@@ -981,6 +1038,7 @@ function currentGoodsState() {
         goods:      [...(props.order.goods ?? [])],
         quantities: [...(props.order.quantities ?? [])],
         prices:     [...(props.order.prices ?? [])],
+        variations: initialVariations(),
         upsell:     props.order.upsell ?? '',
         cross_sell: props.order.cross_sell ?? '',
     }
@@ -1005,11 +1063,13 @@ function addOfferLine(kind) {
     state.goods.push(name)
     state.quantities.push(1)
     state.prices.push(Number(price) || 0)
+    state.variations.push(null)
     state[field] = appendNote(state[field], name)
 
     form.goods = state.goods
     form.quantities = state.quantities
     form.prices = state.prices
+    form.variations = state.variations
     form[field] = state[field]
 
     addingOffer.value = true
@@ -1017,6 +1077,7 @@ function addOfferLine(kind) {
         goods:      state.goods,
         quantities: state.quantities,
         prices:     state.prices,
+        variations: state.variations,
         [field]:    state[field],
     }, {
         preserveScroll: true,

@@ -6,7 +6,9 @@ use App\Models\Income;
 use App\Models\Order;
 use App\Models\OrderStockMovement;
 use App\Models\Product;
+use App\Models\ProductVariation;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class OrderStockAndIncomeService
@@ -122,70 +124,90 @@ class OrderStockAndIncomeService
     {
         $goods      = $order->goods ?? [];
         $quantities = $order->quantities ?? [];
-        $netByProduct = $this->netDeductedByProduct($order);
+        $net        = $this->netDeducted($order);
 
         foreach ($goods as $index => $goodName) {
             $qty = (int) ($quantities[$index] ?? 1);
 
-            $product = Product::withoutGlobalScopes()
-                ->where('tenant_id', $order->tenant_id)
-                ->where('name', $goodName)
-                ->first();
+            $product = $this->findProduct($order, $goodName);
 
             if (!$product) {
                 Log::warning('OrderStockAndIncomeService: product not found for deduction', ['name' => $goodName]);
                 continue;
             }
 
-            $currentNet = $netByProduct[$product->id] ?? 0;
+            $variation = $this->variations()->resolveForStock($product, $order->variationAt((int) $index));
+            $key       = $this->key($product->id, $variation?->id);
+
+            $currentNet = $net[$key] ?? 0;
             if ($currentNet >= $qty) {
                 continue;
             }
 
             $deductQty = $qty - $currentNet;
-            $this->recordMovement($order, $product->id, $deductQty, OrderStockMovement::DIRECTION_OUT, $reason);
 
-            $product->stock = max(0, $product->stock - $deductQty);
-            $product->save();
+            DB::transaction(function () use ($order, $product, $variation, $deductQty, $reason) {
+                $this->recordMovement($order, $product->id, $variation?->id, $deductQty, OrderStockMovement::DIRECTION_OUT, $reason);
+                $this->changeStock($product, $variation, -$deductQty);
+            });
 
-            $netByProduct[$product->id] = $currentNet + $deductQty;
+            $net[$key] = $currentNet + $deductQty;
         }
     }
 
     private function applyRestore(Order $order, string $reason): void
     {
-        $netByProduct = $this->netDeductedByProduct($order);
-
-        foreach ($netByProduct as $productId => $currentNet) {
+        foreach ($this->netDeducted($order) as $key => $currentNet) {
             if ($currentNet <= 0) {
                 continue;
             }
+
+            [$productId, $variationId] = array_map('intval', explode(':', $key));
 
             $product = Product::withoutGlobalScopes()->find($productId);
             if (!$product) {
                 continue;
             }
 
-            $this->recordMovement($order, $productId, $currentNet, OrderStockMovement::DIRECTION_IN, $reason);
+            $variation = $variationId
+                ? ProductVariation::withoutGlobalScopes()->find($variationId)
+                : null;
 
-            $product->stock = max(0, $product->stock + $currentNet);
-            $product->save();
+            DB::transaction(function () use ($order, $product, $variation, $currentNet, $reason) {
+                $this->recordMovement($order, $product->id, $variation?->id, $currentNet, OrderStockMovement::DIRECTION_IN, $reason);
+                $this->changeStock($product, $variation, $currentNet);
+            });
         }
     }
 
     /**
-     * @return array<int, int> product_id => net qty out
+     * @return array<string, int> "productId:variationId" (0 = no variation) => net qty out
      */
-    private function netDeductedByProduct(Order $order): array
+    private function netDeducted(Order $order): array
     {
         $rows = OrderStockMovement::withoutGlobalScopes()
             ->where('order_id', $order->id)
             ->get();
 
+        $baseVariationIds = [];
         $net = [];
         foreach ($rows as $row) {
+            $variationId = $row->variation_id;
+
+            // Movement made while the product had no variations: it belongs to variation 1 now.
+            if (!$variationId) {
+                if (!array_key_exists($row->product_id, $baseVariationIds)) {
+                    $baseVariationIds[$row->product_id] = ProductVariation::withoutGlobalScopes()
+                        ->where('product_id', $row->product_id)
+                        ->where('number', 1)
+                        ->value('id');
+                }
+                $variationId = $baseVariationIds[$row->product_id];
+            }
+
+            $key   = $this->key($row->product_id, $variationId);
             $delta = $row->direction === OrderStockMovement::DIRECTION_OUT ? $row->qty : -$row->qty;
-            $net[$row->product_id] = ($net[$row->product_id] ?? 0) + $delta;
+            $net[$key] = ($net[$key] ?? 0) + $delta;
         }
 
         return $net;
@@ -195,21 +217,20 @@ class OrderStockAndIncomeService
     {
         $goods      = $order->goods ?? [];
         $quantities = $order->quantities ?? [];
-        $netByProduct = $this->netDeductedByProduct($order);
+        $net        = $this->netDeducted($order);
 
         foreach ($goods as $index => $goodName) {
             $qty = (int) ($quantities[$index] ?? 1);
 
-            $product = Product::withoutGlobalScopes()
-                ->where('tenant_id', $order->tenant_id)
-                ->where('name', $goodName)
-                ->first();
+            $product = $this->findProduct($order, $goodName);
 
             if (!$product) {
                 continue;
             }
 
-            if (($netByProduct[$product->id] ?? 0) < $qty) {
+            $variation = $this->variations()->resolveForStock($product, $order->variationAt((int) $index));
+
+            if (($net[$this->key($product->id, $variation?->id)] ?? 0) < $qty) {
                 return false;
             }
         }
@@ -217,16 +238,53 @@ class OrderStockAndIncomeService
         return $goods !== [];
     }
 
-    private function recordMovement(Order $order, int $productId, int $qty, string $direction, string $reason): void
+    private function recordMovement(Order $order, int $productId, ?int $variationId, int $qty, string $direction, string $reason): void
     {
         OrderStockMovement::withoutGlobalScopes()->create([
-            'tenant_id'  => $order->tenant_id,
-            'order_id'   => $order->id,
-            'product_id' => $productId,
-            'qty'        => $qty,
-            'direction'  => $direction,
-            'reason'     => $reason,
+            'tenant_id'    => $order->tenant_id,
+            'order_id'     => $order->id,
+            'product_id'   => $productId,
+            'variation_id' => $variationId,
+            'qty'          => $qty,
+            'direction'    => $direction,
+            'reason'       => $reason,
         ]);
+    }
+
+    /**
+     * Change stock of a variation (and refresh the product total) or of a plain product.
+     */
+    private function changeStock(Product $product, ?ProductVariation $variation, int $delta): void
+    {
+        if ($variation) {
+            $variation = ProductVariation::withoutGlobalScopes()->lockForUpdate()->find($variation->id) ?? $variation;
+            $variation->stock = max(0, $variation->stock + $delta);
+            $variation->save();
+            $this->variations()->recalcProductTotals($product);
+
+            return;
+        }
+
+        $product->stock = max(0, $product->stock + $delta);
+        $product->save();
+    }
+
+    private function findProduct(Order $order, $goodName): ?Product
+    {
+        return Product::withoutGlobalScopes()
+            ->where('tenant_id', $order->tenant_id)
+            ->where('name', $goodName)
+            ->first();
+    }
+
+    private function key(int $productId, ?int $variationId): string
+    {
+        return $productId . ':' . (int) $variationId;
+    }
+
+    private function variations(): ProductVariationService
+    {
+        return app(ProductVariationService::class);
     }
 
     private function createAutomaticIncome(Order $order, Carbon $eventAt): void
@@ -272,13 +330,20 @@ class OrderStockAndIncomeService
             $qty   = (int) ($quantities[$index] ?? 1);
             $price = (float) ($prices[$index] ?? 0);
 
-            $product = Product::withoutGlobalScopes()
-                ->where('tenant_id', $order->tenant_id)
-                ->where('name', $goodName)
-                ->first();
+            $product = $this->findProduct($order, $goodName);
 
             if (!$product) {
                 Log::warning('OrderStockAndIncomeService: product not found for sold stats', ['name' => $goodName]);
+                continue;
+            }
+
+            $variation = $this->variations()->resolveForStock($product, $order->variationAt((int) $index));
+
+            if ($variation) {
+                $variation->sold_count  = max(0, $variation->sold_count + ($sign * $qty));
+                $variation->sold_amount = max(0, round($variation->sold_amount + ($sign * $qty * $price), 2));
+                $variation->save();
+                $this->variations()->recalcProductTotals($product);
                 continue;
             }
 

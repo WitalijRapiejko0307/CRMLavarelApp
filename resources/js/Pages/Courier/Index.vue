@@ -64,7 +64,7 @@
 
                             <td class="py-3 text-xs text-gray-600 dark:text-gray-400">
                                 <span v-for="(good, i) in (order.goods || [])" :key="i" class="block">
-                                    {{ good }} × {{ order.quantities?.[i] ?? 1 }}
+                                    {{ goodLabel(order, i) }} × {{ order.quantities?.[i] ?? 1 }}
                                     <span v-if="order.prices?.[i]" class="text-gray-400 dark:text-gray-500">({{ order.prices[i] }} р.)</span>
                                 </span>
                             </td>
@@ -121,6 +121,7 @@ import PageHeader from '@/Components/PageHeader.vue'
 import PackingChecklist from '@/Components/PackingChecklist.vue'
 import { useSubscription } from '@/composables/useSubscription'
 import { apiFetch } from '@/utils/api'
+import { goodLabel } from '@/utils/goodLabel'
 
 const { readOnly } = useSubscription()
 

@@ -55,6 +55,7 @@
 </template>
 
 <script setup>
+import { goodLabel } from '@/utils/goodLabel'
 import { computed, onMounted, reactive, watch } from 'vue'
 import { usePage } from '@inertiajs/inertia-vue3'
 
@@ -82,7 +83,7 @@ function orderToRow(order) {
     let sum = 0
 
     goods.forEach((name, i) => {
-        const label = String(name || '').trim()
+        const label = String(goodLabel(order, i) || '').trim()
         if (!label) return
         const qty = Number(qtys[i] ?? 1) || 1
         const price = Number(prices[i] ?? 0) || 0

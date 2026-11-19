@@ -14,6 +14,7 @@ use App\Services\CustomerService;
 use App\Services\OrderAssignmentService;
 use App\Services\OrderDuplicateService;
 use App\Services\OrderHandlerService;
+use App\Services\ProductVariationService;
 use App\Services\TrackingRunService;
 use App\Support\CallCenterOrderQuery;
 use App\Support\CsvOrderLineParser;
@@ -76,7 +77,7 @@ class OrderController extends Controller
         return Inertia::render('Orders/Create', [
             'statuses'       => Order::STATUSES,
             'deliveryTypes'  => Order::DELIVERY_TYPES,
-            'products'       => Product::orderBy('name')->get(['id', 'name', 'stock']),
+            'products'       => Product::with('variations:id,product_id,number,name,stock')->orderBy('name')->get(['id', 'name', 'stock']),
             'ep_api_version' => $this->epApiVersion((int) Auth::user()->tenant_id),
         ]);
     }
@@ -95,6 +96,9 @@ class OrderController extends Controller
             'goods'      => ['required', 'array', new HasAtLeastOneGood],
             'quantities' => ['nullable', 'array'],
             'prices'     => ['nullable', 'array'],
+            'variations'          => ['nullable', 'array'],
+            'variations.*'        => ['nullable', 'array'],
+            'variations.*.number' => ['nullable', 'integer', 'min:1'],
             'city'       => ['nullable', 'string', 'max:100'],
             'street'     => ['nullable', 'string', 'max:100'],
             'building'   => ['nullable', 'string', 'max:20'],
@@ -112,6 +116,7 @@ class OrderController extends Controller
         ]);
 
         $data['tenant_id'] = Auth::user()->tenant_id;
+        $data['variations'] = $this->normalizeVariations($data['goods'], $data['variations'] ?? null, (int) $data['tenant_id']);
         $data['source']  ??= 'manual';
         $data['phone'] = PhoneNormalizer::normalize($data['phone']);
         $data['poste_restante'] = $request->boolean('poste_restante');
@@ -434,7 +439,7 @@ class OrderController extends Controller
             'order'               => $order,
             'statuses'            => $this->isCallCenter() ? Order::CALL_CENTER_STATUSES : Order::STATUSES,
             'deliveryTypes'       => Order::DELIVERY_TYPES,
-            'products'              => $catalogQuery->orderBy('name')->get($productColumns),
+            'products'              => $catalogQuery->with('variations:id,product_id,number,name,stock')->orderBy('name')->get($productColumns),
             'unknownGoods'          => array_values(array_diff($order->goods ?? [], $catalogNames)),
             'isCallCenter'          => $this->isCallCenter(),
             'updatedByCallCenter'   => !$this->isCallCenter()
@@ -468,6 +473,9 @@ class OrderController extends Controller
             'goods'         => ['sometimes', 'required', 'array', new HasAtLeastOneGood],
             'quantities'    => ['sometimes', 'nullable', 'array'],
             'prices'        => ['sometimes', 'nullable', 'array'],
+            'variations'          => ['sometimes', 'nullable', 'array'],
+            'variations.*'        => ['nullable', 'array'],
+            'variations.*.number' => ['nullable', 'integer', 'min:1'],
             'track_number'       => ['sometimes', 'nullable', 'string', 'max:50'],
             'source'             => ['sometimes', 'nullable', 'string', 'max:2000'],
             'belpost_address_id'  => ['sometimes', 'nullable', 'string', 'max:50'],
@@ -484,7 +492,8 @@ class OrderController extends Controller
         if ($this->isCallCenter()) {
             $rules = array_intersect_key($rules, array_flip([
                 'full_name', 'phone', 'city', 'street', 'building', 'housing', 'apartment',
-                'goods', 'quantities', 'prices', 'source', 'delivery_type',
+                'goods', 'quantities', 'prices', 'variations', 'variations.*', 'variations.*.number',
+                'source', 'delivery_type',
                 'comment', 'upsell', 'cross_sell', 'poste_restante', 'callback_at',
                 'ops_id', 'europochta_store_id',
             ]));
@@ -498,6 +507,13 @@ class OrderController extends Controller
 
         if (array_key_exists('phone', $data)) {
             $data['phone'] = PhoneNormalizer::normalize($data['phone']);
+        }
+
+        if (array_key_exists('goods', $data) || array_key_exists('variations', $data)) {
+            $goods = $data['goods'] ?? ($order->goods ?? []);
+            // Goods edited without variations: keep the stored ones only while they still line up.
+            $incoming = array_key_exists('variations', $data) ? $data['variations'] : $order->variationsAligned();
+            $data['variations'] = $this->normalizeVariations($goods, $incoming, (int) $order->tenant_id);
         }
 
         if (array_key_exists('poste_restante', $data)) {
@@ -516,6 +532,46 @@ class OrderController extends Controller
         }
 
         return back()->with('message', 'Заказ обновлён.');
+    }
+
+    /**
+     * Keep only variations that exist in the product catalogue, aligned with goods[].
+     * Returns null when no position has a variation.
+     *
+     * @param  array<int, mixed>       $goods
+     * @param  array<int, mixed>|null  $variations
+     * @return array<int, array{number: int, name: ?string}|null>|null
+     */
+    private function normalizeVariations(array $goods, ?array $variations, int $tenantId): ?array
+    {
+        if (!$variations || count($variations) !== count($goods)) {
+            return null;
+        }
+
+        $service = app(ProductVariationService::class);
+        $result  = [];
+        $any     = false;
+
+        foreach (array_values($goods) as $i => $goodName) {
+            $number = (int) (($variations[$i]['number'] ?? 0));
+            $found  = null;
+
+            if ($number > 0 && trim((string) $goodName) !== '') {
+                $product = Product::withoutGlobalScopes()
+                    ->where('tenant_id', $tenantId)
+                    ->where('name', $goodName)
+                    ->first();
+                $variation = $product ? $service->find($product, $number) : null;
+                if ($variation) {
+                    $found = ['number' => $variation->number, 'name' => $variation->name];
+                    $any   = true;
+                }
+            }
+
+            $result[] = $found;
+        }
+
+        return $any ? $result : null;
     }
 
     public function updateStatus(Request $request, Order $order)
