@@ -39,8 +39,8 @@ class WebhookController extends Controller
      *
      * Body (JSON):
      *   name, phone, offer, options (price in BYN), comment (optional, max 2000), source
-     *   variation (optional): SalesRender variation number of the product (integer >= 1);
-     *     only used for products that have variations
+     *   variation (optional): variation NAME of the product (like offer; case-insensitive);
+     *     an unrecognised value is ignored (never rejects the lead); only used for products that have variations
      *   optional UTM: utm_source, utm_medium, utm_campaign
      *     or nested utm.source, utm.medium, utm.campaign
      */
@@ -82,7 +82,7 @@ class WebhookController extends Controller
             'offer'         => ['nullable', 'string', 'max:255'],
             'options'       => ['nullable', 'numeric', 'min:0'],
             'comment'       => ['nullable', 'string', 'max:2000'],
-            'variation'     => ['nullable', 'integer', 'min:1'],
+            'variation'     => ['nullable', 'max:255'],
             'source'        => ['nullable', 'string', 'max:2000'],
             'utm_source'    => ['nullable', 'string', 'max:255'],
             'utm_medium'    => ['nullable', 'string', 'max:255'],
@@ -130,11 +130,19 @@ class WebhookController extends Controller
                 ->first()
             : null;
 
-        // Variation applies only to products that have variations; number 1 without a
-        // matching variation means "no variation" (see ProductVariationService::resolve).
+        // Variation is given by name (like the offer) and must exist in the product's variations;
+        // the SalesRender number is taken from the matched variation.
         $variation = null;
-        if ($product && isset($data['variation'])) {
-            $variation = app(ProductVariationService::class)->resolve($product, (int) $data['variation']);
+        $rawVariation = trim((string) ($data['variation'] ?? ''));
+        if ($product && $rawVariation !== '') {
+            $variation = app(ProductVariationService::class)->findByName($product, $rawVariation);
+            if (!$variation) {
+                Log::info('Webhook: variation ignored (no variation with this name)', [
+                    'tenant_id' => $tenantId,
+                    'offer'     => $data['offer'],
+                    'variation' => $rawVariation,
+                ]);
+            }
         }
 
         // ── 2. Create order ───────────────────────────────────────────────────

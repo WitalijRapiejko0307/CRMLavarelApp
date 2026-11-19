@@ -27,6 +27,27 @@ class ProductVariationService
             ->first();
     }
 
+    /**
+     * Webhook input: the variation NAME (like the offer, matched by name), case-insensitive and
+     * trimmed. Always a name, even if it looks like a number (size "42"). Never creates variations;
+     * unknown input returns null.
+     */
+    public function findByName(Product $product, string $input): ?ProductVariation
+    {
+        $input = trim($input);
+
+        if ($input === '') {
+            return null;
+        }
+
+        $needle = mb_strtolower($input);
+
+        return ProductVariation::withoutGlobalScopes()
+            ->where('product_id', $product->id)
+            ->get()
+            ->first(fn (ProductVariation $v) => mb_strtolower(trim((string) $v->name)) === $needle);
+    }
+
     public function isVariational(Product $product): bool
     {
         return ProductVariation::withoutGlobalScopes()

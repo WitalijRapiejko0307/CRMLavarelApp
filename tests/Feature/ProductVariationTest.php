@@ -109,32 +109,64 @@ class ProductVariationTest extends TestCase
         $this->service()->create($product, 1, 'Белый', 5);
         $this->service()->create($product, 6, 'Черный', 5);
 
-        $this->webhook($tenant, ['variation' => 6])->assertOk();
+        $this->webhook($tenant, ['variation' => ' черный '])->assertOk();
 
         $order = Order::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
         $this->assertSame([['number' => 6, 'name' => 'Черный']], $order->variations);
     }
 
-    public function test_webhook_without_variation_or_with_variation_one_has_no_variations(): void
+    public function test_webhook_without_variation_or_for_plain_product_has_no_variations(): void
     {
         $tenant = $this->tenant();
         $this->product($tenant);
 
         $this->webhook($tenant)->assertOk();
-        $this->webhook($tenant, ['variation' => 1])->assertOk();
+        $this->webhook($tenant, ['variation' => 'Основная'])->assertOk();
 
         foreach (Order::withoutGlobalScopes()->where('tenant_id', $tenant->id)->get() as $order) {
             $this->assertNull($order->variations);
         }
     }
 
-    public function test_webhook_rejects_non_numeric_variation(): void
+    public function test_numeric_looking_name_is_matched_as_name_not_number(): void
+    {
+        $tenant  = $this->tenant();
+        $product = $this->product($tenant);
+        $this->service()->create($product, 1, 'S', 5);
+        $this->service()->create($product, 2, '42', 5);
+
+        // "1" is not a name of any variation: ignored, not treated as number 1.
+        $this->webhook($tenant, ['variation' => '1'])->assertOk();
+        $this->webhook($tenant, ['variation' => 42])->assertOk();
+
+        $orders = Order::withoutGlobalScopes()->where('tenant_id', $tenant->id)->orderBy('id')->get();
+        $this->assertNull($orders[0]->variations);
+        $this->assertSame([['number' => 2, 'name' => '42']], $orders[1]->variations);
+    }
+
+    public function test_webhook_matches_variation_by_name_case_insensitive(): void
+    {
+        $tenant  = $this->tenant();
+        $product = $this->product($tenant);
+        $this->service()->create($product, 1, 'Черный', 5);
+        $this->service()->create($product, 5, 'Белый', 5);
+
+        $this->webhook($tenant, ['variation' => 'белый'])->assertOk();
+
+        $order = Order::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+        $this->assertSame([['number' => 5, 'name' => 'Белый']], $order->variations);
+    }
+
+    public function test_webhook_ignores_unknown_variation_name_without_rejecting_the_lead(): void
     {
         $tenant = $this->tenant();
         $this->product($tenant);
 
-        $this->webhook($tenant, ['variation' => 'red'])->assertStatus(422);
-        $this->assertSame(0, Order::withoutGlobalScopes()->count());
+        $this->webhook($tenant, ['variation' => 'red'])->assertOk();
+
+        $order = Order::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+        $this->assertNotNull($order);
+        $this->assertNull($order->variations);
     }
 
     public function test_send_order_uses_variation_and_retries_with_one_when_rejected(): void
