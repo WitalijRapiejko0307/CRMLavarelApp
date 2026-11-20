@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Order;
+use App\Models\Product;
 use App\Models\Tenant;
 use App\Models\TenantSetting;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -146,5 +147,85 @@ class WebhookUtmTest extends TestCase
         $this->assertNull($order->utm_source);
         $this->assertNull($order->utm_medium);
         $this->assertNull($order->utm_campaign);
+    }
+
+    public function test_missing_source_and_no_page_url_stays_empty(): void
+    {
+        [$tenant, $secret] = $this->createWebhookTenant();
+
+        $this->postJson('/api/webhook/lead', [
+            'name'    => 'Иванов Иван Иванович',
+            'phone'   => '291234567',
+            'offer'   => 'Offer A',
+            'options' => 10,
+        ], ['X-Webhook-Token' => $secret])->assertOk();
+
+        $order = Order::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+        $this->assertNotNull($order);
+        $this->assertNull($order->source);
+    }
+
+    public function test_full_url_source_is_stored(): void
+    {
+        [$tenant, $secret] = $this->createWebhookTenant();
+        $url = 'https://www.test.com/landing/very/long/path/that/exceeds/fifty/characters?x=1';
+
+        $this->postJson('/api/webhook/lead', [
+            'name'    => 'Иванов Иван Иванович',
+            'phone'   => '291234567',
+            'offer'   => 'Offer A',
+            'options' => 10,
+            'source'  => $url,
+        ], ['X-Webhook-Token' => $secret])->assertOk();
+
+        $order = Order::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+        $this->assertSame($url, $order->source);
+    }
+
+    public function test_missing_source_falls_back_to_product_page_url(): void
+    {
+        [$tenant, $secret] = $this->createWebhookTenant();
+
+        Product::withoutGlobalScopes()->create([
+            'tenant_id' => $tenant->id,
+            'name'      => 'Offer A',
+            'page_url'  => 'https://www.test.com/offer-a',
+            'stock'     => 5,
+            'weight'    => 0.5,
+        ]);
+
+        $this->postJson('/api/webhook/lead', [
+            'name'    => 'Иванов Иван Иванович',
+            'phone'   => '291234567',
+            'offer'   => 'Offer A',
+            'options' => 10,
+        ], ['X-Webhook-Token' => $secret])->assertOk();
+
+        $order = Order::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+        $this->assertSame('https://www.test.com/offer-a', $order->source);
+    }
+
+    public function test_passed_source_wins_over_product_page_url(): void
+    {
+        [$tenant, $secret] = $this->createWebhookTenant();
+
+        Product::withoutGlobalScopes()->create([
+            'tenant_id' => $tenant->id,
+            'name'      => 'Offer A',
+            'page_url'  => 'https://www.test.com/offer-a',
+            'stock'     => 5,
+            'weight'    => 0.5,
+        ]);
+
+        $this->postJson('/api/webhook/lead', [
+            'name'    => 'Иванов Иван Иванович',
+            'phone'   => '291234567',
+            'offer'   => 'Offer A',
+            'options' => 10,
+            'source'  => 'https://landing.example.com/x',
+        ], ['X-Webhook-Token' => $secret])->assertOk();
+
+        $order = Order::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+        $this->assertSame('https://landing.example.com/x', $order->source);
     }
 }

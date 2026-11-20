@@ -145,6 +145,13 @@ class WebhookController extends Controller
             }
         }
 
+        // Source: sent by the site → catalog page_url of the matched product → empty.
+        $source = trim((string) ($data['source'] ?? ''));
+        if ($source === '') {
+            $pageUrl = trim((string) ($product?->page_url ?? ''));
+            $source  = $pageUrl !== '' ? $pageUrl : null;
+        }
+
         // ── 2. Create order ───────────────────────────────────────────────────
         $order = Order::withoutGlobalScopes()->create([
             'tenant_id'     => $tenantId,
@@ -158,7 +165,7 @@ class WebhookController extends Controller
             'prices'        => $data['offer'] ? [(float) ($data['options'] ?? 0)] : [],
             'comment'       => $comment,
             'status'        => 'Позвонить',
-            'source'        => $data['source'] ?? 'site',
+            'source'        => $source,
             'utm_source'    => $utmSource,
             'utm_medium'    => $utmMedium,
             'utm_campaign'  => $utmCampaign,
