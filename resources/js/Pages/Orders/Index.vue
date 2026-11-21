@@ -96,6 +96,9 @@
                     />
                 </div>
             </div>
+            <p v-if="filters.sr === 'problem'" class="mt-3 text-sm text-amber-700 dark:text-amber-300">
+                Показаны заявки с недоставленными изменениями в SalesRender (ошибка, нет доступа или конфликт).
+            </p>
             <div v-if="hasActiveFilters" class="mt-3 flex justify-end">
                 <button class="btn-secondary btn-sm" @click="resetFilters">Сбросить фильтры</button>
             </div>
@@ -562,6 +565,13 @@ async function applyBulkStatus() {
             ? `Обновлено ${updated} из ${total}.`
             : `Обновлено ${updated} заказов.`
 
+        const sr = data.sr_push
+        if (sr?.warnings > 0) {
+            bulkResultMessage.value += ` Не отправлено в SalesRender: ${sr.warnings}. ${sr.messages?.[0] ?? ''}`
+        } else if (sr?.queued > 0) {
+            bulkResultMessage.value += ` В SalesRender отправляется: ${sr.queued}.`
+        }
+
         Inertia.reload({ only: ['orders'], preserveScroll: true })
     } finally {
         bulkApplying.value = false
@@ -731,6 +741,7 @@ const filters = ref({
     segment:       props.filters?.segment       ?? '',
     delivery_type: props.filters?.delivery_type ?? '',
     assignee:      props.filters?.assignee      ?? '',
+    sr:            props.filters?.sr            ?? '',
     sort:          props.filters?.sort          ?? 'created_at',
     dir:           props.filters?.dir           ?? 'desc',
 })
@@ -743,7 +754,7 @@ const deliveryTypeOptions = computed(() =>
     Object.entries(props.deliveryTypes ?? {}).map(([value, label]) => ({ value, label }))
 )
 
-const FILTER_KEYS = ['search', 'status', 'date_from', 'date_to', 'store_id', 'segment', 'delivery_type', 'assignee']
+const FILTER_KEYS = ['search', 'status', 'date_from', 'date_to', 'store_id', 'segment', 'delivery_type', 'assignee', 'sr']
 
 const hasActiveFilters = computed(() =>
     FILTER_KEYS.some(key => filters.value[key] !== '')
@@ -867,6 +878,7 @@ function buildFilterQuery() {
         segment:       filters.value.segment,
         delivery_type: filters.value.delivery_type,
         assignee:      filters.value.assignee,
+        sr:            filters.value.sr,
     }
     if (props.isCallCenter && filters.value.store_id) {
         query.store_id = filters.value.store_id
@@ -904,7 +916,7 @@ function applySort() {
 function resetFilters() {
     filters.value = {
         search: '', status: '', date_from: '', date_to: '', store_id: '',
-        segment: '', delivery_type: '', assignee: '',
+        segment: '', delivery_type: '', assignee: '', sr: '',
         sort: filters.value.sort,
         dir:  filters.value.dir,
     }

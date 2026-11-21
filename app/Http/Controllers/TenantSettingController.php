@@ -9,6 +9,8 @@ use App\Support\TenantOrderListColumns;
 use App\Services\ConnectionService;
 use App\Services\EvropostStoreSearchService;
 use App\Services\SmsService;
+use App\Services\SrConnectionCheckService;
+use App\Services\SrHealthService;
 use App\Services\TelegramService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -99,6 +101,8 @@ class TenantSettingController extends Controller
                     'api_token_call_centr'     => ['API-токен SalesRender',              'password', '…', ''],
                     'company_id_in_call_centre'=> ['Company ID (в URL)',                 'text',     '…', 'Числовой ID компании в SalesRender'],
                     'project_id_in_call_centr' => ['Project UUID (GraphQL)',             'text',     '…', ''],
+                    'sr_push_enabled'          => ['Отправлять изменения заказов в колл-центр', 'toggle', '', 'Телефон, ФИО и статус (Заказать, Отказ(Ошибка), Дубль, Спам) изменённых заказов уходят в SalesRender. Включается после успешной «Проверки подключения»'],
+                    'sr_push_cart'             => ['Отправлять изменения корзины', 'toggle', '', 'Товары, количество и цены (в рублях). Товар должен быть связан с позицией SalesRender (ID позиции в карточке товара), а цена — в допустимом диапазоне товара в SalesRender, иначе SalesRender отклонит изменение'],
                 ],
             ],
             'sms' => [
@@ -243,6 +247,7 @@ class TenantSettingController extends Controller
             'theme'            => Auth::user()->theme ?? 'system',
             'connectionData'   => $connectionData,
             'webhook_url'      => $canView ? static::webhookUrl() : null,
+            'srPanel'          => $canView && $tenant->isStore() ? $this->srPanel((int) $tenantId) : null,
             'orderListColumns' => $canView && $tenant->isStore()
                 ? TenantOrderListColumns::fieldsForTenant($tenantId)
                 : [],
@@ -250,6 +255,26 @@ class TenantSettingController extends Controller
                 ? TenantOrderListColumns::optionsForUi()
                 : [],
         ]);
+    }
+
+    /**
+     * SalesRender state block of the settings page.
+     *
+     * @return array<string, mixed>
+     */
+    protected function srPanel(int $tenantId): array
+    {
+        return [
+            'health'        => SrHealthService::get($tenantId),
+            'checked_at'    => SrHealthService::setting($tenantId, 'sr_check_ok_at') ?: null,
+            'request_text'  => SrHealthService::get($tenantId)['state'] !== SrHealthService::STATE_OK
+                ? SrHealthService::requestText($tenantId)
+                : null,
+            'undelivered'   => \App\Models\Order::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)
+                ->whereIn('sr_sync_state', ['blocked', 'failed', 'retrying'])
+                ->count(),
+        ];
     }
 
     public static function webhookUrl(): string
@@ -347,6 +372,17 @@ class TenantSettingController extends Controller
 
         $this->assertDigestCanBeEnabled($input);
 
+        // New token / company id: the stored health and the "connection checked" mark are stale.
+        $credsChanged = false;
+        foreach (['api_token_call_centr', 'company_id_in_call_centre', 'project_id_in_call_centr'] as $credKey) {
+            $submitted = isset($input[$credKey]) ? trim((string) $input[$credKey]) : '';
+            if ($submitted !== '' && $submitted !== SrHealthService::setting($tenantId, $credKey)) {
+                $credsChanged = true;
+            }
+        }
+
+        $this->assertSrPushCanBeEnabled($input, $tenantId, $credsChanged, in_array('sr_push_enabled', $allowed, true));
+
         foreach ($allowed as $key) {
             $value = isset($input[$key]) ? trim((string)$input[$key]) : '';
 
@@ -362,7 +398,67 @@ class TenantSettingController extends Controller
             }
         }
 
+        if ($credsChanged) {
+            SrHealthService::reset($tenantId);
+        }
+
         return back()->with('message', 'Настройки сохранены.');
+    }
+
+    /**
+     * Sending order changes to SalesRender requires a passed connection check for the current token.
+     */
+    protected function assertSrPushCanBeEnabled(array $input, int $tenantId, bool $credsChanged, bool $applicable): void
+    {
+        if (!$applicable || (string) ($input['sr_push_enabled'] ?? '') !== '1') {
+            return;
+        }
+
+        $checked = SrHealthService::setting($tenantId, 'sr_check_ok_at') !== '' && !$credsChanged;
+
+        if (!$checked) {
+            throw ValidationException::withMessages([
+                'settings.sr_push_enabled' => 'Сначала сохраните токен и нажмите «Проверить подключение»: отправка включается только после успешной проверки прав.',
+            ]);
+        }
+    }
+
+    /**
+     * POST /settings/salesrender/check
+     * Safe probes (no data changed): read right, update right, statuses, fields.
+     */
+    public function checkSalesrender(SrConnectionCheckService $service): JsonResponse
+    {
+        Gate::authorize('manage-settings');
+
+        $tenant = Auth::user()->tenant;
+        if (!$tenant || !$tenant->isStore()) {
+            abort(404);
+        }
+
+        $tenantId = (int) Auth::user()->tenant_id;
+        $result   = $service->run($tenantId);
+
+        return response()->json($result + [
+            'health'       => SrHealthService::get($tenantId),
+            'request_text' => $result['ok'] ? null : SrHealthService::requestText($tenantId),
+        ]);
+    }
+
+    /**
+     * POST /settings/salesrender/retry-blocked
+     * After the token is fixed: put undelivered changes back into the queue.
+     */
+    public function retrySalesrenderBlocked(SrConnectionCheckService $service): JsonResponse
+    {
+        Gate::authorize('manage-settings');
+
+        $tenant = Auth::user()->tenant;
+        if (!$tenant || !$tenant->isStore()) {
+            abort(404);
+        }
+
+        return response()->json(['queued' => $service->requeueBlocked((int) Auth::user()->tenant_id)]);
     }
 
     /**

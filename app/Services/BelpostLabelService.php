@@ -268,13 +268,13 @@ class BelpostLabelService
     private function barcodeSizeFor(?string $labelSize): array
     {
         if ($labelSize === '120x80') {
-            return ['module' => '0.16', 'height' => '14'];
+            return ['module' => '0.268', 'height' => '13'];
         }
         if ($labelSize === '210x150') {
-            return ['module' => '0.28', 'height' => '16'];
+            return ['module' => '0.42', 'height' => '16'];
         }
 
-        return ['module' => '0.24', 'height' => '12'];
+        return ['module' => '0.305', 'height' => '12'];
     }
 
     private function barcodeMarkup(string $track, string $moduleMm = '0.24', string $heightMm = '11'): string
@@ -288,7 +288,7 @@ class BelpostLabelService
                 if (!extension_loaded('imagick') && method_exists($generator, 'useGd')) {
                     $generator->useGd();
                 }
-                $scale = max(1, (int) round((float) $moduleMm / 0.12));
+                $scale = 3; // integer px per module; CSS stretches to the box width
                 $pngH  = max(30, (int) round((float) $heightMm * 3.5));
                 $png = $generator->getBarcode($track, BarcodeGeneratorPNG::TYPE_CODE_128, $scale, $pngH);
 

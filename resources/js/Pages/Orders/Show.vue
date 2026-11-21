@@ -50,6 +50,8 @@
 
         <CustomerPrefillNotice :prefill="customerPrefill" :order-id="order.id" />
 
+        <SrPushStatus v-if="!isCallCenter && srPush" :order-id="order.id" :info="srPush" />
+
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <!-- Left: Main info -->
             <div class="lg:col-span-2 space-y-6">
@@ -716,6 +718,7 @@ import DuplicateFunnelModal from '@/Components/DuplicateFunnelModal.vue'
 import FormAlert from '@/Components/FormAlert.vue'
 import CustomerLookupNotice from '@/Components/CustomerLookupNotice.vue'
 import CustomerPrefillNotice from '@/Components/CustomerPrefillNotice.vue'
+import SrPushStatus from '@/Components/SrPushStatus.vue'
 import { useCustomerLookup } from '@/composables/useCustomerLookup'
 import { applyCustomerToForm } from '@/utils/customerPrefill'
 import { useSubscription } from '@/composables/useSubscription'
@@ -746,6 +749,7 @@ const props = defineProps({
     customerPrefill: { type: Object, default: null },
     customerLookupKey: { type: String, default: null },
     callScript:    { type: String, default: null },
+    srPush:        { type: Object, default: null },
     ep_api_version: { type: String, default: 'new' },
 })
 

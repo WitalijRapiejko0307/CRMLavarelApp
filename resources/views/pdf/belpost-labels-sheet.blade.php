@@ -72,7 +72,7 @@
             padding: 0 2mm 2mm 3.4mm;
         }
         .row-body .col-right {
-            padding: 4mm 6mm 2mm 0.8mm;
+            padding: 4mm 3mm 2mm 0.8mm;
         }
         .from-name,
         .to-name {
@@ -134,8 +134,8 @@
         }
         .barcode-box img,
         .barcode-box svg {
-            width: 96%;
-            max-width: 96%;
+            width: 90%;
+            max-width: 90%;
             height: 12mm;
         }
         .barcode-box .barcode {
@@ -180,7 +180,7 @@
             padding: 0 2.5mm 2.5mm 4.5mm;
         }
         .label-size-210x150 .row-body .col-right {
-            padding: 4mm 8mm 2.5mm 1mm;
+            padding: 4mm 4mm 2.5mm 1mm;
         }
         .label-size-210x150 .from-name,
         .label-size-210x150 .to-name {
@@ -208,7 +208,7 @@
             padding: 0 2mm;
         }
         .label-size-210x150 .barcode-box {
-            width: 88mm;
+            width: 90mm;
             height: 25mm;
             padding: 2mm 2.2mm 0.8mm 2.2mm;
             margin-bottom: 2.5mm;
@@ -253,7 +253,7 @@
             padding: 0 1.4mm 1.2mm 2.1mm;
         }
         .label-size-120x80 .row-body .col-right {
-            padding: 0 8mm 0 1.5mm;
+            padding: 0 2.5mm 0 1.5mm;
         }
         .label-size-120x80 .from-name,
         .label-size-120x80 .to-name {
@@ -281,15 +281,15 @@
             padding: 0 0.6mm;
         }
         .label-size-120x80 .barcode-box {
-            width: 40mm;
-            height: 17mm;
+            width: 55mm;
+            height: 19mm;
             padding: 1.2mm 1.4mm 0.3mm 1.4mm;
             margin-bottom: 0.8mm;
         }
         .label-size-120x80 .barcode-box img,
         .label-size-120x80 .barcode-box svg,
         .label-size-120x80 .barcode-box .barcode {
-            height: 11.5mm;
+            height: 13mm;
         }
         .label-size-120x80 .track {
             font-size: 6.5pt;

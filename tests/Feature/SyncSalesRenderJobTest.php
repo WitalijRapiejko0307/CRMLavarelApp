@@ -103,7 +103,7 @@ class SyncSalesRenderJobTest extends TestCase
         }
     }
 
-    public function test_spam_and_duplicates_become_refusal_error(): void
+    public function test_spam_and_duplicates_map_to_their_own_statuses(): void
     {
         $tenant = $this->seedTenant();
         $spam   = $this->makeOrder($tenant->id, ['external_id' => 'sr-spam']);
@@ -123,8 +123,10 @@ class SyncSalesRenderJobTest extends TestCase
 
         (new SyncSalesRenderJob($tenant->id))->handle();
 
-        $this->assertSame('Отказ(Ошибка)', $spam->fresh()->status);
-        $this->assertSame('Отказ(Ошибка)', $dup->fresh()->status);
+        // SalesRender "Спам" → CRM "Спам"; "Дубли" → CRM "Дубль" (excluded from the funnel).
+        $this->assertSame('Спам', $spam->fresh()->status);
+        $this->assertSame('Дубль', $dup->fresh()->status);
+        $this->assertTrue((bool) $dup->fresh()->funnel_exclude);
     }
 
     public function test_final_status_validation_failure_is_stored(): void

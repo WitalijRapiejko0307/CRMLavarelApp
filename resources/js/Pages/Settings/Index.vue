@@ -367,6 +367,11 @@
                     </p>
 
                     <div v-show="isGroupOpen(groupKey)" class="space-y-4">
+                        <SrIntegrationPanel
+                            v-if="groupKey === 'salesrender' && srPanel"
+                            :panel="srPanel"
+                            :can-edit="canEditSettings"
+                        />
                         <template v-for="(meta, key) in group.keys" :key="key">
                             <template v-if="key !== 'cc_round_robin'">
                             <div v-if="isVisible(meta) && key === 'webhook_secret'" class="setting-row space-y-4">
@@ -716,6 +721,7 @@ import { Inertia } from '@inertiajs/inertia'
 import { usePage } from '@inertiajs/inertia-vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import PageHeader from '@/Components/PageHeader.vue'
+import SrIntegrationPanel from '@/Components/SrIntegrationPanel.vue'
 import { useTheme } from '@/composables/useTheme'
 import { useSubscription } from '@/composables/useSubscription'
 import { useOnboarding } from '@/composables/useOnboarding'
@@ -736,6 +742,7 @@ const props = defineProps({
     webhook_url:       { type: String, default: '' },
     orderListColumns:  { type: Array, default: () => [] },
     orderColumnOptions:{ type: Array, default: () => [] },
+    srPanel:           { type: Object, default: null },
 })
 
 const page = usePage()

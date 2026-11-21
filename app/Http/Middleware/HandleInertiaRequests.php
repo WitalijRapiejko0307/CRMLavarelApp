@@ -7,6 +7,7 @@ use App\Models\TenantSetting;
 use App\Models\Order;
 use App\Services\FeedbackPromptService;
 use App\Services\OnboardingService;
+use App\Services\SrHealthService;
 use App\Services\TrackingRunService;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -54,6 +55,7 @@ class HandleInertiaRequests extends Middleware
                 ? ['blocked_statuses' => Order::NON_DELETABLE_STATUSES]
                 : null,
             'sr_sync_failures' => fn () => $this->shareSrSyncFailures($user),
+            'sr_integration' => fn () => $this->shareSrIntegration($user),
             'onboarding' => fn () => $this->shareOnboarding($user),
             'feedback_prompt' => fn () => $this->shareFeedbackPrompt($user),
         ]);
@@ -129,6 +131,19 @@ class HandleInertiaRequests extends Middleware
         }
 
         return app(FeedbackPromptService::class)->resolvePromptForUser($user);
+    }
+
+    /**
+     * SalesRender health + problem orders (persistent banner, order badges).
+     * Store tenants only: internal call-center operators never see SalesRender details.
+     */
+    protected function shareSrIntegration($user): ?array
+    {
+        if (!$user || !$user->isTenantUser() || !$user->tenant || !$user->tenant->isStore()) {
+            return null;
+        }
+
+        return SrHealthService::shared((int) $user->tenant_id);
     }
 
     protected function shareSrSyncFailures($user): ?array

@@ -16,6 +16,7 @@ use App\Http\Controllers\EvropostController;
 use App\Http\Controllers\EvropostStoreController;
 use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\OrderController;
+use App\Http\Controllers\SrPushController;
 use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\OrderFeedController;
 use App\Http\Controllers\ProductController;
@@ -157,6 +158,8 @@ Route::prefix('settings')->name('settings.')->group(function () {
     Route::post('/generate-webhook-secret', [TenantSettingController::class, 'generateWebhookSecret'])->name('generateWebhookSecret');
     Route::post('/europochta/refresh-stores', [TenantSettingController::class, 'refreshEuropochtaStores'])->name('europochta.refreshStores');
     Route::post('/telegram/test', [TenantSettingController::class, 'testTelegram'])->name('telegram.test');
+    Route::post('/salesrender/check', [TenantSettingController::class, 'checkSalesrender'])->name('salesrender.check');
+    Route::post('/salesrender/retry-blocked', [TenantSettingController::class, 'retrySalesrenderBlocked'])->name('salesrender.retryBlocked');
     Route::post('/digest/send-now', [TenantSettingController::class, 'sendDigestNow'])->name('digest.sendNow');
     Route::post('/reveal-webhook-secret', [TenantSettingController::class, 'revealWebhookSecret'])->name('revealWebhookSecret');
     Route::post('/schedule-deletion', [TenantSettingController::class, 'scheduleDeletion'])->name('scheduleDeletion')->withoutMiddleware('tenant.writable');
@@ -190,6 +193,8 @@ Route::prefix('api')->name('api.')->middleware(['auth', 'tenant', 'tenant.writab
     Route::get('/orders/feed', [OrderFeedController::class, 'index'])->name('orders.feed')->withoutMiddleware('tenant.writable');
     Route::post('/tracking/auto-notice/dismiss', [OrderController::class, 'dismissTrackingNotice'])->name('tracking.dismissNotice');
     Route::post('/sr-sync/failures/dismiss', [OrderController::class, 'dismissSrSyncFailures'])->name('srSync.dismissFailures');
+    Route::post('/orders/{order}/sr-push/retry', [SrPushController::class, 'retry'])->name('orders.srPush.retry');
+    Route::post('/orders/{order}/sr-push/resolve', [SrPushController::class, 'resolve'])->name('orders.srPush.resolve');
 });
 
 // Super-admin panel

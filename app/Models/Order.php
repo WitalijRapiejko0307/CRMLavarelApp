@@ -229,6 +229,13 @@ class Order extends Model
         'customer_lookup_key',
         'customer_prefill',
         'customer_prefill_ack_at',
+        'sr_sync_state',
+        'sr_pending_changes',
+        'sr_last_error_code',
+        'sr_last_error_message',
+        'sr_last_attempt_at',
+        'sr_last_synced_at',
+        'sr_push_attempts',
         'created_at',
     ];
 
@@ -243,6 +250,9 @@ class Order extends Model
         'customer_prefill'  => 'array',
         'customer_lookup_at' => 'datetime',
         'customer_prefill_ack_at' => 'datetime',
+        'sr_pending_changes' => 'array',
+        'sr_last_attempt_at' => 'datetime',
+        'sr_last_synced_at' => 'datetime',
         'status_changed_at' => 'datetime',
         'callback_at'       => 'datetime',
         'created_at'        => 'datetime',

@@ -11,6 +11,9 @@ use App\Rules\BelarusPhone;
 use App\Rules\FullNameTwoParts;
 use App\Rules\HasAtLeastOneGood;
 use App\Services\CustomerService;
+use App\Services\SrHealthService;
+use App\Services\SrPushService;
+use App\Support\SrOrderMapper;
 use App\Services\OrderAssignmentService;
 use App\Services\OrderDuplicateService;
 use App\Services\OrderHandlerService;
@@ -333,6 +336,10 @@ class OrderController extends Controller
             });
         }
 
+        if ($request->input('sr') === 'problem') {
+            $query->whereIn('sr_sync_state', ['failed', 'blocked', 'conflict']);
+        }
+
         if ($status = $request->input('status')) {
             $query->where('status', $status);
         }
@@ -399,7 +406,7 @@ class OrderController extends Controller
         return Inertia::render('Orders/Index', [
             'orders'          => $orders,
             'filters'         => array_merge(
-                $request->only('search', 'status', 'date_from', 'date_to', 'store_id', 'segment', 'delivery_type', 'assignee'),
+                $request->only('search', 'status', 'date_from', 'date_to', 'store_id', 'segment', 'delivery_type', 'assignee', 'sr'),
                 ['sort' => $sort, 'dir' => $dir],
             ),
             'statuses'             => $tenant->isCallCenter() ? Order::CALL_CENTER_STATUSES : Order::STATUSES,
@@ -453,6 +460,7 @@ class OrderController extends Controller
                 ? array_merge($order->customer_prefill, ['acknowledged' => $order->customer_prefill_ack_at !== null])
                 : null,
             'customerLookupKey'     => $order->customer_lookup_key,
+            'srPush'                => $this->isCallCenter() ? null : $this->srPushInfo($order),
             'callScript'            => $this->isCallCenter() ? $this->renderCallScript($order) : null,
             'ep_api_version'        => $this->epApiVersion((int) $order->tenant_id),
         ]);
@@ -523,7 +531,11 @@ class OrderController extends Controller
 
         $data['last_updated_by_user_id'] = Auth::id();
 
+        $srBefore = $this->srSnapshot($order);
+
         $order->update($data);
+
+        $srNotice = $this->srTrack($order, $srBefore);
 
         // Saving the form means the operator has seen the auto-filled data.
         $this->customers->acknowledgePrefill($order);
@@ -531,7 +543,7 @@ class OrderController extends Controller
             $this->customers->registerLookup($order);
         }
 
-        return back()->with('message', 'Заказ обновлён.');
+        return $this->withSrNotice(back(), 'Заказ обновлён.', $srNotice);
     }
 
     /**
@@ -606,9 +618,11 @@ class OrderController extends Controller
             $payload['callback_at'] = $request->input('callback_at');
         }
 
+        $srBefore = $this->srSnapshot($order);
+
         $order->update($payload);
 
-        return back()->with('message', 'Статус обновлён.');
+        return $this->withSrNotice(back(), 'Статус обновлён.', $this->srTrack($order, $srBefore));
     }
 
     public function bulkUpdateStatus(Request $request): JsonResponse
@@ -623,6 +637,7 @@ class OrderController extends Controller
 
         $updated = 0;
         $failed  = [];
+        $srPush  = ['queued' => 0, 'warnings' => 0, 'messages' => []];
 
         foreach ($data['order_ids'] as $id) {
             $order = Order::find($id);
@@ -639,17 +654,116 @@ class OrderController extends Controller
                 continue;
             }
 
+            $srBefore = $this->srSnapshot($order);
+
             $order->update(array_merge([
                 'status'                  => $data['status'],
                 'last_updated_by_user_id' => Auth::id(),
             ], $this->funnelFieldsForStatusChange($order, $data['status'])));
             $updated++;
+
+            $notice = $this->srTrack($order, $srBefore);
+            if ($notice['queued']) {
+                $srPush['queued']++;
+            }
+            if ($notice['level'] === 'warning') {
+                $srPush['warnings']++;
+            }
+            if ($notice['message'] && !in_array($notice['message'], $srPush['messages'], true) && count($srPush['messages']) < 3) {
+                $srPush['messages'][] = $notice['message'];
+            }
         }
 
         return response()->json([
             'updated' => $updated,
             'failed'  => $failed,
+            'sr_push' => $srPush,
         ]);
+    }
+
+    /**
+     * State of delivery to SalesRender for the order card (badge, conflict dialog, attempt log).
+     *
+     * @return array<string, mixed>|null
+     */
+    private function srPushInfo(Order $order): ?array
+    {
+        if (!$order->external_id) {
+            return null;
+        }
+
+        $labels  = ['phone' => 'Телефон', 'full_name' => 'ФИО', 'cart' => 'Корзина', 'status' => 'Статус'];
+        $pending = [];
+
+        foreach (($order->sr_pending_changes ?: []) as $field => $entry) {
+            $pending[] = [
+                'field'    => $field,
+                'label'    => $labels[$field] ?? $field,
+                'from'     => SrOrderMapper::label($field, $entry['from'] ?? null),
+                'to'       => SrOrderMapper::label($field, $entry['to'] ?? null),
+                'conflict' => !empty($entry['conflict']),
+                'sr'       => !empty($entry['conflict']) ? SrOrderMapper::label($field, $entry['sr'] ?? null) : null,
+            ];
+        }
+
+        $attempts = \Illuminate\Support\Facades\DB::table('order_sr_pushes')
+            ->where('order_id', $order->id)
+            ->orderByDesc('id')
+            ->limit(5)
+            ->get(['status', 'error_code', 'message', 'created_at'])
+            ->all();
+
+        return [
+            'state'       => $order->sr_sync_state,
+            'error_code'  => $order->sr_last_error_code,
+            'error'       => $order->sr_last_error_message,
+            'attempts'    => (int) $order->sr_push_attempts,
+            'synced_at'   => optional($order->sr_last_synced_at)->toIso8601String(),
+            'pending'     => $pending,
+            'log'         => $attempts,
+            'push_enabled' => SrHealthService::setting((int) $order->tenant_id, 'sr_push_enabled') === '1',
+        ];
+    }
+
+    // ─── SalesRender push (see docs/features/salesrender-push-updates.md) ─────
+
+    /**
+     * @return array<string, mixed>|null  null for call-center users: they never push to SalesRender
+     */
+    private function srSnapshot(Order $order): ?array
+    {
+        return $this->isCallCenter() ? null : app(SrPushService::class)->snapshot($order);
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $before
+     * @return array{level: string, message: ?string, queued: bool}
+     */
+    private function srTrack(Order $order, ?array $before): array
+    {
+        if ($before === null) {
+            return ['level' => 'none', 'message' => null, 'queued' => false];
+        }
+
+        return app(SrPushService::class)->track($order, $before, Auth::id());
+    }
+
+    /**
+     * Flash: info goes to the green message, a problem to the red one so it cannot be missed.
+     *
+     * @param  array{level: string, message: ?string, queued: bool}  $notice
+     */
+    private function withSrNotice($redirect, string $base, array $notice)
+    {
+        if ($notice['level'] === 'warning') {
+            return $redirect->with('message', $base)->with('error', $notice['message']);
+        }
+
+        if ($notice['level'] === 'info' && $notice['message']) {
+            return $redirect->with('message', $base . ' ' . $notice['message']);
+        }
+
+        return $redirect->with('message', $base);
     }
 
     /**

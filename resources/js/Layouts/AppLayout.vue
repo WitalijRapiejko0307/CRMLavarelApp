@@ -236,6 +236,9 @@
             </div>
         </div>
 
+        <!-- SalesRender integration problems (persistent) -->
+        <SrIntegrationBanner />
+
         <!-- Flash messages -->
         <div v-if="flash.message || flash.error" class="page-shell mt-4">
             <div v-if="flash.message" class="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-200 rounded-md px-4 py-3 text-sm flex items-center gap-2">
@@ -271,6 +274,7 @@ import { computed, ref } from 'vue'
 import { Link, usePage } from '@inertiajs/inertia-vue3'
 import { Inertia } from '@inertiajs/inertia'
 import { apiFetch } from '@/utils/api'
+import SrIntegrationBanner from '@/Components/SrIntegrationBanner.vue'
 import TrialBanner from '@/Components/TrialBanner.vue'
 import OnboardingChecklist from '@/Components/OnboardingChecklist.vue'
 import OnboardingWelcomeModal from '@/Components/OnboardingWelcomeModal.vue'

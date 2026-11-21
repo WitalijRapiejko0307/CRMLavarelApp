@@ -8,12 +8,15 @@ use App\Models\TenantSetting;
 use App\Services\CustomerService;
 use App\Services\ProductVariationService;
 use App\Services\SalesRenderService;
+use App\Services\SrPushService;
 use App\Support\PhoneNormalizer;
+use App\Support\SrStatusMap;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -22,10 +25,13 @@ use Illuminate\Support\Facades\Log;
  *
  * Mirrors GAS checkAndUpdateOrders() in backend/SalesRender.gs.
  *
- * SalesRender status → CRM status:
- *   "Принят"                    → "Заказать"  (operator confirmed)
- *   "Отменен" / "Отмена" /
- *   "Дубли" / "Спам"            → "Отказ(Ошибка)"
+ * SalesRender status → CRM status (see SrStatusMap):
+ *   "Принят"            → "Заказать"  (operator confirmed)
+ *   "Отменен" / "Отмена" → "Отказ(Ошибка)"
+ *   "Дубли"             → "Дубль"
+ *   "Спам"              → "Спам"
+ *
+ * Fields with an unsent CRM edit (orders.sr_pending_changes) are never overwritten here.
  *
  * While SR status is not final: sync cart + comment/upsell if they changed.
  *
@@ -67,7 +73,8 @@ class SyncSalesRenderJob implements ShouldQueue
             return;
         }
 
-        $service = new SalesRenderService($apiToken, $companyId, $projectId);
+        $service = new SalesRenderService($apiToken, $companyId, $projectId, $this->tenantId);
+        $push    = app(SrPushService::class);
 
         $orders = Order::withoutGlobalScopes()
             ->where('tenant_id', $this->tenantId)
@@ -84,75 +91,25 @@ class SyncSalesRenderJob implements ShouldQueue
         $failures = [];
 
         foreach ($orders as $order) {
+            // Same lock as PushOrderToSalesRenderJob: never interleave pull and push of one order.
+            $lock = Cache::lock('sr-order:' . $order->id, 60);
+
+            if (!$lock->get()) {
+                $skipped++;
+                continue;
+            }
+
             try {
-                $srOrderId = (string) $order->external_id;
-                $srOrder   = $service->fetchOrder($srOrderId);
-
-                if (!$srOrder) {
-                    Log::debug("SyncSalesRenderJob: order not found in SR", [
-                        'order_id'    => $order->id,
-                        'sr_order_id' => $srOrderId,
-                    ]);
-                    $skipped++;
-                    continue;
-                }
-
-                $srStatus = $srOrder['status']['name'] ?? '';
-                $isFinal  = in_array($srStatus, self::SR_FINAL_STATUSES, true);
-
-                if (!$isFinal) {
-                    if ($this->validate($order, $srOrder)) {
-                        if ($this->applyNonFinalUpdates($order, $srOrder)) {
-                            $updated++;
-                        } else {
-                            $skipped++;
-                        }
-                    } else {
-                        $skipped++;
-                    }
-                    continue;
-                }
-
-                if (!$this->validate($order, $srOrder)) {
-                    Log::warning("SyncSalesRenderJob: validation failed", [
-                        'order_id'    => $order->id,
-                        'sr_order_id' => $srOrderId,
-                    ]);
-                    $failures[] = [
-                        'order_id'    => $order->id,
-                        'external_id' => $srOrderId,
-                        'sr_status'   => $srStatus,
-                        'reason'      => 'VALIDATION',
-                    ];
-                    $skipped++;
-                    continue;
-                }
-
-                try {
-                    if ($srStatus === 'Принят') {
-                        $this->applyConfirmedData($order, $srOrder);
-                    } else {
-                        $this->applyRefusal($order, $srOrder);
-                    }
-                    $updated++;
-                } catch (\Throwable $e) {
-                    Log::error("SyncSalesRenderJob: update error", [
-                        'order_id' => $order->id,
-                        'error'    => $e->getMessage(),
-                    ]);
-                    $failures[] = [
-                        'order_id'    => $order->id,
-                        'external_id' => $srOrderId,
-                        'sr_status'   => $srStatus,
-                        'reason'      => 'UPDATE_ERROR',
-                        'message'     => $e->getMessage(),
-                    ];
-                }
+                $order->refresh();
+                $outcome = $this->processOrder($service, $push, $order, $failures);
+                $outcome === 'updated' ? $updated++ : $skipped++;
             } catch (\Throwable $e) {
                 Log::error("SyncSalesRenderJob: error processing order", [
                     'order_id' => $order->id,
                     'error'    => $e->getMessage(),
                 ]);
+            } finally {
+                $lock->release();
             }
         }
 
@@ -164,6 +121,83 @@ class SyncSalesRenderJob implements ShouldQueue
             'skipped'   => $skipped,
             'failures'  => count($failures),
         ]);
+    }
+
+    // ─── Per order ────────────────────────────────────────────────────────────
+
+    /**
+     * @param  array<int, array<string, mixed>>  $failures
+     * @return string  'updated' | 'skipped'
+     */
+    private function processOrder(SalesRenderService $service, SrPushService $push, Order $order, array &$failures): string
+    {
+        $srOrderId = (string) $order->external_id;
+        $fetch     = $service->fetchOrderResult($srOrderId);
+
+        if (!$fetch->ok) {
+            // Permission / token problems are recorded in SrHealthService (banner), not lost as "not found".
+            Log::debug("SyncSalesRenderJob: SR order not available", [
+                'order_id'    => $order->id,
+                'sr_order_id' => $srOrderId,
+                'code'        => $fetch->errorCode,
+            ]);
+
+            return 'skipped';
+        }
+
+        $srOrder = $fetch->data['order'];
+
+        // Unsent CRM edits stay as they are; SalesRender values equal to them are acknowledged.
+        $keep   = $push->reconcile($order, $srOrder);
+        $order->refresh();
+
+        $srStatus = $srOrder['status']['name'] ?? '';
+        $isFinal  = in_array($srStatus, self::SR_FINAL_STATUSES, true);
+
+        if (!$isFinal) {
+            return $this->validate($order, $srOrder) && $this->applyNonFinalUpdates($order, $srOrder, $keep)
+                ? 'updated'
+                : 'skipped';
+        }
+
+        if (!$this->validate($order, $srOrder)) {
+            Log::warning("SyncSalesRenderJob: validation failed", [
+                'order_id'    => $order->id,
+                'sr_order_id' => $srOrderId,
+            ]);
+            $failures[] = [
+                'order_id'    => $order->id,
+                'external_id' => $srOrderId,
+                'sr_status'   => $srStatus,
+                'reason'      => 'VALIDATION',
+            ];
+
+            return 'skipped';
+        }
+
+        try {
+            if ($srStatus === 'Принят') {
+                $this->applyConfirmedData($order, $srOrder, $keep);
+            } else {
+                $this->applyRefusal($order, $srOrder);
+            }
+
+            return 'updated';
+        } catch (\Throwable $e) {
+            Log::error("SyncSalesRenderJob: update error", [
+                'order_id' => $order->id,
+                'error'    => $e->getMessage(),
+            ]);
+            $failures[] = [
+                'order_id'    => $order->id,
+                'external_id' => $srOrderId,
+                'sr_status'   => $srStatus,
+                'reason'      => 'UPDATE_ERROR',
+                'message'     => $e->getMessage(),
+            ];
+
+            return 'skipped';
+        }
     }
 
     // ─── Private helpers ──────────────────────────────────────────────────────
@@ -188,7 +222,26 @@ class SyncSalesRenderJob implements ShouldQueue
         $srRaw = (string) ($phoneFields[0]['value']['raw'] ?? '');
         $srKey = PhoneNormalizer::lastNineDigits($srRaw);
 
-        return $srKey !== '' && $srKey === PhoneNormalizer::lastNineDigits((string) $order->phone);
+        if ($srKey === '') {
+            return false;
+        }
+
+        if ($srKey === PhoneNormalizer::lastNineDigits((string) $order->phone)) {
+            return true;
+        }
+
+        // The phone was edited in the CRM and not delivered yet: SalesRender still holds the old
+        // (or already the new) number — both identify the same order.
+        $pendingPhone = ($order->sr_pending_changes ?: [])['phone'] ?? null;
+        if ($pendingPhone) {
+            foreach (['from', 'to'] as $side) {
+                if ($srKey === PhoneNormalizer::lastNineDigits((string) ($pendingPhone[$side] ?? ''))) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -196,11 +249,11 @@ class SyncSalesRenderJob implements ShouldQueue
      *
      * @return bool  true if anything was written
      */
-    private function applyNonFinalUpdates(Order $order, array $srOrder): bool
+    private function applyNonFinalUpdates(Order $order, array $srOrder, array $keep = []): bool
     {
         $changed = false;
 
-        $cart = $this->extractCart($order, $srOrder);
+        $cart = in_array('cart', $keep, true) ? null : $this->extractCart($order, $srOrder);
         if ($cart !== null && $this->isCartChanged($order, $cart)) {
             $order->update([
                 'goods'      => $cart['goods'],
@@ -228,11 +281,11 @@ class SyncSalesRenderJob implements ShouldQueue
      * Apply confirmed order data from SalesRender to our Order record.
      * Mirrors GAS updateRowWithOrderData() for status "Принят".
      */
-    private function applyConfirmedData(Order $order, array $srOrder): void
+    private function applyConfirmedData(Order $order, array $srOrder, array $keep = []): void
     {
         $data = [];
 
-        $humanNameFields = $srOrder['data']['humanNameFields'] ?? [];
+        $humanNameFields = in_array('full_name', $keep, true) ? [] : ($srOrder['data']['humanNameFields'] ?? []);
         if (!empty($humanNameFields)) {
             $firstName = $humanNameFields[0]['value']['firstName'] ?? '';
             $lastName  = $humanNameFields[0]['value']['lastName']  ?? '';
@@ -265,7 +318,7 @@ class SyncSalesRenderJob implements ShouldQueue
             }
         }
 
-        $cart = $this->extractCart($order, $srOrder);
+        $cart = in_array('cart', $keep, true) ? null : $this->extractCart($order, $srOrder);
         if ($cart !== null) {
             $data['goods']      = $cart['goods'];
             $data['quantities'] = $cart['quantities'];
@@ -273,7 +326,9 @@ class SyncSalesRenderJob implements ShouldQueue
             $data['variations'] = $cart['variations'];
         }
 
-        $data['status'] = 'Заказать';
+        if (!in_array('status', $keep, true)) {
+            $data['status'] = SrStatusMap::toCrm('Принят') ?? 'Заказать';
+        }
 
         $order->update($data);
         $this->syncNoteFields($order, $srOrder);
@@ -305,15 +360,22 @@ class SyncSalesRenderJob implements ShouldQueue
 
     private function applyRefusal(Order $order, array $srOrder): void
     {
-        $order->update([
-            'status' => 'Отказ(Ошибка)',
-        ]);
+        $srStatus = (string) ($srOrder['status']['name'] ?? '');
+        $status   = SrStatusMap::toCrm($srStatus) ?? 'Отказ(Ошибка)';
+
+        $attrs = ['status' => $status];
+        if ($status === 'Дубль') {
+            $attrs['funnel_exclude'] = true; // same effect as marking a duplicate by hand
+        }
+
+        $order->update($attrs);
 
         $this->syncNoteFields($order, $srOrder);
 
         Log::info("SyncSalesRenderJob: refused", [
-            'order_id'  => $order->id,
-            'sr_status' => $srOrder['status']['name'] ?? '',
+            'order_id'   => $order->id,
+            'sr_status'  => $srStatus,
+            'crm_status' => $status,
         ]);
     }
 
