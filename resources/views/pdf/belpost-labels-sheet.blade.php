@@ -241,19 +241,19 @@
             width: 50%;
         }
         .label-size-120x80 .row-head .col-left {
-            padding: 2mm 1.4mm 0 2.1mm;
+            padding: 1.5mm 1.4mm 0 2.1mm;
         }
         .label-size-120x80 .row-head .col-right {
-            padding: 2mm 2.1mm 0 1.2mm;
+            padding: 1.5mm 2.1mm 0 1.2mm;
         }
         .label-size-120x80 .row-brand .col-left {
-            padding: 6mm 1.4mm 1.6mm 2.1mm;
+            padding: 3mm 1.4mm 0.5mm 2.1mm;
         }
         .label-size-120x80 .row-body .col-left {
             padding: 0 1.4mm 1.2mm 2.1mm;
         }
         .label-size-120x80 .row-body .col-right {
-            padding: 1.5mm 8mm 1.2mm 1.5mm;
+            padding: 0 8mm 0 1.5mm;
         }
         .label-size-120x80 .from-name,
         .label-size-120x80 .to-name {
@@ -282,17 +282,21 @@
         }
         .label-size-120x80 .barcode-box {
             width: 40mm;
-            height: 20mm;
-            padding: 1.8mm 1.4mm 0.5mm 1.4mm;
-            margin-bottom: 1.2mm;
+            height: 17mm;
+            padding: 1.2mm 1.4mm 0.3mm 1.4mm;
+            margin-bottom: 0.8mm;
         }
         .label-size-120x80 .barcode-box img,
         .label-size-120x80 .barcode-box svg,
         .label-size-120x80 .barcode-box .barcode {
-            height: 14mm;
+            height: 11.5mm;
         }
         .label-size-120x80 .track {
             font-size: 6.5pt;
+        }
+        .label-size-120x80 .to-block {
+            margin-top: 0.5mm;
+            line-height: 1.2;
         }
         .label-size-120x80 .cod {
             white-space: nowrap;
