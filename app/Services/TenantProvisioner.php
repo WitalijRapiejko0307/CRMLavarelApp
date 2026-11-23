@@ -56,7 +56,6 @@ class TenantProvisioner
             'api_token_call_centr'       => '',
             'company_id_in_call_centre'  => '',
             'project_id_in_call_centr'  => '',
-            'api_key_blacks_by'          => '',
             'token_sms_by'               => '',
             'alphaname_id'               => '',
             'sms_rules'                  => '',

@@ -202,7 +202,6 @@ class OnboardingService
         $sr = (($map['sr_enabled'] ?? '') === '1')
             && $this->filled($map['api_token_call_centr'] ?? null);
         $sms = $this->filled($map['token_sms_by'] ?? null);
-        $blacks = $this->filled($map['api_key_blacks_by'] ?? null);
         $cc = TenantConnection::query()
             ->where('store_tenant_id', $tenant->id)
             ->whereIn('status', [
@@ -211,7 +210,7 @@ class OnboardingService
             ])
             ->exists();
 
-        return $epNew || $epLegacy || $sr || $sms || $blacks || $cc;
+        return $epNew || $epLegacy || $sr || $sms || $cc;
     }
 
     protected function filled(?string $value): bool

@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\TenantSetting;
-use App\Services\BlacklistService;
 use App\Services\CustomerService;
 use App\Services\OrderAssignmentService;
 use App\Services\ProductVariationService;
@@ -31,8 +30,7 @@ class WebhookController extends Controller
      * Flow (Phase 3 additions):
      *   1. Verify X-Webhook-Token
      *   2. Create order with status "Позвонить"
-     *   3. BlacklistService — append " НЕБЛАГОНАДЕЖНЫЙ КЛИЕНТ" if flagged
-     *   4. SalesRenderService.sendOrder() — optional push if sr_default_item_id configured
+     *   3. SalesRenderService.sendOrder() — optional push if sr_default_item_id configured
      *
      * Headers:
      *   X-Webhook-Token: <webhook_secret from tenant_settings>
@@ -109,18 +107,7 @@ class WebhookController extends Controller
         // Set tenant context so TenantSetting::get() resolves correctly below
         app()->instance('current_tenant_id', $tenantId);
 
-        // ── 1. Blacklist check ────────────────────────────────────────────────
-        $fullName  = $data['name'];
-        $apiKey    = TenantSetting::get('api_key_blacks_by', '');
-        $listId    = TenantSetting::get('id_blacks_by', '');
-
-        if ($apiKey && $listId) {
-            $blacklist = new BlacklistService($apiKey, $listId);
-            if ($blacklist->check($phone)) {
-                $fullName .= ' НЕБЛАГОНАДЕЖНЫЙ КЛИЕНТ';
-                Log::info('Webhook: blacklisted phone', ['phone' => $phone, 'tenant_id' => $tenantId]);
-            }
-        }
+        $fullName = $data['name'];
 
         // Product matched by offer name (sr_item_id and variations are resolved from it)
         $product = $data['offer']

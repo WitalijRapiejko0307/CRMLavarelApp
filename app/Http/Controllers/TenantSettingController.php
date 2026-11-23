@@ -148,12 +148,6 @@ class TenantSettingController extends Controller
                     ],
                 ],
             ],
-            'blacklist' => [
-                'label' => 'Blacks.by',
-                'keys'  => [
-                    'api_key_blacks_by' => ['API-ключ', 'password', '…', ''],
-                ],
-            ],
             'system' => [
                 'label' => 'Заявки с сайта',
                 'keys'  => [
