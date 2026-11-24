@@ -32,6 +32,12 @@ return [
             'level'  => 'info',
             'days'   => 14,
         ],
+        'europost_labels' => [
+            'driver' => 'daily',
+            'path'   => storage_path('logs/europost-labels.log'),
+            'level'  => 'info',
+            'days'   => 30,
+        ],
         'null' => [
             'driver'  => 'monolog',
             'handler' => NullHandler::class,

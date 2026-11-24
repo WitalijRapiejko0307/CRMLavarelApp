@@ -172,21 +172,28 @@
                         </div>
                     </template>
                     <template v-else-if="useEvropostPicker">
-                        <EvropostOfficePicker
-                            v-model:city="form.city"
-                            v-model:street="form.street"
-                            v-model:building="form.building"
-                            v-model:opsId="form.ops_id"
-                            v-model:europochtaStoreId="form.europochta_store_id"
-                        />
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                        <div class="space-y-4">
                             <div>
-                                <label class="label">Корпус</label>
-                                <input v-model="form.housing" type="text" class="w-full mt-1" />
+                                <label class="label">ОПС отправки</label>
+                                <EvropostStorePicker
+                                    class="mt-1"
+                                    placeholder="Номер отделения или адрес (мин. 2 символа)"
+                                    v-model:id="form.europochta_store_start_id"
+                                    v-model:label="form.europochta_store_start_label"
+                                />
+                                <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                                    Подставляется из настроек. Изменение действует только для этой заявки.
+                                </p>
                             </div>
                             <div>
-                                <label class="label">Квартира</label>
-                                <input v-model="form.apartment" type="text" class="w-full mt-1" />
+                                <label class="label">ОПС получателя</label>
+                                <EvropostOfficePicker
+                                    v-model:city="form.city"
+                                    v-model:street="form.street"
+                                    v-model:building="form.building"
+                                    v-model:opsId="form.ops_id"
+                                    v-model:europochtaStoreId="form.europochta_store_id"
+                                />
                             </div>
                         </div>
                     </template>
@@ -380,6 +387,7 @@ import AppScrollSelect from '@/Components/AppScrollSelect.vue'
 import { statusColorClass } from '@/utils/orderStatusColors'
 import AddressInlinePicker from '@/Components/AddressInlinePicker.vue'
 import EvropostOfficePicker from '@/Components/EvropostOfficePicker.vue'
+import EvropostStorePicker from '@/Components/EvropostStorePicker.vue'
 import FormAlert from '@/Components/FormAlert.vue'
 import CustomerLookupNotice from '@/Components/CustomerLookupNotice.vue'
 import { useCustomerLookup } from '@/composables/useCustomerLookup'
@@ -403,6 +411,8 @@ const props = defineProps({
     deliveryTypes: Object,
     products:      Array,
     ep_api_version: { type: String, default: 'new' },
+    default_courier: { type: String, default: 'belpost' },
+    sender_ops: { type: Object, default: () => ({ id: null, label: '' }) },
 })
 
 const productNames = computed(() => props.products.map(p => p.name))
@@ -421,7 +431,7 @@ const form = useForm({
     comment:       '',
     upsell:        '',
     cross_sell:    '',
-    delivery_type: 'belpost',
+    delivery_type: props.default_courier,
     city:              '',
     street:            '',
     building:          '',
@@ -430,6 +440,8 @@ const form = useForm({
     belpost_address_id: '',
     ops_id: '',
     europochta_store_id: null,
+    europochta_store_start_id: props.default_courier === 'europochta' ? (props.sender_ops?.id ?? null) : null,
+    europochta_store_start_label: props.default_courier === 'europochta' ? (props.sender_ops?.label ?? '') : '',
     poste_restante: false,
     goods:      [],
     quantities: [],
@@ -447,7 +459,7 @@ function applyFromInfo(data, auto = false) {
     const filled = applyCustomerToForm(form, data.customer, { deliveryType: data.customer.delivery_type })
     // Delivery type: only switch it while the operator has not chosen anything yet.
     if (data.customer.delivery_type
-        && form.delivery_type === 'belpost'
+        && form.delivery_type === props.default_courier
         && !form.belpost_address_id
         && !form.europochta_store_id
         && filled.length) {
@@ -483,6 +495,12 @@ watch(() => form.delivery_type, (newType, oldType) => {
     if (oldType === 'europochta' && newType !== 'europochta') {
         form.europochta_store_id = null
         form.ops_id = ''
+        form.europochta_store_start_id = null
+        form.europochta_store_start_label = ''
+    }
+    if (newType === 'europochta' && !form.europochta_store_start_id && props.sender_ops?.id) {
+        form.europochta_store_start_id = props.sender_ops.id
+        form.europochta_store_start_label = props.sender_ops.label || ''
     }
 })
 

@@ -94,6 +94,7 @@ Route::prefix('europochta')->name('europochta.')->middleware('tenant.type:store'
     Route::get('/', [EvropostController::class, 'index'])->name('index');
     Route::post('/orders/{order}/register', [EvropostController::class, 'register'])->name('register');
     Route::post('/register-all', [EvropostController::class, 'registerAll'])->name('registerAll');
+    Route::post('/labels', [EvropostController::class, 'labels'])->name('labels');
 });
 
 // Customer base (store only)

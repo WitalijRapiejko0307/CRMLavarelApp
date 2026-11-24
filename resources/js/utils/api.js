@@ -68,6 +68,7 @@ export async function apiDownload(path, method, body, acceptTypes, fallbackName)
             ok: true,
             status: response.status,
             blob: response.data,
+            headers: response.headers,
             filename: filenameFromDisposition(response.headers['content-disposition'], fallbackName),
         }
     } catch (error) {

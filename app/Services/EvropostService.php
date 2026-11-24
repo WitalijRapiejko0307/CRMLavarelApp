@@ -121,7 +121,10 @@ class EvropostService
     {
         $token         = TenantSetting::get('token_ep', '');
         $contractorUnn = TenantSetting::get('contractor_unn', '');
-        $warehouseStart = TenantSetting::get('warehouse_id_start', '');
+        // Sender OPS: chosen for this order, otherwise the store default from settings
+        $warehouseStart = !empty($order->europochta_store_start_id)
+            ? (string) $order->europochta_store_start_id
+            : TenantSetting::get('warehouse_id_start', '');
 
         if (!$token) {
             return $this->failure('config_error', 'Не задан token_ep в настройках');
@@ -512,6 +515,115 @@ class EvropostService
             Log::error("EvropostService::newApiRequest {$method} {$path} exception", ['error' => $e->getMessage()]);
             return ['status' => 0, 'body' => ['message' => $e->getMessage()]];
         }
+    }
+
+    // ─── Labels (new API only) ────────────────────────────────────────────────
+
+    public const LABEL_FORMAT_A5      = 'a5';
+    public const LABEL_FORMAT_THERMAL = 'thermal';
+
+    /**
+     * Raw GET (binary-safe): newApiRequest() would decode the body as JSON and corrupt a PDF.
+     *
+     * @return array{status: int, body: string, content_type: string, elapsed_ms: int}
+     */
+    private function newApiBinaryRequest(string $path, string $token): array
+    {
+        $started = microtime(true);
+
+        try {
+            $response = Http::timeout(30)
+                ->withHeaders([
+                    'Cache-Control' => 'no-cache',
+                    'Token'         => $token,
+                ])
+                ->get(self::NEW_API_URL . $path);
+
+            return [
+                'status'       => $response->status(),
+                'body'         => (string) $response->body(),
+                'content_type' => (string) $response->header('Content-Type'),
+                'elapsed_ms'   => (int) round((microtime(true) - $started) * 1000),
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'status'       => 0,
+                'body'         => (string) json_encode(['message' => $e->getMessage()]),
+                'content_type' => 'application/json',
+                'elapsed_ms'   => (int) round((microtime(true) - $started) * 1000),
+            ];
+        }
+    }
+
+    /**
+     * Download one label PDF.
+     *
+     * @return array{ok: bool, pdf?: string, error?: string, message?: string, status: int, content_type: string, elapsed_ms: int, size: int, head: string}
+     */
+    public function fetchLabel(string $track, string $format, string $token): array
+    {
+        $kind = $format === self::LABEL_FORMAT_THERMAL ? 'thermal' : 'address';
+        $path = '/api/external/label/' . $kind . '/' . rawurlencode($track);
+
+        $resp = $this->newApiBinaryRequest($path, $token);
+        if ($resp['status'] === 0 || $resp['status'] >= 500) {
+            $retry = $this->newApiBinaryRequest($path, $token);
+            $resp['elapsed_ms'] += $retry['elapsed_ms'];
+            $resp = array_merge($retry, ['elapsed_ms' => $resp['elapsed_ms']]);
+        }
+
+        $meta = [
+            'status'       => $resp['status'],
+            'content_type' => $resp['content_type'],
+            'elapsed_ms'   => $resp['elapsed_ms'],
+            'size'         => strlen($resp['body']),
+            'head'         => bin2hex(substr($resp['body'], 0, 8)),
+        ];
+
+        if ($resp['status'] === 200 && strncmp($resp['body'], '%PDF', 4) === 0) {
+            return ['ok' => true, 'pdf' => $resp['body']] + $meta;
+        }
+
+        $json    = json_decode($resp['body'], true);
+        $message = is_array($json) ? ($json['message'] ?? null) : null;
+
+        if ($resp['status'] === 401) {
+            return ['ok' => false, 'error' => 'auth_error', 'message' => 'Ошибка авторизации API Европочты (401). Проверьте token_ep.'] + $meta;
+        }
+        if ($resp['status'] === 400 || $resp['status'] === 404) {
+            return ['ok' => false, 'error' => 'label_unavailable', 'message' => $message ?: 'Ярлык недоступен'] + $meta;
+        }
+        if ($resp['status'] === 200) {
+            return ['ok' => false, 'error' => 'not_pdf', 'message' => 'Европочта вернула не PDF'] + $meta;
+        }
+
+        return ['ok' => false, 'error' => 'api_error', 'message' => $message ?: ('HTTP ' . $resp['status'])] + $meta;
+    }
+
+    /**
+     * Download labels for several tracks (sequentially, one request per track).
+     *
+     * @param  array<int, string>  $tracks  order id => track number
+     * @return array{pdfs: array<int, string>, errors: array<int, array{track: string, message: string}>, fetched: array<int, array>}
+     */
+    public function fetchLabels(array $tracks, string $format, string $token): array
+    {
+        $pdfs    = [];
+        $errors  = [];
+        $fetched = [];
+
+        foreach ($tracks as $orderId => $track) {
+            $result = $this->fetchLabel((string) $track, $format, $token);
+            $fetched[$orderId] = ['track' => $track] + array_diff_key($result, ['pdf' => 1]);
+
+            if ($result['ok']) {
+                $pdfs[$orderId] = $result['pdf'];
+            } else {
+                $errors[$orderId] = ['track' => (string) $track, 'message' => (string) ($result['message'] ?? 'Ошибка')];
+            }
+        }
+
+        return ['pdfs' => $pdfs, 'errors' => $errors, 'fetched' => $fetched];
     }
 
     /**

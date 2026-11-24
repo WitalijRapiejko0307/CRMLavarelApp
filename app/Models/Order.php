@@ -220,6 +220,8 @@ class Order extends Model
         'cross_sell',
         'ops_id',
         'europochta_store_id',
+        'europochta_store_start_id',
+        'europochta_store_start_label',
         'belpost_address_id',
         'belpost_mailing_item_id',
         'belpost_partial_receipt_complete',
@@ -265,7 +267,7 @@ class Order extends Model
 
         static::creating(function (Order $order) {
             if ($order->delivery_type === null || $order->delivery_type === '') {
-                $order->delivery_type = 'belpost';
+                $order->delivery_type = \App\Support\TenantDefaults::courier($order->tenant_id ? (int) $order->tenant_id : null);
             }
         });
     }

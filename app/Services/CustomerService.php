@@ -265,7 +265,7 @@ class CustomerService
         if ($deliveryUntouched && $customer->delivery_type
             && empty($current['belpost_address_id'])
             && empty($current['europochta_store_id'])
-            && in_array($current['delivery_type'] ?? null, [null, '', 'belpost'], true)) {
+            && in_array($current['delivery_type'] ?? null, [null, '', \App\Support\TenantDefaults::courier($customer->tenant_id ? (int) $customer->tenant_id : null)], true)) {
             foreach (self::DELIVERY_FIELDS as $field) {
                 $values[$field] = $customer->{$field};
             }

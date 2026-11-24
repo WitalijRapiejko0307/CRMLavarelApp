@@ -50,6 +50,11 @@ class Kernel extends ConsoleKernel
           ->name('dispatch-tracking-morning')
           ->withoutOverlapping();
 
+        // Europochta label debug samples (failed merges) live 14 days.
+        $schedule->call(function () {
+            \App\Services\EvropostLabelLogger::purgeSamples(14);
+        })->dailyAt('04:10')->name('purge-europost-label-samples');
+
         // Phase 3: dispatch one SalesRender sync job per tenant every 5 minutes.
         $schedule->call(function () {
             foreach ($this->writableTenants() as $tenant) {

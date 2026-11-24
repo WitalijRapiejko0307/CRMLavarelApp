@@ -47,6 +47,7 @@ class TenantSettingController extends Controller
                 'label' => 'Магазин',
                 'keys'  => [
                     'shop_name' => ['Название магазина', 'text', 'BaseCRM', 'Отображается в шапке сайта'],
+                    'default_courier' => ['Служба доставки по умолчанию', 'select', '', 'Подставляется в новые заявки, если служба не указана. Европочта сработает, когда подключён её API', ['belpost' => 'Белпочта', 'europochta' => 'Европочта']],
                 ],
             ],
             'cc' => [
@@ -86,7 +87,8 @@ class TenantSettingController extends Controller
                 'label' => 'Европочта',
                 'keys'  => [
                     'ep_api_version'    => ['Версия API',    'select',   '', 'Выберите версию Европочты', ['new' => 'v1.8.2 (актуальный)', 'legacy' => 'JWT (устаревший)']],
-                    'warehouse_id_start'=> ['ОПС отправки', 'text',     '…', ''],
+                    'warehouse_id_start'=> ['ОПС отправки', 'ops_picker', '', 'Отделение, из которого отправляются посылки. Можно заменить в конкретной заявке'],
+                    'warehouse_label'   => ['Название ОПС отправки', 'hidden', '', ''],
                     'token_ep'          => ['Bearer-токен API v1.8.2', 'password', '…', '', null, ['ep_api_version' => 'new']],
                     'contractor_unn'    => ['УНН контрагента',         'text',     '…', '', null, ['ep_api_version' => 'new']],
                     'login_name_ep'     => ['Логин JWT API',           'text',     '…', '', null, ['ep_api_version' => 'legacy']],

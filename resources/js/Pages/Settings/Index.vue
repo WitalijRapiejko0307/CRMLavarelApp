@@ -495,7 +495,7 @@
                             </div>
 
                             <!-- depends_on: hide if condition not met -->
-                            <div v-else-if="isVisible(meta)" class="setting-row">
+                            <div v-else-if="meta[1] !== 'hidden' && isVisible(meta)" class="setting-row">
                                 <label class="label">{{ meta[0] }}</label>
 
                                 <!-- toggle -->
@@ -541,6 +541,17 @@
                                     rows="4"
                                     class="input mt-1 font-mono resize-y"
                                     :disabled="!canEditSettings || readOnly"
+                                />
+
+                                <!-- Europochta OPS picker (stores id + label) -->
+                                <EvropostStorePicker
+                                    v-else-if="meta[1] === 'ops_picker'"
+                                    class="mt-1"
+                                    :id="form[key] || null"
+                                    :label="form.warehouse_label || ''"
+                                    :disabled="!canEditSettings || readOnly"
+                                    @update:id="form[key] = String($event ?? '')"
+                                    @update:label="form.warehouse_label = $event"
                                 />
 
                                 <!-- text / password -->
@@ -722,6 +733,7 @@ import { usePage } from '@inertiajs/inertia-vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import PageHeader from '@/Components/PageHeader.vue'
 import SrIntegrationPanel from '@/Components/SrIntegrationPanel.vue'
+import EvropostStorePicker from '@/Components/EvropostStorePicker.vue'
 import { useTheme } from '@/composables/useTheme'
 import { useSubscription } from '@/composables/useSubscription'
 import { useOnboarding } from '@/composables/useOnboarding'

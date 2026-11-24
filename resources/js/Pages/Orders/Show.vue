@@ -247,9 +247,15 @@
                             v-if="order.delivery_type === 'europochta' && order.ops_id"
                             class="text-gray-600 dark:text-gray-400"
                         >
-                            ОПС №{{ order.ops_id }}
+                            ОПС получателя №{{ order.ops_id }}
                         </div>
                         <span v-else-if="!fullAddress && !order.poste_restante" class="text-gray-400 dark:text-gray-500">—</span>
+                        <div
+                            v-if="order.delivery_type === 'europochta' && (order.europochta_store_start_label || order.europochta_store_start_id)"
+                            class="text-gray-600 dark:text-gray-400"
+                        >
+                            ОПС отправки: {{ order.europochta_store_start_label || ('ОПС ' + order.europochta_store_start_id) }}
+                        </div>
                     </div>
 
                     <!-- Edit mode: belpost → picker, new EP → OPS picker, others → plain fields -->
@@ -287,21 +293,28 @@
                         </template>
 
                         <template v-else-if="useEvropostPicker">
-                            <EvropostOfficePicker
-                                v-model:city="form.city"
-                                v-model:street="form.street"
-                                v-model:building="form.building"
-                                v-model:opsId="form.ops_id"
-                                v-model:europochtaStoreId="form.europochta_store_id"
-                            />
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                            <div class="space-y-4">
                                 <div>
-                                    <label class="label">Корпус</label>
-                                    <input v-model="form.housing" type="text" class="w-full mt-1" />
+                                    <label class="label">ОПС отправки</label>
+                                    <EvropostStorePicker
+                                        class="mt-1"
+                                        placeholder="Номер отделения или адрес (мин. 2 символа)"
+                                        v-model:id="form.europochta_store_start_id"
+                                        v-model:label="form.europochta_store_start_label"
+                                    />
+                                    <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                                        Подставляется из настроек. Изменение действует только для этой заявки.
+                                    </p>
                                 </div>
                                 <div>
-                                    <label class="label">Квартира</label>
-                                    <input v-model="form.apartment" type="text" class="w-full mt-1" />
+                                    <label class="label">ОПС получателя</label>
+                                    <EvropostOfficePicker
+                                        v-model:city="form.city"
+                                        v-model:street="form.street"
+                                        v-model:building="form.building"
+                                        v-model:opsId="form.ops_id"
+                                        v-model:europochtaStoreId="form.europochta_store_id"
+                                    />
                                 </div>
                             </div>
                         </template>
@@ -703,7 +716,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { Inertia } from '@inertiajs/inertia'
 import { useForm, usePage } from '@inertiajs/inertia-vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
@@ -713,6 +726,7 @@ import OrderStatusBadge from '@/Components/OrderStatusBadge.vue'
 import { statusColorClass } from '@/utils/orderStatusColors'
 import AddressInlinePicker from '@/Components/AddressInlinePicker.vue'
 import EvropostOfficePicker from '@/Components/EvropostOfficePicker.vue'
+import EvropostStorePicker from '@/Components/EvropostStorePicker.vue'
 import DeleteOrderModal from '@/Components/DeleteOrderModal.vue'
 import DuplicateFunnelModal from '@/Components/DuplicateFunnelModal.vue'
 import FormAlert from '@/Components/FormAlert.vue'
@@ -751,6 +765,7 @@ const props = defineProps({
     callScript:    { type: String, default: null },
     srPush:        { type: Object, default: null },
     ep_api_version: { type: String, default: 'new' },
+    sender_ops: { type: Object, default: () => ({ id: null, label: '' }) },
 })
 
 const isAdmin = computed(() => page.props.value.auth?.user?.role === 'admin')
@@ -802,6 +817,8 @@ const form = useForm({
     belpost_address_id: props.order.belpost_address_id ?? '',
     ops_id:             props.order.ops_id             ?? '',
     europochta_store_id: props.order.europochta_store_id ?? null,
+    europochta_store_start_id: props.order.europochta_store_start_id ?? (props.order.delivery_type === 'europochta' ? (props.sender_ops?.id ?? null) : null),
+    europochta_store_start_label: props.order.europochta_store_start_label ?? (props.order.delivery_type === 'europochta' ? (props.sender_ops?.label ?? '') : ''),
     comment:            props.order.comment            ?? '',
     upsell:             props.order.upsell             ?? '',
     cross_sell:         props.order.cross_sell         ?? '',
@@ -828,6 +845,14 @@ function applyLookup() {
 const useEvropostPicker = computed(() =>
     props.order.delivery_type === 'europochta' && props.ep_api_version === 'new'
 )
+
+// Switching to Europochta: preselect the store's default sender OPS (this order only)
+watch(useEvropostPicker, (on) => {
+    if (on && !form.europochta_store_start_id && props.sender_ops?.id) {
+        form.europochta_store_start_id = props.sender_ops.id
+        form.europochta_store_start_label = props.sender_ops.label || ''
+    }
+})
 
 // Initial query for the picker pre-fills with current city + street
 const pickerInitialQuery = computed(() =>

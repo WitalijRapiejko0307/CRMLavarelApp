@@ -82,6 +82,8 @@ class OrderController extends Controller
             'deliveryTypes'  => Order::DELIVERY_TYPES,
             'products'       => Product::with('variations:id,product_id,number,name,stock')->orderBy('name')->get(['id', 'name', 'stock']),
             'ep_api_version' => $this->epApiVersion((int) Auth::user()->tenant_id),
+            'default_courier' => \App\Support\TenantDefaults::courier((int) Auth::user()->tenant_id),
+            'sender_ops'      => \App\Support\TenantDefaults::senderOps((int) Auth::user()->tenant_id),
         ]);
     }
 
@@ -115,6 +117,8 @@ class OrderController extends Controller
             'belpost_address_id'   => ['nullable', 'string', 'max:50'],
             'ops_id'               => ['nullable', 'string', 'max:50'],
             'europochta_store_id'  => ['nullable', 'integer'],
+            'europochta_store_start_id'    => ['nullable', 'integer'],
+            'europochta_store_start_label' => ['nullable', 'string', 'max:255'],
             'poste_restante'       => ['sometimes', 'boolean'],
         ]);
 
@@ -463,6 +467,7 @@ class OrderController extends Controller
             'srPush'                => $this->isCallCenter() ? null : $this->srPushInfo($order),
             'callScript'            => $this->isCallCenter() ? $this->renderCallScript($order) : null,
             'ep_api_version'        => $this->epApiVersion((int) $order->tenant_id),
+            'sender_ops'            => \App\Support\TenantDefaults::senderOps((int) $order->tenant_id),
         ]);
     }
 
@@ -489,6 +494,8 @@ class OrderController extends Controller
             'belpost_address_id'  => ['sometimes', 'nullable', 'string', 'max:50'],
             'ops_id'              => ['sometimes', 'nullable', 'string', 'max:50'],
             'europochta_store_id' => ['sometimes', 'nullable', 'integer'],
+            'europochta_store_start_id'    => ['sometimes', 'nullable', 'integer'],
+            'europochta_store_start_label' => ['sometimes', 'nullable', 'string', 'max:255'],
             'delivery_type'       => ['sometimes', 'nullable', Order::deliveryTypeRule()],
             'comment'            => ['sometimes', 'nullable', 'string', 'max:2000'],
             'upsell'             => ['sometimes', 'nullable', 'string', 'max:1000'],
@@ -814,6 +821,8 @@ class OrderController extends Controller
         ];
         if ($deliveryType !== 'europochta') {
             $payload['europochta_store_id'] = null;
+            $payload['europochta_store_start_id'] = null;
+            $payload['europochta_store_start_label'] = null;
             $payload['ops_id'] = null;
         }
 
