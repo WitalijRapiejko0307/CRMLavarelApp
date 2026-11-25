@@ -63,7 +63,19 @@ class BelpostService
         $batchId = (string)($data['id'] ?? '');
 
         if (!$batchId) {
-            throw new \RuntimeException('Belpost createList: API returned no batch id. Body: ' . $response->body());
+            // Полный ответ (часто HTML-страница сайта) — только в лог, клиенту — понятное пояснение.
+            Log::error('Belpost createList: no batch id in response', [
+                'tenant_id'    => $this->tenantId,
+                'status'       => $response->status(),
+                'content_type' => $response->header('Content-Type'),
+                'body'         => mb_substr($response->body(), 0, 1000),
+            ]);
+
+            throw new \RuntimeException(
+                'Белпочта не вернула номер партии. Проверьте в Настройках токен Белпочты и ЭЛС '
+                . '(должны быть заполнены и сохранены — рядом с токеном отображается «сохранено»). '
+                . 'Если с ними всё в порядке, возможно, сервис Белпочты временно недоступен по техническим причинам — попробуйте позже.'
+            );
         }
 
         return MailBatch::withoutGlobalScopes()->create([

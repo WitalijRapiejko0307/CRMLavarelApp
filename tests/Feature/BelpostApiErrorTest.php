@@ -32,4 +32,28 @@ class BelpostApiErrorTest extends TestCase
 
         (new BelpostService($tenant->id))->createList('parcel', 'Покупатель');
     }
+
+    public function test_create_list_html_response_gives_friendly_message(): void
+    {
+        $tenant = Tenant::create([
+            'name'                => 'BP Co ' . uniqid(),
+            'created_at'          => now(),
+            'subscription_status' => Tenant::STATUS_ACTIVE,
+            'subscribed_at'       => now(),
+        ]);
+
+        app()->instance('current_tenant_id', $tenant->id);
+
+        Http::fake([
+            'api.belpost.by/*' => Http::response('<!doctype html><html><title>Белпочта</title></html>', 200),
+        ]);
+
+        try {
+            (new BelpostService($tenant->id))->createList('parcel', 'Покупатель');
+            $this->fail('Exception expected');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('токен Белпочты и ЭЛС', $e->getMessage());
+            $this->assertStringNotContainsString('<html', $e->getMessage());
+        }
+    }
 }
