@@ -25,9 +25,12 @@ class Kernel extends ConsoleKernel
     {
         // Process queued jobs every minute (database driver, no Redis).
         // withoutOverlapping prevents multiple workers from piling up.
-        $schedule->command('queue:work --stop-when-empty --tries=3')
+        // The mutex expires after 10 minutes (default is 24 h): if a worker is killed or hangs,
+        // it cannot hold the whole queue — SalesRender sync, tracking, etc. — for a day.
+        // --max-time makes a healthy worker exit by itself well before the mutex expires.
+        $schedule->command('queue:work --stop-when-empty --tries=3 --max-time=240')
             ->everyMinute()
-            ->withoutOverlapping();
+            ->withoutOverlapping(10);
 
         // Morning auto tracking check at 07:30 Europe/Minsk — once per tenant per day.
         $schedule->call(function () {
