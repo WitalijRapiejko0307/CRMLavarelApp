@@ -718,6 +718,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { Inertia } from '@inertiajs/inertia'
+import { ordersListUrl } from '@/utils/ordersListState'
 import { useForm, usePage } from '@inertiajs/inertia-vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import PageHeader from '@/Components/PageHeader.vue'
@@ -1129,7 +1130,7 @@ function changeDeliveryType() {
 // --- Helpers ---
 
 function back() {
-    Inertia.get('/orders')
+    Inertia.get(ordersListUrl())
 }
 
 function formatDate(value) {

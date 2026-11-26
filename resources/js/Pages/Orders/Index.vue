@@ -386,6 +386,7 @@
 import { goodLabel } from '@/utils/goodLabel'
 import { ref, computed, h, onMounted, onUnmounted, watch } from 'vue'
 import { Inertia } from '@inertiajs/inertia'
+import { saveOrdersListQuery, getOrdersListQuery } from '@/utils/ordersListState'
 import { Link, usePage } from '@inertiajs/inertia-vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import PageHeader from '@/Components/PageHeader.vue'
@@ -578,6 +579,10 @@ async function applyBulkStatus() {
     }
 }
 
+watch(() => props.filters, () => {
+    saveOrdersListQuery(window.location.search)
+}, { deep: true })
+
 watch(() => props.orders.current_page, () => {
     clearSelection()
 })
@@ -721,6 +726,15 @@ async function startRefreshTracking() {
 }
 
 onMounted(() => {
+    // Зашли в /orders без параметров (меню, ссылка) — вернуть последние фильтры
+    if (!window.location.search) {
+        const saved = getOrdersListQuery()
+        if (saved) {
+            Inertia.get('/orders', Object.fromEntries(new URLSearchParams(saved)), { replace: true })
+        }
+    } else {
+        saveOrdersListQuery(window.location.search)
+    }
     if (props.isCallCenter) return
     pollTrackingStatus().then(() => {
         if (trackingStatus.value.status === 'running') {
