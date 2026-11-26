@@ -52,7 +52,8 @@
                                 class="border-b border-gray-100 dark:border-gray-800"
                             >
                                 <td class="py-3 pr-4 font-medium">{{ tenant.name }}</td>
-                                <td class="py-3 pr-4">
+                                <td v-if="tenant.archived_at" class="py-3 pr-4 text-xs text-muted" colspan="3">В архиве</td>
+                                <td v-if="!tenant.archived_at" class="py-3 pr-4">
                                     <select
                                         v-model="forms[tenant.id].subscription_status"
                                         class="w-full max-w-[140px]"
@@ -65,10 +66,10 @@
                                     </select>
                                     <div v-if="tenant.read_only" class="text-xs text-red-600 dark:text-red-400 mt-1">read-only</div>
                                 </td>
-                                <td class="py-3 pr-4 text-xs">
+                                <td v-if="!tenant.archived_at" class="py-3 pr-4 text-xs">
                                     {{ leadsLabel(tenant) }}
                                 </td>
-                                <td class="py-3 pr-4">
+                                <td v-if="!tenant.archived_at" class="py-3 pr-4">
                                     <input
                                         v-model="forms[tenant.id].access_until"
                                         type="datetime-local"
@@ -103,6 +104,7 @@
                                         class="absolute right-0 top-full z-20 mt-1 w-52 p-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg space-y-1 text-xs"
                                     >
                                         <button
+                                            v-if="!tenant.archived_at"
                                             type="button"
                                             class="block w-full text-left px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
                                             :disabled="forms[tenant.id].processing"
@@ -111,6 +113,7 @@
                                             Активировать
                                         </button>
                                         <button
+                                            v-if="!tenant.archived_at"
                                             type="button"
                                             class="block w-full text-left px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
                                             :disabled="forms[tenant.id].processing"
@@ -119,6 +122,7 @@
                                             Продлить месяц
                                         </button>
                                         <button
+                                            v-if="!tenant.archived_at"
                                             type="button"
                                             class="block w-full text-left px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
                                             :disabled="forms[tenant.id].processing"
@@ -127,6 +131,7 @@
                                             +14 дней trial
                                         </button>
                                         <button
+                                            v-if="!tenant.archived_at"
                                             type="button"
                                             class="block w-full text-left px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
                                             :disabled="forms[tenant.id].processing"
@@ -196,11 +201,18 @@
                                             type="text"
                                             class="w-full"
                                         />
-                                        <div class="flex flex-wrap gap-2">
+                                        <p
+                                v-if="deleteState(tenant.id).input && !sameName(deleteState(tenant.id).input, tenant.name)"
+                                class="text-red-600 dark:text-red-400 font-medium"
+                                role="alert"
+                            >
+                                ⚠ Название не совпадает. Введите точно: «{{ tenant.name }}»
+                            </p>
+                            <div class="flex flex-wrap gap-2">
                                             <button
                                                 type="button"
                                                 class="btn-secondary text-xs text-red-600 dark:text-red-400"
-                                                :disabled="deleteState(tenant.id).input !== tenant.name || deleteState(tenant.id).processing"
+                                                :disabled="!sameName(deleteState(tenant.id).input, tenant.name) || deleteState(tenant.id).processing"
                                                 @click="confirmDelete(tenant)"
                                             >
                                                 Удалить навсегда
@@ -226,12 +238,13 @@
                 <ListCard v-for="tenant in tenants" :key="tenant.id">
                     <div class="flex items-start justify-between gap-2">
                         <p class="font-medium text-gray-800 dark:text-gray-200">{{ tenant.name }}</p>
-                        <span v-if="tenant.read_only" class="text-xs text-red-600 dark:text-red-400 shrink-0">read-only</span>
+                        <span v-if="tenant.archived_at" class="text-xs text-muted shrink-0">В архиве</span>
+                        <span v-else-if="tenant.read_only" class="text-xs text-red-600 dark:text-red-400 shrink-0">read-only</span>
                     </div>
                     <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">{{ tenant.admin_email || '—' }}</p>
-                    <p class="mt-1 text-xs text-muted">{{ leadsLabel(tenant) }}</p>
+                    <p v-if="!tenant.archived_at" class="mt-1 text-xs text-muted">{{ leadsLabel(tenant) }}</p>
 
-                    <div class="mt-3 space-y-2">
+                    <div v-if="!tenant.archived_at" class="mt-3 space-y-2">
                         <div>
                             <label class="label">Статус</label>
                             <select
@@ -284,6 +297,7 @@
                             class="absolute left-0 top-full z-20 mt-1 w-52 p-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg space-y-1 text-xs"
                         >
                             <button
+                                v-if="!tenant.archived_at"
                                 type="button"
                                 class="block w-full text-left px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 touch-target"
                                 :disabled="forms[tenant.id].processing"
@@ -292,6 +306,7 @@
                                 Активировать
                             </button>
                             <button
+                                v-if="!tenant.archived_at"
                                 type="button"
                                 class="block w-full text-left px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 touch-target"
                                 :disabled="forms[tenant.id].processing"
@@ -300,6 +315,7 @@
                                 Продлить месяц
                             </button>
                             <button
+                                v-if="!tenant.archived_at"
                                 type="button"
                                 class="block w-full text-left px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 touch-target"
                                 :disabled="forms[tenant.id].processing"
@@ -308,6 +324,7 @@
                                 +14 дней trial
                             </button>
                             <button
+                                v-if="!tenant.archived_at"
                                 type="button"
                                 class="block w-full text-left px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 touch-target"
                                 :disabled="forms[tenant.id].processing"
@@ -377,11 +394,18 @@
                                 type="text"
                                 class="w-full"
                             />
+                            <p
+                                v-if="deleteState(tenant.id).input && !sameName(deleteState(tenant.id).input, tenant.name)"
+                                class="text-red-600 dark:text-red-400 font-medium"
+                                role="alert"
+                            >
+                                ⚠ Название не совпадает. Введите точно: «{{ tenant.name }}»
+                            </p>
                             <div class="flex flex-wrap gap-2">
                                 <button
                                     type="button"
                                     class="btn-secondary text-xs text-red-600 dark:text-red-400 touch-target"
-                                    :disabled="deleteState(tenant.id).input !== tenant.name || deleteState(tenant.id).processing"
+                                    :disabled="!sameName(deleteState(tenant.id).input, tenant.name) || deleteState(tenant.id).processing"
                                     @click="confirmDelete(tenant)"
                                 >
                                     Удалить навсегда
@@ -549,6 +573,17 @@ function cancelDeletion(id) {
     withProcessing(id, (opts) => Inertia.post(`/admin/tenants/${id}/cancel-deletion`, {}, opts))
 }
 
+function normName(s) {
+    return String(s ?? '')
+        .replace(/[«»“”„‟"'`‘’‚]/g, '"')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase()
+}
+function sameName(a, b) {
+    return !!normName(b) && normName(a) === normName(b)
+}
+
 function startDeleteConfirm(id) {
     menuOpen[id] = false
     const state = ensureDeleteState(id)
@@ -564,7 +599,7 @@ function cancelDeleteConfirm(id) {
 
 function confirmDelete(tenant) {
     const state = ensureDeleteState(tenant.id)
-    if (state.input !== tenant.name || state.processing) return
+    if (!sameName(state.input, tenant.name) || state.processing) return
     state.processing = true
     forms[tenant.id].processing = true
     Inertia.delete(`/admin/tenants/${tenant.id}`, {

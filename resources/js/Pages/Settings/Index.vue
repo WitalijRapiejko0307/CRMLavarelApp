@@ -709,10 +709,17 @@
                         :disabled="deletionBusy || !companyName"
                         autocomplete="off"
                     />
+                    <p
+                        v-if="deletionConfirmName && !sameName(deletionConfirmName, companyName)"
+                        class="text-sm text-red-600 dark:text-red-400 mt-2"
+                        role="alert"
+                    >
+                        ⚠ Название не совпадает. Введите точно: «{{ companyName }}»
+                    </p>
                     <button
                         type="button"
                         class="btn-secondary btn-sm mt-3 text-red-600 dark:text-red-400"
-                        :disabled="deletionBusy || deletionConfirmName !== companyName || !companyName"
+                        :disabled="deletionBusy || !sameName(deletionConfirmName, companyName) || !companyName"
                         @click="scheduleCompanyDeletion"
                     >
                         {{ deletionBusy ? 'Отправка…' : 'Запланировать удаление' }}
@@ -879,12 +886,23 @@ function formatConnectionDate(value) {
     })
 }
 
+function normName(s) {
+    return String(s ?? '')
+        .replace(/[«»“”„‟"'`‘’‚]/g, '"')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase()
+}
+function sameName(a, b) {
+    return !!normName(b) && normName(a) === normName(b)
+}
+
 function formatDeletionDate(value) {
     return formatConnectionDate(value)
 }
 
 function scheduleCompanyDeletion() {
-    if (deletionBusy.value || deletionConfirmName.value !== companyName.value) return
+    if (deletionBusy.value || !sameName(deletionConfirmName.value, companyName.value)) return
     deletionBusy.value = true
     Inertia.post('/settings/schedule-deletion', {
         confirm_name: deletionConfirmName.value,

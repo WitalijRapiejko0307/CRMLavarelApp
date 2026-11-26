@@ -187,7 +187,9 @@ class TenantController extends Controller
             'confirm_name' => ['required', 'string'],
         ]);
 
-        if ($data['confirm_name'] !== $tenant->name) {
+        $norm = fn (string $v) => mb_strtolower(trim(preg_replace('/\s+/u', ' ', preg_replace('/[«»“”„‟"\'`‘’‚]/u', '"', $v))));
+
+        if ($norm($data['confirm_name']) !== $norm((string) $tenant->name)) {
             throw ValidationException::withMessages([
                 'confirm_name' => ['Название не совпадает.'],
             ]);
